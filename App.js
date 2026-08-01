@@ -2,9 +2,10 @@
 //   Loading splash → Login (receptionist connects the tablet to Odoo) →
 //   customer flow. We're building the customer flow one screen at a time.
 //   Right now, after login the customer goes straight to Select Service.
-import React, { useState } from 'react';
-import { Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Alert, BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import { SessionProvider, useSession } from './SessionContext';
 import { LanguageProvider } from './LanguageContext';
@@ -25,11 +26,16 @@ import HealthScreen from './screens/flow/HealthScreen';
 import ReviewScreen from './screens/flow/ReviewScreen';
 import SuccessScreen from './screens/flow/SuccessScreen';
 
+// Keep the native (Android) splash on screen until our loading work is done,
+// so the app reveals straight into the first page — no second splash flash.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 const EMPTY_FORM = {
   membership: null, selectedCustomer: null, selectedPackage: null,
   serviceId: null, service: '', servicePrice: 0, serviceObj: null,
   package: null, packageName: '',
-  fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+91', phone: '', whatsapp: '', whatsappSame: true,
+  fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', phone: '', whatsapp: '', whatsappSame: true,
+  email: '', signature: '',
   answers: [],
   therapist: '', date: '', time: '', branch: '', specialRequests: '', paymentMode: 'offline',
 };
@@ -38,6 +44,9 @@ function CustomerFlow() {
   const { logout } = useSession();
   const [form, setForm] = useState(EMPTY_FORM);
   const [step, setStep] = useState('welcome');
+  // Once the customer has picked a language, going Back to Welcome should land on
+  // the New/Existing choice — not re-open language select. A fresh session resets it.
+  const [langPicked, setLangPicked] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
   // Home = hand the tablet back to reception (return to login).
@@ -46,11 +55,39 @@ function CustomerFlow() {
     { text: 'Yes', onPress: logout },
   ]);
   // Fresh start for the next customer — Welcome screen re-opens at language select.
-  const restart = () => { setForm(EMPTY_FORM); setStep('welcome'); };
+  const restart = () => { setForm(EMPTY_FORM); setLangPicked(false); setStep('welcome'); };
+
+  // Android hardware Back button: walk back one step in the flow instead of
+  // closing the app. On Welcome/Success it does nothing (kiosk — no accidental exit).
+  useEffect(() => {
+    const onBackPress = () => {
+      const multi = (form.membership?.customers || []).length > 1;
+      switch (step) {
+        case 'welcome': return true;                       // first screen — don't close
+        case 'service': setStep('welcome'); return true;
+        case 'identify': setStep('welcome'); return true;
+        case 'profileSelect': setStep('identify'); return true;
+        case 'account': setStep(multi ? 'profileSelect' : 'identify'); return true;
+        case 'editProfile': setStep('account'); return true;
+        case 'membership': setStep('account'); return true;
+        case 'packages': setStep('service'); return true;
+        case 'packageDetails': setStep('packages'); return true;
+        case 'personal': setStep('packageDetails'); return true;
+        case 'health': setStep('personal'); return true;
+        case 'review': setStep('health'); return true;
+        case 'success': return true;                        // finished — don't re-open
+        default: return true;
+      }
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [step, form.membership]);
 
   if (step === 'welcome') {
     return (
       <WelcomeScreen
+        startChosen={langPicked}
+        onChoose={() => setLangPicked(true)}
         onNew={() => setStep('service')}
         onExisting={() => setStep('identify')}
         onHome={onHome} />
@@ -142,6 +179,12 @@ function Shell() {
   const { loggedIn, login } = useSession();
   const [ready, setReady] = useState(false);
   const [fontsLoaded] = useFonts({ PlayfairDisplay_700Bold, PlayfairDisplay_600SemiBold });
+  // Once loading is done and the real first page is about to render, drop the
+  // native splash. Because it stays up the whole time, the user sees ONE splash,
+  // then the app — never the logo twice.
+  useEffect(() => {
+    if (ready && fontsLoaded) SplashScreen.hideAsync().catch(() => {});
+  }, [ready, fontsLoaded]);
   // LoadingScreen passes back a session (info) when a saved kiosk login logs in
   // automatically → we skip the login page and go straight to the customer flow.
   if (!ready || !fontsLoaded) {

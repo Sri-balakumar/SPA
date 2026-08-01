@@ -1,5 +1,6 @@
 // Screen 6 — Review & Confirm. Shows everything the customer entered, then
 // Submit Request creates a Spa Booking in Odoo (the receptionist sees it).
+// (The "I agree" + signature step now lives on the Health/Questions screen.)
 import React, { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -57,7 +58,6 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
         </View>
 
         <Button title={busy ? t('submitting') : t('submit')} onPress={submit} loading={busy} style={{ marginTop: 4 }} />
-        <Button title={t('back')} variant="ghost" onPress={onBack} style={{ marginTop: 12 }} />
       </ScrollView>
     </View>
   );

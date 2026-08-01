@@ -9,7 +9,17 @@
 //   POST /api/spa/tab/submit           → new booking → POS ▸ Spa ▸ Tab (Pending)
 //   POST /api/spa/tab/passes  {phone}  → existing customer's remaining packages
 //   POST /api/spa/tab/redeem  {phone,pass_id} → check in for today
-import { getBaseUrl } from './connection';
+import { getBaseUrl, getDb } from './connection';
+
+// Set to true ONLY to demo the "Select Your Profile" flow without a live server.
+// When false, the lookup shows REAL customers (or "not found" → Register as New) —
+// never the fake sample people.
+const DEMO_MODE = false;
+
+// Shared key for the tablet REST endpoints (Odoo system param
+// `spa_online_booking.tab_api_key`). The server rejects /tab/* calls without it
+// ("unauthorized"). If the backend team rotates the key, update this value.
+const TAB_API_KEY = 'YRyMXZZO7eJP2ebm5NzuJVyU0CfAtEGF';
 
 function base() {
   const b = getBaseUrl();
@@ -18,14 +28,38 @@ function base() {
 }
 
 async function readJson(res) {
-  const data = await res.json().catch(() => { throw new Error('The server returned an unexpected response.'); });
+  const text = await res.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; }
+  catch (e) {
+    // Not JSON — most likely a 404 route/DB page or a 500 error page. Surface a
+    // short snippet so we can see WHAT the server actually returned.
+    const snippet = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+    throw new Error(`Unexpected response (${res.status}): ${snippet || 'empty'}`);
+  }
   if (!res.ok || (data && data.error)) {
     throw new Error((data && data.error) || `Server error (${res.status}).`);
   }
   return data;
 }
 
+// Multi-DB servers have no dbfilter, so a cold /api/spa/* call 404s with
+// "No database is selected". Per the API docs, hitting GET /spa/book?db=<db>
+// once sets a session cookie bound to that DB; RN's fetch then carries it on
+// every later call. We do this lazily and cache per (url, db).
+let _boundKey = null;
+async function ensureDbSession() {
+  const db = getDb();
+  const key = `${getBaseUrl()}|${db}`;
+  if (!db || _boundKey === key) return;
+  try {
+    await fetch(`${base()}/spa/book?db=${encodeURIComponent(db)}`);
+    _boundKey = key;
+  } catch (e) { /* fall through — the login session cookie may already cover it */ }
+}
+
 async function restGet(path) {
+  await ensureDbSession();
   let res;
   try { res = await fetch(base() + path); }
   catch (e) { throw new Error('Cannot reach the server. Check the connection.'); }
@@ -33,6 +67,7 @@ async function restGet(path) {
 }
 
 async function restPost(path, body) {
+  await ensureDbSession();
   let res;
   try {
     res = await fetch(base() + path, {
@@ -131,6 +166,7 @@ export async function loadQuestions(packageId, lang = 'en') {
   const data = await restGet(`/api/spa/questions?service_ids=${encodeURIComponent(packageId)}&lang=${encodeURIComponent(lang)}`);
   return (data.questions || []).map((q) => ({
     id: q.id, name: q.text, type: q.type, required: q.required, options: q.options || [],
+    heading: q.heading || '', headingId: q.heading_id ?? 0,   // section grouping
   }));
 }
 
@@ -142,7 +178,8 @@ export async function submitBooking(form) {
     if (a.value !== '' && a.value != null) answers[String(a.questionId)] = String(a.value);
   });
   const cc = form.countryCode || '';
-  const withCc = (n) => (n ? `${cc} ${n}`.trim() : '');
+  // E.164: leading +, country code, NO spaces/brackets/dashes (per the API docs).
+  const withCc = (n) => (n ? `${cc}${String(n).replace(/\D/g, '')}` : '');
   const body = {
     name: form.fullName,
     service_ids: [form.serviceId],                 // the chosen PACKAGE id
@@ -151,9 +188,13 @@ export async function submitBooking(form) {
     // Save the personal details onto the customer's Contact too.
     birthday: form.dobISO || form.dob || '',        // date of birth (YYYY-MM-DD preferred)
     dob: form.dobISO || form.dob || '',
+    date_of_birth: form.dobISO || form.dob || '',   // the key the API docs name
     gender: form.gender || '',
     age: form.age !== '' && form.age != null ? String(form.age) : '',
+    email: form.email || '',                         // contact email
+    signature: form.signature || '',                 // digital signature (base64 PNG, no prefix)
     answers,
+    api_key: TAB_API_KEY,
   };
   return restPost('/api/spa/tab/submit', body);     // { success, booking_ref, id }
 }
@@ -166,8 +207,10 @@ export async function submitBooking(form) {
 // Handles both the new multi-customer response and the older single-customer
 // one, and falls back to SAMPLE people if the server can't be reached.
 export async function findMembership(phone, lang = 'en') {
+  // E.164, no spaces — matches how the server stores/compares numbers.
+  const clean = `+${String(phone || '').replace(/\D/g, '')}`;
   try {
-    const data = await restPost('/api/spa/tab/passes', { phone, lang });
+    const data = await restPost('/api/spa/tab/passes', { phone: clean, lang, api_key: TAB_API_KEY });
     // New shape: a list of people who share this number.
     if (Array.isArray(data.customers) && data.customers.length) {
       return { demo: false, customers: data.customers.map((c) => shapeCustomer(c, phone)) };
@@ -179,8 +222,13 @@ export async function findMembership(phone, lang = 'en') {
     }
     return null;                                   // reachable, but nobody found for this number
   } catch (e) {
-    const digits = String(phone || '').replace(/\D/g, '');
-    return digits.length >= 4 ? demoProfiles(phone) : null;   // offline → sample
+    // No fake people. In demo mode only, show the sample profiles; otherwise treat
+    // a failed lookup as "nobody found" → the screen offers "Register as New Customer".
+    if (DEMO_MODE) {
+      const digits = String(phone || '').replace(/\D/g, '');
+      return digits.length >= 4 ? demoProfiles(phone) : null;
+    }
+    return null;
   }
 }
 
@@ -189,8 +237,9 @@ function shapeCustomer(c, phone) {
   return {
     id: c.id, name: c.name || 'Customer', demo: !!c.demo,
     age: c.age || '', gender: c.gender || '',
-    // date of birth — pass through whatever key the backend uses
+    // date of birth + email — pass through whatever key the backend uses
     dob: c.dob || c.birthday || c.date_of_birth || c.birthdate || '',
+    email: c.email || '',
     phone: c.phone || phone, whatsapp: c.whatsapp || c.phone || phone,
     packages: (c.passes || []).map((p) => ({
       id: p.pass_id, pass_id: p.pass_id, package_id: p.package_id, reference: p.reference,
@@ -209,7 +258,7 @@ export async function checkInSession(pkg, phone) {
   if (!pkg || pkg.demo) {
     return { success: true, booking_ref: 'DEMO', sessions_left: pkg ? pkg.sessions_left : 0 };
   }
-  return restPost('/api/spa/tab/redeem', { phone, pass_id: pkg.pass_id || pkg.id });
+  return restPost('/api/spa/tab/redeem', { phone, pass_id: pkg.pass_id || pkg.id, api_key: TAB_API_KEY });
 }
 
 // Sample people — used only when the live server isn't reachable yet, so the

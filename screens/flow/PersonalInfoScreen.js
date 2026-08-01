@@ -117,6 +117,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       dobISO,
       age,
       gender: normGender(c.gender),
+      email: c.email || '',
       countryCode: cc,
       phone: phoneNum,
       whatsapp: same ? phoneNum : waNum,
@@ -130,7 +131,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   // New customer → start a CLEAN, empty form (keep only the number they typed).
   function registerNew() {
     set({
-      fullName: '', dob: '', dobISO: '', age: '', gender: '',
+      fullName: '', dob: '', dobISO: '', age: '', gender: '', email: '',
       countryCode: lookupCc, phone: lookupNum.trim(), whatsapp: lookupNum.trim(),
       whatsappSame: true, existingCustomerId: null,
     });
@@ -157,6 +158,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     if (!form.gender) return Alert.alert(t('missing'), t('selectGender'));
     if (!form.phone.trim()) return Alert.alert(t('missing'), t('enterPhone'));
     if (!form.whatsapp.trim()) return Alert.alert(t('missing'), t('enterWhatsapp'));
+    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim()))
+      return Alert.alert(t('invalidEmail'), t('invalidEmailMsg'));
     next();
   }
 
@@ -309,6 +312,14 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
             <TextInput style={s.input} placeholder={t('whatsappPh')} placeholderTextColor="#B4A9C4"
               keyboardType="phone-pad" editable={!form.whatsappSame}
               value={form.whatsapp} onChangeText={(v) => set({ whatsapp: v })} />
+          </View>
+
+          {/* Email */}
+          <Text style={s.label}>{t('email')}</Text>
+          <View style={s.field}>
+            <TextInput style={s.input} placeholder={t('emailPh')} placeholderTextColor="#B4A9C4"
+              keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
+              value={form.email} onChangeText={(v) => set({ email: v })} />
           </View>
 
           <Button title={t('next')} onPress={proceed} style={{ marginTop: 18 }} />

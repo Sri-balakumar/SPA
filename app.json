@@ -2,12 +2,18 @@
   "expo": {
     "name": "Stretch & Go",
     "slug": "spa-app",
+    "owner": "stretchgo",
     "scheme": "spaapp",
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffffff",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/stretchandgo_black.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5EEFB"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -37,7 +43,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "f87944f3-1730-465e-b200-957d810299b6"
+        "projectId": "e14446a4-e410-4867-b4f5-9d71c536bdf4"
       }
     }
   }

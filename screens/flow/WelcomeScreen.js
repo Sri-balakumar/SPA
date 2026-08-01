@@ -31,13 +31,15 @@ function Divider() {
   );
 }
 
-export default function WelcomeScreen({ onNew, onExisting, onHome }) {
+export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen = false, onChoose }) {
   const { t, lang, setLang } = useLang();
   const { width } = useWindowDimensions();
   const contentW = Math.min(width - 40, 540);
-  const [chosen, setChosen] = useState(false);
+  // If the language was already picked earlier this session (e.g. we came Back
+  // here), open straight on the New/Existing content — skip language select.
+  const [chosen, setChosen] = useState(startChosen);
   const [pick, setPick] = useState(lang);            // which language is ticked
-  const anim = useRef(new Animated.Value(0)).current; // 0 = language, 1 = welcome
+  const anim = useRef(new Animated.Value(startChosen ? 1 : 0)).current; // 0 = language, 1 = welcome
 
   const rtl = lang === 'ar';
   const cardTxt = rtl ? { textAlign: 'right', writingDirection: 'rtl' } : null;
@@ -46,6 +48,7 @@ export default function WelcomeScreen({ onNew, onExisting, onHome }) {
     setLang(code);
     setPick(code);
     setChosen(true);
+    onChoose && onChoose();      // tell the app the language step is done
     // smooth in-place cross-fade + slide (≈420ms)
     Animated.timing(anim, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.ease), useNativeDriver: true }).start();
   }

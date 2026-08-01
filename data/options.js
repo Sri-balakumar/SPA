@@ -49,5 +49,6 @@ export const TIME_SLOTS = [
 ];
 export const BRANCHES = ['Spa Downtown Branch', 'Spa Uptown Branch', 'Spa Mall Branch'];
 
-// Country dialing codes for the phone / WhatsApp fields (India default first).
-export const COUNTRY_CODES = ['+91', '+971', '+966', '+974', '+965', '+968', '+973', '+1', '+44', '+60', '+65'];
+// Exact list the POS + booking page use (per the API docs). Oman first (default).
+// +968 Oman · +971 UAE · +966 Saudi · +974 Qatar · +973 Bahrain · +965 Kuwait · +91 India · +44 UK · +1 US
+export const COUNTRY_CODES = ['+968', '+971', '+966', '+974', '+973', '+965', '+91', '+44', '+1'];

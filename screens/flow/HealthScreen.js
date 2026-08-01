@@ -12,14 +12,30 @@ import { COLORS } from '../../theme';
 import StepHeader from '../../components/StepHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
+import SignaturePad from '../../components/SignaturePad';
 import { loadQuestions } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 
+// Group the (already ordered) questions into sections and number them 1.. per
+// section — render a heading whenever heading_id changes (0 = no section).
+function decorate(questions) {
+  let last = null, num = 0;
+  return questions.map((q) => {
+    const hid = q.headingId || 0;
+    const isNew = hid !== last;
+    if (isNew) { last = hid; num = 0; }
+    num += 1;
+    return { q, showHeading: isNew && hid !== 0, number: num };
+  });
+}
+
 export default function HealthScreen({ form, set, next, onBack, onHome }) {
   const { t, lang } = useLang();
+  const rtl = lang === 'ar';
   const [questions, setQuestions] = useState(null);
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState({});   // { [qid]: string | string[] }
+  const [agree, setAgree] = useState(false);    // must accept before signing
 
   async function fetch() {
     setError('');
@@ -47,6 +63,8 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
       if (q.required && empty) return Alert.alert(t('required'), `${t('answerThis')} ${q.name}`);
     }
+    if (!agree) return Alert.alert(t('missing'), t('agreeFirst'));
+    if (!form.signature) return Alert.alert(t('missing'), t('signatureRequired'));
     const out = questions.map((q) => ({
       questionId: q.id,
       value: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : (answers[q.id] || ''),
@@ -71,9 +89,11 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
               <Text style={s.none}>{t('noQuestions')}</Text>
             )}
 
-            {questions.map((q) => (
-              <View key={q.id} style={s.qBlock}>
-                <Text style={s.label}>{q.name}{q.required ? <Text style={s.req}> *</Text> : null}</Text>
+            {decorate(questions).map(({ q, showHeading, number }) => (
+              <View key={q.id}>
+                {showHeading && <Text style={[s.section, rtl && s.rtl]}>{q.heading}</Text>}
+                <View style={s.qBlock}>
+                <Text style={s.label}>{number}. {q.name}{q.required ? <Text style={s.req}> *</Text> : null}</Text>
 
                 {q.type === 'yes_no' && (
                   <View style={s.yesNo}>
@@ -112,8 +132,24 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
                       value={answers[q.id] || ''} onChangeText={(v) => setAns(q.id, v)} multiline />
                   </View>
                 )}
+                </View>
               </View>
             ))}
+
+            {/* Consent — must agree before the signature pad opens */}
+            <TouchableOpacity style={s.agree} activeOpacity={0.8} onPress={() => setAgree((v) => !v)}>
+              <View style={[s.abox, agree && s.aboxOn]}>{agree && <Text style={s.atick}>✓</Text>}</View>
+              <Text style={[s.agreeTxt, rtl && s.rtl]}>{t('agreeText')}</Text>
+            </TouchableOpacity>
+
+            {agree && (
+              <View style={{ marginBottom: 8 }}>
+                <SignaturePad
+                  label={t('signature')} required
+                  hint={t('signHint')} clearLabel={t('clearSign')}
+                  onChange={(sig) => set({ signature: sig })} rtl={rtl} />
+              </View>
+            )}
 
             <Button title={t('next')} onPress={proceed} style={{ marginTop: 12 }} />
           </ScrollView>
@@ -150,4 +186,22 @@ const s = StyleSheet.create({
 
   field: { backgroundColor: COLORS.field, borderWidth: 1.4, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14 },
   input: { paddingVertical: 12, fontSize: 15, color: COLORS.ink, minHeight: 70, textAlignVertical: 'top' },
+
+  // section heading (e.g. "GENERAL HEALTH (PAR-Q)")
+  section: {
+    fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep, letterSpacing: 0.4,
+    textTransform: 'uppercase', marginTop: 18, marginBottom: 10,
+    borderBottomWidth: 1.5, borderBottomColor: COLORS.line, paddingBottom: 8,
+  },
+  rtl: { textAlign: 'right', writingDirection: 'rtl' },
+
+  // consent + signature
+  agree: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 8, marginBottom: 14, paddingHorizontal: 2 },
+  abox: {
+    width: 24, height: 24, borderRadius: 7, borderWidth: 1.8, borderColor: COLORS.purple,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12, marginTop: 1, backgroundColor: '#fff',
+  },
+  aboxOn: { backgroundColor: COLORS.purple },
+  atick: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  agreeTxt: { flex: 1, fontSize: 13.5, color: COLORS.ink, fontWeight: '600', lineHeight: 19 },
 });

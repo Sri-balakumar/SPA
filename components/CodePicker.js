@@ -9,7 +9,7 @@ export default function CodePicker({ value, onChange }) {
   return (
     <>
       <TouchableOpacity style={s.btn} onPress={() => setOpen(true)} activeOpacity={0.7}>
-        <Text style={s.code}>{value || '+91'}</Text>
+        <Text style={s.code}>{value || '+968'}</Text>
         <Text style={s.chev}>▾</Text>
       </TouchableOpacity>
       <View style={s.sep} />

@@ -72,6 +72,16 @@ const STR = {
   selectGender: { en: 'Please select your gender.', hi: 'कृपया अपना लिंग चुनें।', ar: 'يرجى اختيار جنسك.' },
   enterPhone: { en: 'Please enter your phone number.', hi: 'कृपया अपना फ़ोन नंबर दर्ज करें।', ar: 'يرجى إدخال رقم هاتفك.' },
   enterWhatsapp: { en: 'Please enter your WhatsApp number.', hi: 'कृपया अपना व्हाट्सएप नंबर दर्ज करें।', ar: 'يرجى إدخال رقم واتساب.' },
+  email: { en: 'Email Address', hi: 'ईमेल पता', ar: 'البريد الإلكتروني' },
+  emailPh: { en: 'Enter your email address', hi: 'अपना ईमेल पता दर्ज करें', ar: 'أدخل بريدك الإلكتروني' },
+  invalidEmail: { en: 'Invalid email', hi: 'अमान्य ईमेल', ar: 'بريد إلكتروني غير صالح' },
+  invalidEmailMsg: { en: 'Please enter a valid email address.', hi: 'कृपया एक मान्य ईमेल पता दर्ज करें।', ar: 'يرجى إدخال بريد إلكتروني صالح.' },
+  signature: { en: 'Digital Signature', hi: 'डिजिटल हस्ताक्षर', ar: 'التوقيع الرقمي' },
+  signHint: { en: 'Sign here with your finger', hi: 'यहाँ अपनी उंगली से हस्ताक्षर करें', ar: 'وقّع هنا بإصبعك' },
+  clearSign: { en: 'Clear', hi: 'साफ़ करें', ar: 'مسح' },
+  signatureRequired: { en: 'Please sign in the box to continue.', hi: 'जारी रखने के लिए कृपया बॉक्स में हस्ताक्षर करें।', ar: 'يرجى التوقيع في المربع للمتابعة.' },
+  agreeText: { en: 'I agree to the terms and conditions and confirm the details above are correct.', hi: 'मैं नियम और शर्तों से सहमत हूँ और पुष्टि करता/करती हूँ कि ऊपर दिए गए विवरण सही हैं।', ar: 'أوافق على الشروط والأحكام وأؤكد أن التفاصيل أعلاه صحيحة.' },
+  agreeFirst: { en: 'Please tick “I agree” before signing.', hi: 'हस्ताक्षर करने से पहले कृपया "मैं सहमत हूँ" पर टिक करें।', ar: 'يرجى تحديد "أوافق" قبل التوقيع.' },
 
   // health
   healthTitle: { en: 'Your Health & Preferences', hi: 'आपका स्वास्थ्य और प्राथमिकताएँ', ar: 'صحتك وتفضيلاتك' },
