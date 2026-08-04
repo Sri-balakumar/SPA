@@ -1,6 +1,6 @@
 // Screen 5 — Package details (before Personal Info).
 // Shows the selected package's exact description, sessions, duration, price.
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions,
 } from 'react-native';
@@ -9,6 +9,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
+import LangButton from '../../components/LangButton';
+import { loadTherapies } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { toDigits } from '../../dateFmt';
 
@@ -23,7 +25,7 @@ function Row({ label, value, rtl }) {
   );
 }
 
-export default function PackageDetailsScreen({ form, next, onBack, onHome }) {
+export default function PackageDetailsScreen({ form, set, next, onBack, onHome }) {
   const { t, lang } = useLang();
   const rtl = lang === 'ar';
   const insets = useSafeAreaInsets();
@@ -32,12 +34,44 @@ export default function PackageDetailsScreen({ form, next, onBack, onHome }) {
   const pkg = form.package || {};
   const dur = pkg.duration || form.serviceObj?.duration_min || 60;
 
+  // `form.package` is a snapshot taken on the Packages screen, so its Odoo text
+  // is frozen in the language chosen back then. Re-fetch on a language switch
+  // so the package name and description follow it.
+  useEffect(() => {
+    const therapyId = form.serviceObj?.id;
+    const pkgId = form.package?.id;
+    if (!therapyId || !pkgId || !set) return;
+    let alive = true;
+    (async () => {
+      try {
+        const data = await loadTherapies(lang);
+        const therapy = (data.therapies || []).find((x) => x.id === therapyId);
+        const fresh = (therapy?.packages || []).find((p) => p.id === pkgId);
+        if (!alive || !therapy || !fresh) return;
+        set({
+          serviceObj: therapy,
+          service: therapy.name,
+          packageName: fresh.name,
+          package: {
+            ...form.package,
+            name: fresh.name,
+            description: fresh.session_desc
+              || (fresh.details && fresh.details[0] && fresh.details[0].description)
+              || '',
+          },
+        });
+      } catch (e) { /* keep showing what we already have */ }
+    })();
+    return () => { alive = false; };
+  }, [lang]);
+
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
       <LinearGradient colors={['#EFE6F8', '#F5EFFb']} style={[s.header, { paddingTop: insets.top + 10 }]}>
         <View style={s.headTop}>
           <TouchableOpacity onPress={onBack} hitSlop={hit}><Ionicons name="chevron-back" size={26} color={COLORS.purpleDeep} /></TouchableOpacity>
+          <LangButton />
         </View>
         <Text style={s.svcName}>{form.service}</Text>
         <Text style={s.subtitle}>{t('packageDetails')}</Text>

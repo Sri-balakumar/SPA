@@ -577,8 +577,14 @@ const s = StyleSheet.create({
   },
   alertBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 28 },
-  sheet: { backgroundColor: '#fff', borderRadius: 18, paddingVertical: 8, maxHeight: '60%' },
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(46,36,64,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  sheet: {
+    backgroundColor: '#fff', borderRadius: 18, paddingVertical: 6,
+    width: '100%', maxWidth: 320, maxHeight: '60%', overflow: 'hidden',
+  },
   sheetTitle: { fontSize: 15, fontWeight: '800', color: COLORS.ink, padding: 16, paddingBottom: 8 },
   dbRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

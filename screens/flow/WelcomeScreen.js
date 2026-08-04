@@ -98,7 +98,7 @@ export default function WelcomeScreen({
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
-      {/* NexGenn brand, moved up from the footer (replaces Stretch & Go here). */}
+      {/* NexGenn brand, moved up from the footer. */}
       <BrandHeader
         onHome={onHome}
         logo={require('../../assets/nexgen_dark.png')}

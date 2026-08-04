@@ -1,5 +1,5 @@
 // Shared header for the existing-customer flow — SAME design as the Service page:
-// a soft lavender band with [back]  [English] on top, the stretch & go logo
+// a soft lavender band with [back]  [English] on top, the NexGenn logo
 // centred, then an optional serif title + tulip divider + subtitle.
 // Long-press the logo ends the session (reception only).
 import React from 'react';
@@ -15,7 +15,7 @@ const hit = { top: 10, bottom: 10, left: 10, right: 10 };
 
 // `logo` / `logoStyle` override the default brand mark for screens that show a
 // different one (the Welcome/language screen uses the NexGenn logo). Omitting
-// them keeps the original Stretch & Go header used by the rest of the flow.
+// them keeps the default NexGenn header used by the rest of the flow.
 // `showLang={false}` hides the top-right language switcher — used on the
 // Welcome screen, where picking the language IS the content.
 // `onLogoPress` is the tap handler on the brand mark (the Welcome screen uses

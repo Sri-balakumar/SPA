@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
+import LangButton from './LangButton';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 
@@ -20,7 +21,8 @@ export default function StepHeader({ title, subtitle, onBack }) {
             <Ionicons name="chevron-back" size={26} color={COLORS.purpleDeep} />
           </TouchableOpacity>
         ) : <View style={{ width: 26 }} />}
-        <View style={{ width: 26 }} />
+        {/* The customer can still switch language mid-form. */}
+        <LangButton />
       </View>
       <Text style={s.title}>{title}</Text>
       {!!subtitle && <Text style={s.sub}>{subtitle}</Text>}

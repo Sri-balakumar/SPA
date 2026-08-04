@@ -37,10 +37,18 @@ export default function LangButton() {
 const s = StyleSheet.create({
   btn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderRadius: 999, paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1, borderColor: COLORS.line },
   lbl: { fontSize: 12, fontWeight: '700', color: COLORS.purpleDeep },
-  backdrop: { flex: 1, backgroundColor: 'rgba(46,36,64,0.45)', justifyContent: 'center', padding: 40 },
-  sheet: { backgroundColor: '#fff', borderRadius: 16, paddingVertical: 8 },
-  title: { fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep, padding: 16, paddingBottom: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 15, borderTopWidth: 1, borderTopColor: COLORS.line },
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(46,36,64,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  // maxWidth is the fix: without it the sheet stretched to the full width of a
+  // tablet screen for two short rows. alignItems on the backdrop centres it.
+  sheet: {
+    backgroundColor: '#fff', borderRadius: 18, paddingVertical: 6,
+    width: '100%', maxWidth: 300, overflow: 'hidden',
+  },
+  title: { fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep, textAlign: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 13, borderTopWidth: 1, borderTopColor: COLORS.line },
   rowTxt: { fontSize: 17, color: COLORS.ink },
   check: { color: COLORS.purple, fontWeight: '900', fontSize: 16 },
 });

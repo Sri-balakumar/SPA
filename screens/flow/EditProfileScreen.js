@@ -155,8 +155,14 @@ const s = StyleSheet.create({
   cta: { alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.purple, borderRadius: 999, paddingVertical: 16, marginTop: 26 },
   ctaTxt: { color: '#fff', fontSize: 15.5, fontWeight: '800' },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(46,36,64,0.45)', justifyContent: 'center', padding: 40 },
-  sheet: { backgroundColor: '#fff', borderRadius: 16, paddingVertical: 8 },
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(46,36,64,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  sheet: {
+    backgroundColor: '#fff', borderRadius: 18, paddingVertical: 6,
+    width: '100%', maxWidth: 300, overflow: 'hidden',
+  },
   sheetTitle: { fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep, padding: 16, paddingBottom: 8 },
   gRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderTopWidth: 1, borderTopColor: COLORS.line },
   gTxt: { fontSize: 16, color: COLORS.ink },

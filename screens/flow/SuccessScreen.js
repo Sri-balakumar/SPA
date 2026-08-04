@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOW } from '../../theme';
 import Button from '../../components/Button';
+import LangButton from '../../components/LangButton';
 import { useLang } from '../../LanguageContext';
 
 export default function SuccessScreen({ form, onHome }) {
@@ -17,6 +18,10 @@ export default function SuccessScreen({ form, onHome }) {
   return (
     <View style={[s.root, { paddingTop: insets.top }]}>
       <StatusBar style="dark" />
+      {/* No header on this screen, so the switcher sits on its own top row. */}
+      <View style={s.topBar}>
+        <LangButton />
+      </View>
       <ScrollView contentContainerStyle={s.center}>
         <View style={s.checkWrap}>
           <Ionicons name="checkmark" size={54} color="#fff" />
@@ -55,6 +60,7 @@ export default function SuccessScreen({ form, onHome }) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.lavender },
+  topBar: { alignItems: 'flex-end', paddingHorizontal: 18, paddingTop: 10 },
   center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
   checkWrap: {
     width: 96, height: 96, borderRadius: 48, backgroundColor: COLORS.purple,

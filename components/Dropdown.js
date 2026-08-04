@@ -55,8 +55,16 @@ const s = StyleSheet.create({
   value: { fontSize: 15, color: COLORS.ink, flex: 1 },
   chev: { fontSize: 15, color: COLORS.muted, paddingLeft: 8 },
 
-  backdrop: { flex: 1, backgroundColor: 'rgba(46,36,64,0.45)', justifyContent: 'center', padding: 26 },
-  sheet: { backgroundColor: '#fff', borderRadius: 18, paddingVertical: 8, maxHeight: '65%' },
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(46,36,64,0.45)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  // maxWidth keeps the sheet a compact centred card instead of stretching to
+  // the full width of a tablet screen — same sizing as the language popup.
+  sheet: {
+    backgroundColor: '#fff', borderRadius: 18, paddingVertical: 6,
+    width: '100%', maxWidth: 300, maxHeight: '65%', overflow: 'hidden',
+  },
   sheetTitle: { fontSize: 15, fontWeight: '800', color: COLORS.purpleDeep, padding: 16, paddingBottom: 8 },
   row: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

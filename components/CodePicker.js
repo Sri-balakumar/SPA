@@ -112,7 +112,9 @@ const s = StyleSheet.create({
   },
   sheet: {
     backgroundColor: '#fff', borderRadius: 18, paddingBottom: 8,
-    width: '100%', maxWidth: 460, maxHeight: '80%',
+    // Wider than the other pickers because each row carries three columns
+    // (flag, country name, dial code) plus a search box.
+    width: '100%', maxWidth: 380, maxHeight: '80%',
   },
   head: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

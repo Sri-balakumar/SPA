@@ -2,7 +2,7 @@
   "expo": {
     "name": "NEXGENN SPA",
     "slug": "spa",
-    "owner": "stretchgo",
+    "owner": "setihel",
     "scheme": "spa",
     "version": "1.0.0",
     "orientation": "default",
@@ -10,7 +10,7 @@
     "backgroundColor": "#ffffff",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/stretchandgo_black.png",
+      "image": "./assets/nexgen_dark.png",
       "resizeMode": "contain",
       "backgroundColor": "#F5EEFB"
     },
@@ -43,7 +43,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "e14446a4-e410-4867-b4f5-9d71c536bdf4"
+        "projectId": "c2716ab3-35c3-4538-8d85-d2d11a2ee65b"
       }
     }
   }

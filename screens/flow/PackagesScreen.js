@@ -1,7 +1,7 @@
 // Screen 3 — Packages under the selected service.
-// The customer picks Single / Starter / Commit / Lifestyle. Packages are built
-// from the service's single price (see data/packages.js). Purple/lavender theme.
-import React, { useState } from 'react';
+// The customer picks Single / Starter / Commit / Lifestyle. The packages come
+// live from Odoo alongside the therapy. Purple/lavender theme.
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions,
 } from 'react-native';
@@ -10,6 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
+import LangButton from '../../components/LangButton';
+import { loadTherapies } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { toDigits } from '../../dateFmt';
 
@@ -36,6 +38,24 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
   });
   const [selected, setSelected] = useState(null);
 
+  // Package names and descriptions come from Odoo and were captured on the
+  // Service page in whatever language was active THEN — switching language here
+  // would otherwise only re-label the chrome and leave the packages in the old
+  // language. Re-fetch this therapy so the Odoo text follows the switch too.
+  useEffect(() => {
+    const id = form.serviceObj?.id;
+    if (!id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const data = await loadTherapies(lang);
+        const fresh = (data.therapies || []).find((x) => x.id === id);
+        if (alive && fresh) set({ serviceObj: fresh, service: fresh.name });
+      } catch (e) { /* keep showing what we already have */ }
+    })();
+    return () => { alive = false; };
+  }, [lang]);
+
   function cont() {
     const pkg = packages[selected];
     // serviceId = the PACKAGE id — that's what /questions and /tab/submit expect.
@@ -49,6 +69,7 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
       <LinearGradient colors={['#EFE6F8', '#F5EFFb']} style={[s.header, { paddingTop: insets.top + 10 }]}>
         <View style={s.headTop}>
           <TouchableOpacity onPress={onBack} hitSlop={hit}><Ionicons name="chevron-back" size={26} color={COLORS.purpleDeep} /></TouchableOpacity>
+          <LangButton />
         </View>
         <Text style={s.svcName}>{form.service}</Text>
         <Text style={s.subtitle}>{t('choosePackage')}</Text>

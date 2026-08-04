@@ -5,10 +5,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { COLORS } from '../../theme';
+import AppAlert from '../../components/AppAlert';
 import StepHeader from '../../components/StepHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
@@ -49,6 +50,10 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
   }
   useEffect(() => { fetch(); }, [form.serviceId]);
 
+  // In-app popup styled like the rest of the app, in place of the OS Alert.
+  const [alertBox, setAlertBox] = useState(null);
+  const showAlert = (title, message, tone = 'error') => setAlertBox({ title, message, tone });
+
   const setAns = (qid, val) => setAnswers((a) => ({ ...a, [qid]: val }));
   function toggleMulti(qid, opt) {
     setAnswers((a) => {
@@ -61,10 +66,10 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
     for (const q of questions) {
       const v = answers[q.id];
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
-      if (q.required && empty) return Alert.alert(t('required'), `${t('answerThis')} ${q.name}`);
+      if (q.required && empty) return showAlert(t('required'), `${t('answerThis')} ${q.name}`);
     }
-    if (!agree) return Alert.alert(t('missing'), t('agreeFirst'));
-    if (!form.signature) return Alert.alert(t('missing'), t('signatureRequired'));
+    if (!agree) return showAlert(t('missing'), t('agreeFirst'));
+    if (!form.signature) return showAlert(t('missing'), t('signatureRequired'));
     const out = questions.map((q) => ({
       questionId: q.id,
       value: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : (answers[q.id] || ''),
@@ -155,6 +160,8 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
           </ScrollView>
         </KeyboardAvoidingView>
       )}
+
+      <AppAlert box={alertBox} onClose={() => setAlertBox(null)} />
     </View>
   );
 }

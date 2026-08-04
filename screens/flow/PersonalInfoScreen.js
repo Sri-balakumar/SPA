@@ -9,17 +9,18 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, useWindowDimensions,
+  KeyboardAvoidingView, Platform, ActivityIndicator, useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import StepHeader from '../../components/StepHeader';
 import BrandHeader from '../../components/BrandHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
 import CodePicker from '../../components/CodePicker';
+import AppAlert from '../../components/AppAlert';
 import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
@@ -86,18 +87,29 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   const formRule = phoneRule(form.countryIso || 'OM');
   const badPhone = !!form.phone && !formRule.isValid(form.phone);
   const badWa = !!form.whatsapp && !formRule.isValid(form.whatsapp);
+
+  // Email must be a Gmail address: something before the @, then @gmail.com.
+  const GMAIL_RE = /^[^\s@]+@gmail\.com$/i;
+  const emailOk = GMAIL_RE.test((form.email || '').trim());
+  const badEmail = !!form.email && !emailOk;   // red line only once they've typed
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [customers, setCustomers] = useState([]);
 
   const [showPicker, setShowPicker] = useState(false);
   const [dobDate, setDobDate] = useState(null);
+
+  // In-app popup styled like the rest of the app, in place of the OS Alert.
+  const [alertBox, setAlertBox] = useState(null);
+  function showAlert(title, message, tone = 'error') {
+    setAlertBox({ title, message, tone });
+  }
   const gLabel = { Female: t('female'), Male: t('male'), Other: t('other') };
   const gValue = { [t('female')]: 'Female', [t('male')]: 'Male', [t('other')]: 'Other' };
 
   // ---- Lookup ----
   async function find() {
-    if (!lookupNum.trim()) return Alert.alert(t('missing'), t('missingMobile'));
+    if (!lookupNum.trim()) return showAlert(t('missing'), t('missingMobile'));
     setLoading(true);
     setNotFound(false);
     try {
@@ -107,7 +119,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       if (list.length) { setCustomers(list); setMode('profiles'); }
       else setNotFound(true);
     } catch (e) {
-      Alert.alert(t('couldNotLookup'), e.message || t('tryAgain'));
+      showAlert(t('couldNotLookup'), e.message || t('tryAgain'));
     } finally {
       setLoading(false);
     }
@@ -166,15 +178,19 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     set({ whatsappSame: nextSame, whatsapp: nextSame ? form.phone : '' });
   }
   function proceed() {
-    if (!form.fullName.trim()) return Alert.alert(t('missing'), t('enterName'));
+    if (!form.fullName.trim()) return showAlert(t('missing'), t('enterName'));
     // DOB is required for brand-new customers; returning ones may not have it on file yet.
-    if (!form.existingCustomerId && !form.dob) return Alert.alert(t('missing'), t('selectDob'));
-    if (!form.gender) return Alert.alert(t('missing'), t('selectGender'));
-    if (!form.phone.trim()) return Alert.alert(t('missing'), t('enterPhone'));
-    if (badPhone || badWa) return Alert.alert(t('missing'), t('phoneInvalid'));
-    if (!form.whatsapp.trim()) return Alert.alert(t('missing'), t('enterWhatsapp'));
-    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim()))
-      return Alert.alert(t('invalidEmail'), t('invalidEmailMsg'));
+    if (!form.existingCustomerId && !form.dob) return showAlert(t('missing'), t('selectDob'));
+    if (!form.gender) return showAlert(t('missing'), t('selectGender'));
+    if (!form.phone.trim()) return showAlert(t('missing'), t('enterPhone'));
+    if (badPhone || badWa) return showAlert(t('missing'), t('phoneInvalid'));
+    if (!form.whatsapp.trim()) return showAlert(t('missing'), t('enterWhatsapp'));
+    // Email is required and must be a Gmail address.
+    if (!emailOk) return showAlert(t('invalidEmail'), t('gmailOnly'));
+    // Belt & braces: the picker's maximumDate already blocks future dates, but
+    // guard the stored value too in case it ever arrives from elsewhere.
+    if (form.dobISO && new Date(form.dobISO) > new Date())
+      return showAlert(t('missing'), t('selectDob'));
     next();
   }
 
@@ -187,10 +203,20 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     return (
       <View style={s.root}>
         <StatusBar style="dark" />
-        <BrandHeader title={t('findMyDetails')} subtitle={t('lookupSub')} titleSize={28} onBack={onBack} onHome={onHome} />
+        {/* Logo only — the heading moved into the centred block below so it
+            sits next to the number field instead of pinned to the top. */}
+        <BrandHeader onBack={onBack} onHome={onHome} />
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.centerScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={{ width: contentW }}>
+              <Text style={s.bTitle}>{t('findMyDetails')}</Text>
+              <View style={s.bDivider}>
+                <View style={s.bLine} />
+                <MaterialCommunityIcons name="flower-tulip" size={16} color={COLORS.purple} />
+                <View style={s.bLine} />
+              </View>
+              <Text style={s.bSubtitle}>{t('lookupSub')}</Text>
+
               <Text style={[s.bLabel, rtl && s.rtl]}>{t('mobileNumber')}</Text>
               <View style={[s.bField, badLookup && s.fieldError]}>
                 <CodePicker value={lookupCc} onChange={(d, iso) => { setLookupCc(d); setLookupIso(iso); }} />
@@ -228,6 +254,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        <AppAlert box={alertBox} onClose={() => setAlertBox(null)} />
       </View>
     );
   }
@@ -334,16 +362,19 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
           {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
           {/* Email */}
-          <Text style={s.label}>{t('email')}</Text>
-          <View style={s.field}>
-            <TextInput style={s.input} placeholder={t('emailPh')} placeholderTextColor="#B4A9C4"
+          <Text style={s.label}>{t('email')} <Text style={s.req}>*</Text></Text>
+          <View style={[s.field, badEmail && s.fieldError]}>
+            <TextInput style={s.input} placeholder="name@gmail.com" placeholderTextColor="#B4A9C4"
               keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
-              value={form.email} onChangeText={(v) => set({ email: v })} />
+              value={form.email} onChangeText={(v) => set({ email: v.trim() })} />
           </View>
+          {badEmail && <Text style={s.errTxt}>{t('gmailOnly')}</Text>}
 
           <Button title={t('next')} onPress={proceed} style={{ marginTop: 18 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AppAlert box={alertBox} onClose={() => setAlertBox(null)} />
     </View>
   );
 }
@@ -376,8 +407,16 @@ const s = StyleSheet.create({
 
   // lookup + profiles (branded, no footer)
   rtl: { textAlign: 'right', writingDirection: 'rtl' },
-  centerScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 24, paddingHorizontal: 16 },
+  // Centred, biased upward so the block sits near the top of the free space.
+  centerScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 24, paddingBottom: 130, paddingHorizontal: 16 },
   centerTop: { alignItems: 'center', paddingTop: 14, paddingBottom: 30 },
+
+  // "Find My Details" block — moved out of BrandHeader so it centres with the
+  // number field rather than sitting pinned at the top of the screen.
+  bTitle: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: 28, color: COLORS.purpleDeep, textAlign: 'center' },
+  bDivider: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  bLine: { width: 46, height: 1, backgroundColor: '#D7C7EA', marginHorizontal: 8 },
+  bSubtitle: { fontSize: 13.5, color: COLORS.muted, textAlign: 'center', marginTop: 10, marginBottom: 26 },
 
   bLabel: { fontSize: 13, fontWeight: '800', color: COLORS.muted, marginBottom: 8, marginLeft: 2 },
   bField: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 14, paddingHorizontal: 14, height: 56 },

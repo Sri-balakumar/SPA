@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
+import LangButton from '../../components/LangButton';
 import { odooImage } from '../../spaApi';
 
 const SERIF = 'PlayfairDisplay_700Bold';
@@ -28,7 +29,10 @@ export default function ServiceDetailScreen({ form, next, onBack, onHome }) {
       <LinearGradient colors={['#EFE6F8', '#F5EFFb']} style={[s.header, { paddingTop: insets.top + 8 }]}>
         <View style={s.headTop}>
           <TouchableOpacity onPress={onBack} hitSlop={hit}><Ionicons name="chevron-back" size={26} color={COLORS.purpleDeep} /></TouchableOpacity>
-          <TouchableOpacity onLongPress={onHome} delayLongPress={800} activeOpacity={1}><Text style={s.deco}>🪷</Text></TouchableOpacity>
+          <View style={s.headRight}>
+            <LangButton />
+            <TouchableOpacity onLongPress={onHome} delayLongPress={800} activeOpacity={1}><Text style={s.deco}>🪷</Text></TouchableOpacity>
+          </View>
         </View>
         <Text style={s.svcName}>{form.service}</Text>
         <Text style={s.subtitle}>Service details</Text>
@@ -80,6 +84,7 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.lavender },
   header: { paddingHorizontal: 18, paddingBottom: 18, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
   headTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   deco: { fontSize: 30 },
   svcName: { fontFamily: SERIF, fontSize: 26, color: COLORS.purpleDeep, textAlign: 'center', marginTop: 4 },
   subtitle: { fontSize: 13.5, color: COLORS.muted, textAlign: 'center', marginTop: 6 },

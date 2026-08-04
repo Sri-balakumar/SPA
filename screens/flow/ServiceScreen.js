@@ -176,9 +176,10 @@ const s = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   line: { width: 46, height: 1, backgroundColor: '#D7C7EA', marginHorizontal: 8 },
   subtitle: { fontSize: 13.5, color: COLORS.muted, textAlign: 'center', marginTop: 8 },
-  // NexGenn brand, moved up from the footer (5:1 aspect, matching the header
-  // treatment on the Welcome and device config screens).
-  brandLogo: { width: 270, height: 54, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
+  // NexGenn brand, moved up from the footer. Same 320x68 as BrandHeader uses on
+  // every other screen — this screen has its own inline header, so it needs the
+  // size set here rather than inheriting it.
+  brandLogo: { width: 320, height: 68, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
   headRibbon: { width: 28, height: 38 },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
@@ -202,12 +203,18 @@ const s = StyleSheet.create({
     shadowColor: '#4A2F6B', shadowOpacity: 0.15, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
   name: { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.purpleDeep, lineHeight: 19 },
-  // Fixed height keeps every card the same size in the grid, but it must be
-  // TALLER than numberOfLines x lineHeight or it clips the last line through
-  // the middle. Integer lineHeight (not 16.5) avoids Android rounding it up
-  // past the box; 4 x 17 = 68, plus slack for font-metric differences.
-  descBox: { height: 72, marginTop: 16, justifyContent: 'flex-start' },
-  desc: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
+  // minHeight, NOT height: a fixed height is a hard clip, so anything even a
+  // pixel taller loses the bottom of the last line. minHeight still reserves
+  // the same space (keeping cards equal in the grid, since numberOfLines caps
+  // the text at 4) but can never cut text off.
+  descBox: { minHeight: 72, marginTop: 16 },
+  desc: {
+    fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17,
+    // Android pads above/below the glyphs on top of lineHeight, so 4 lines
+    // measure taller than 4 x 17 and overflow the box. Turning it off makes
+    // the rendered height match the arithmetic.
+    includeFontPadding: false,
+  },
   priceBar: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lavenderSoft,
     marginHorizontal: -14, marginTop: 14, paddingHorizontal: 14, paddingVertical: 15, borderTopLeftRadius: 22,

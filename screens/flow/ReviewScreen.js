@@ -2,9 +2,10 @@
 // Submit Request creates a Spa Booking in Odoo (the receptionist sees it).
 // (The "I agree" + signature step now lives on the Health/Questions screen.)
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { COLORS, SHADOW } from '../../theme';
+import AppAlert from '../../components/AppAlert';
 import StepHeader from '../../components/StepHeader';
 import Button from '../../components/Button';
 import { submitBooking } from '../../spaApi';
@@ -23,15 +24,28 @@ function Row({ label, value }) {
 export default function ReviewScreen({ form, set, next, onBack, onHome }) {
   const { t } = useLang();
   const [busy, setBusy] = useState(false);
+  const [alertBox, setAlertBox] = useState(null);
 
   async function submit() {
     setBusy(true);
     try {
+      console.log('[SUBMIT] sending booking →', JSON.stringify({
+        serviceId: form.serviceId, package: form.packageName,
+        name: form.fullName, phone: `${form.countryCode} ${form.phone}`,
+        answers: (form.answers || []).length, hasSignature: !!form.signature,
+      }));
       const res = await submitBooking(form);        // { success, booking_ref, id }
+      console.log('[SUBMIT] ok →', JSON.stringify(res));
       set({ bookingToken: res?.booking_ref || '' });
       next();
     } catch (e) {
-      Alert.alert(t('couldNotSubmit'), e.message || t('tryAgain'));
+      // Log everything the server sent back — `message` alone often hides the
+      // real Odoo cause, which lives in e.odoo.data.
+      console.log('[SUBMIT] FAILED →', e.message);
+      console.log('[SUBMIT] odoo error →', JSON.stringify(e.odoo || null, null, 2));
+      console.log('[SUBMIT] payload was →', JSON.stringify(form, null, 2));
+      const detail = e.odoo?.data?.message || e.odoo?.message || e.message || t('tryAgain');
+      setAlertBox({ title: t('couldNotSubmit'), message: detail, tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -59,6 +73,8 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
 
         <Button title={busy ? t('submitting') : t('submit')} onPress={submit} loading={busy} style={{ marginTop: 4 }} />
       </ScrollView>
+
+      <AppAlert box={alertBox} onClose={() => setAlertBox(null)} />
     </View>
   );
 }

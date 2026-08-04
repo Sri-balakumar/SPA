@@ -1,5 +1,5 @@
 // Brief splash: rehydrates the last-used connection (URL + DB) from storage,
-// then hands control back to the app shell. Shows the Stretch & Go logo.
+// then hands control back to the app shell. Shows the NexGenn logo.
 import React, { useEffect } from 'react';
 import { View, Image, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -53,7 +53,7 @@ export default function LoadingScreen({ onDone }) {
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
-      <Image source={require('../assets/stretchandgo_black.png')} style={s.logo} resizeMode="contain" />
+      <Image source={require('../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
       <ActivityIndicator color={COLORS.purple} style={s.spinner} />
     </View>
   );
@@ -61,6 +61,8 @@ export default function LoadingScreen({ onDone }) {
 
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F5EEFB', alignItems: 'center', justifyContent: 'center' },
-  logo: { width: '70%', height: 150 },
+  // 5:1, matching nexgen_dark.png — the old 150 height was sized for the
+  // taller Stretch & Go wordmark and would letterbox this logo.
+  logo: { width: '72%', maxWidth: 340, height: 70 },
   spinner: { marginTop: 20 },
 });

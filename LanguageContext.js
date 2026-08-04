@@ -130,6 +130,7 @@ const STR = {
   // {n} is filled with the selected country's digit count.
   enterNDigits: { en: 'Enter {n} digit number', ar: 'أدخل رقمًا من {n} أرقام' },
   phoneInvalid: { en: 'Enter a valid mobile number for the selected country.', ar: 'أدخل رقم هاتف محمول صالحًا للدولة المختارة.' },
+  gmailOnly: { en: 'Please enter a Gmail address ending in @gmail.com', ar: 'يرجى إدخال بريد Gmail ينتهي بـ @gmail.com' },
   findMyPackages: { en: 'Find My Packages', ar: 'ابحث عن باقاتي' },
   secureNote: { en: 'We use your number to find your active packages securely.', ar: 'نستخدم رقمك للعثور على باقاتك النشطة بأمان.' },
   needAssistance: { en: 'Need assistance? Please contact the reception desk.', ar: 'بحاجة إلى مساعدة؟ يرجى التواصل مع مكتب الاستقبال.' },
