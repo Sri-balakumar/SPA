@@ -1,0 +1,27 @@
+.spa-qty-stepper {
+    // Keep the stepper off the far-left edge, aligned under the line text.
+    .spa-qty-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.75rem;
+        height: 2.75rem;
+        border: 2px solid #dfe8e4;
+        border-radius: 0.6rem;
+        background: #fff;
+        color: #1f6f5c;
+        font-size: 1.1rem;
+        line-height: 1;
+
+        &:active {
+            background: #1f6f5c;
+            color: #fff;
+        }
+    }
+
+    .spa-qty-value {
+        min-width: 2rem;
+        text-align: center;
+        font-size: 1.1rem;
+    }
+}

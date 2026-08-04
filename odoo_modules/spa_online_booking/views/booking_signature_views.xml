@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- A tablet still running the old app can submit a booking with no
+         signature. Those are accepted for now so the shop keeps working, but
+         they must not be invisible: someone has to be able to see who still
+         owes a signature before the tablet API starts refusing them. -->
+    <record id="view_spa_booking_list_signature" model="ir.ui.view">
+        <field name="name">spa.booking.list.signature</field>
+        <field name="model">spa.booking</field>
+        <field name="inherit_id" ref="spa_kiosk.view_spa_booking_list"/>
+        <field name="arch" type="xml">
+            <field name="state" position="before">
+                <field name="signature_missing" string="Not Signed"
+                       widget="boolean_toggle" readonly="1" optional="show"/>
+                <field name="terms_accepted" string="Terms" widget="boolean_toggle"
+                       readonly="1" optional="show"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_spa_booking_search_signature" model="ir.ui.view">
+        <field name="name">spa.booking.search.signature</field>
+        <field name="model">spa.booking</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="partner_name"/>
+                <field name="mobile"/>
+                <filter name="spa_not_signed" string="Not Signed"
+                        domain="[('signature_missing', '=', True)]"/>
+            </search>
+        </field>
+    </record>
+
+</odoo>

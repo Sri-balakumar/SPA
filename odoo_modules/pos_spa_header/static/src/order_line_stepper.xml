@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Inject a "− qty +" stepper into each order line of the cashier panel. -->
+    <t t-inherit="point_of_sale.OrderSummary" t-inherit-mode="extension">
+        <xpath expr="//Orderline" position="inside">
+            <t t-set-slot="default">
+                <li class="spa-qty-stepper d-flex align-items-center gap-2 mt-1"
+                    t-on-pointerdown.stop="() => {}"
+                    t-on-pointerup.stop="() => {}"
+                    t-on-click.stop="() => {}">
+                    <button type="button" class="spa-qty-btn spa-qty-minus"
+                            aria-label="Decrease quantity"
+                            t-on-click.stop="() => this.decrementLine(line)">
+                        <i class="fa fa-minus"/>
+                    </button>
+                    <span class="spa-qty-value fw-bolder"
+                          t-esc="line.getQuantityStr().unitPart"/>
+                    <button type="button" class="spa-qty-btn spa-qty-plus"
+                            aria-label="Increase quantity"
+                            t-on-click.stop="() => this.incrementLine(line)">
+                        <i class="fa fa-plus"/>
+                    </button>
+                </li>
+            </t>
+        </xpath>
+    </t>
+
+</templates>

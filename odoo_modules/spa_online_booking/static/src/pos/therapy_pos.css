@@ -1,0 +1,580 @@
+/* ============================================================
+   POS therapy-booking flow (inside the Book Therapy dialog).
+   Scoped to .spa-pos-flow so it never leaks into the rest of POS.
+   ============================================================ */
+.spa-pos-flow { --tp-green: #16A34A; --tp-green-dark: #15803D; --tp-dark: #0F1720; --tp-line: #E5E7EB; --tp-soft: #6B7280; }
+
+/* ---- therapy grid ---- */
+.spa-pos-flow .tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.spa-pos-flow .tp-tcard { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; justify-content: center; min-height: 108px; padding: 16px 16px; background: #fff; color: #1f2a37; border: 1px solid #e6e8eb; border-bottom: 3px solid var(--tp-green); border-radius: 10px; cursor: pointer; text-align: start; box-shadow: 0 1px 2px rgba(16,23,32,.04); transition: box-shadow .12s; }
+.spa-pos-flow .tp-tcard:hover { box-shadow: 0 6px 16px rgba(16,23,32,.10); }
+.spa-pos-flow .tp-tcard__name { font-weight: 800; font-size: 1.05rem; color: #1f2a37; }
+.spa-pos-flow .tp-tcard__meta { color: #8a94a0; font-size: .84rem; }
+.spa-pos-flow .tp-tcard__from { color: var(--tp-green); font-weight: 700; font-size: .9rem; margin-top: 2px; }
+
+/* ---- therapy detail ---- */
+.spa-pos-flow .tp-banner__media { border-radius: 14px; overflow: hidden; margin-bottom: 12px; max-height: 200px; }
+.spa-pos-flow .tp-banner__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.spa-pos-flow .tp-banner__name { font-weight: 800; text-transform: uppercase; margin: 0 0 8px; }
+.spa-pos-flow .tp-rich { font-size: .92rem; line-height: 1.55; }
+.spa-pos-flow .tp-rich p { margin: 0 0 8px; }
+.spa-pos-flow .tp-info { list-style: none; margin: 12px 0; padding: 0; border-top: 1px solid var(--tp-line); }
+.spa-pos-flow .tp-info li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--tp-line); }
+.spa-pos-flow .tp-info li span { color: var(--tp-soft); }
+.spa-pos-flow .tp-info li b { text-align: end; }
+.spa-pos-flow .tp-section { font-weight: 800; font-size: 1rem; margin: 14px 0 8px; }
+
+/* ---- package radio list ---- */
+.spa-pos-flow .tp-plist { display: flex; flex-direction: column; gap: 10px; }
+.spa-pos-flow .tp-prow { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; padding: 13px 14px; border: 1.5px solid var(--tp-line); border-radius: 14px; cursor: pointer; margin: 0; }
+.spa-pos-flow .tp-prow.is-selected { border-color: var(--tp-green); box-shadow: 0 0 0 1px var(--tp-green) inset; background: #E7F6EC; }
+.spa-pos-flow .tp-prow input { position: absolute; opacity: 0; width: 0; height: 0; }
+.spa-pos-flow .tp-prow__radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #C7CDD4; position: relative; }
+.spa-pos-flow .tp-prow.is-selected .tp-prow__radio { border-color: var(--tp-green); }
+.spa-pos-flow .tp-prow.is-selected .tp-prow__radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--tp-green); }
+.spa-pos-flow .tp-prow__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.spa-pos-flow .tp-prow__name { font-weight: 700; }
+.spa-pos-flow .tp-prow__sub { font-size: .8rem; color: var(--tp-soft); }
+.spa-pos-flow .tp-prow__price { text-align: end; display: flex; flex-direction: column; }
+.spa-pos-flow .tp-prow__amt { font-weight: 800; font-size: 1.05rem; }
+.spa-pos-flow .tp-prow__save { font-size: .72rem; font-weight: 700; color: var(--tp-green); }
+.spa-pos-flow .tp-prow--detailed { align-items: flex-start; }
+.spa-pos-flow .tp-prow--detailed .tp-prow__radio { margin-top: 3px; }
+.spa-pos-flow .tp-prow--detailed .tp-prow__price { padding-top: 2px; }
+.spa-pos-flow .tp-prow__desc { display: block; font-size: .82rem; color: var(--tp-soft); margin-top: 7px; line-height: 1.55; }
+.spa-pos-flow .tp-pkgsel__title { font-weight: 800; text-transform: uppercase; letter-spacing: .01em; margin: 0 0 2px; }
+
+/* ============ Select Therapy screen ============ */
+.spa-pos-flow .tbk-h { font-weight: 800; font-size: 1.3rem; margin: 0 0 2px; color: #1f2a37; }
+.spa-pos-flow .tbk-therapies { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 992px) { .spa-pos-flow .tbk-therapies { grid-template-columns: repeat(2, 1fr); } }
+.spa-pos-flow .tbk-tcard { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; background: #fff; border: 2px solid #eef0f2; border-radius: 16px; padding: 0 0 18px; cursor: pointer; overflow: hidden; box-shadow: 0 1px 3px rgba(16,23,32,.04); transition: border-color .12s, box-shadow .12s; }
+.spa-pos-flow .tbk-tcard:hover { box-shadow: 0 8px 22px rgba(16,23,32,.10); }
+.spa-pos-flow .tbk-tcard.is-selected { border-color: var(--c); background: #f8f8fc; }
+.spa-pos-flow .tbk-tcard__check { position: absolute; top: 10px; inset-inline-end: 10px; z-index: 3; width: 26px; height: 26px; border-radius: 50%; background: var(--c); color: #fff; display: flex; align-items: center; justify-content: center; font-size: .8rem; }
+.spa-pos-flow .tbk-tcard__media { width: 100%; height: 120px; background-size: cover; background-position: center; background-color: #0f1720; }
+.spa-pos-flow .tbk-tcard__icon { width: 62px; height: 62px; margin-top: -31px; margin-bottom: 8px; border-radius: 50%; background: #fff; color: var(--c); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,.12); position: relative; z-index: 2; }
+.spa-pos-flow .tbk-tcard__name { font-weight: 800; font-size: 1.05rem; color: var(--c); text-transform: uppercase; letter-spacing: .02em; }
+.spa-pos-flow .tbk-tcard__tag { color: #6b7682; font-size: .85rem; margin-top: 4px; padding: 0 12px; line-height: 1.4; }
+
+/* ============ Packages section ============ */
+.spa-pos-flow .tbk-sep { border: 0; border-top: 1px solid #eef0f2; margin: 22px 0 18px; }
+.spa-pos-flow .tbk-pkg-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.spa-pos-flow .tbk-back { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #e6e8eb; background: #fff; color: #555; cursor: pointer; flex-shrink: 0; }
+.spa-pos-flow .tbk-pkg-title { font-weight: 800; color: #4b2e83; margin: 0; flex: 1; }
+.spa-pos-flow .tbk-viewtoggle { display: flex; gap: 6px; }
+.spa-pos-flow .tbk-viewtoggle button { width: 40px; height: 36px; border-radius: 10px; border: 1px solid #e6e8eb; background: #fff; color: #6b7682; cursor: pointer; }
+.spa-pos-flow .tbk-viewtoggle button.is-on { background: #4b2e83; color: #fff; border-color: #4b2e83; }
+.spa-pos-flow .tbk-pkgs--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+.spa-pos-flow .tbk-pkgs--list { display: flex; flex-direction: column; gap: 12px; }
+.spa-pos-flow .tbk-pcard { display: flex; flex-direction: column; background: #fff; border: 1px solid #eef0f2; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(16,23,32,.04); }
+.spa-pos-flow .tbk-pkgs--list .tbk-pcard { flex-direction: row; }
+.spa-pos-flow .tbk-pcard__img { height: 92px; background: #f0f2f5; background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center; }
+.spa-pos-flow .tbk-pkgs--list .tbk-pcard__img { width: 130px; height: auto; flex-shrink: 0; }
+.spa-pos-flow .tbk-pcard__ph { color: #c3c9d0; font-size: 1.7rem; }
+.spa-pos-flow .tbk-pcard__body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.spa-pos-flow .tbk-pcard__name { font-weight: 700; font-size: .95rem; color: #1f2a37; line-height: 1.3; }
+.spa-pos-flow .tbk-pcard__meta { color: #8a94a0; font-size: .82rem; }
+.spa-pos-flow .tbk-pcard__desc { color: #8a94a0; font-size: .82rem; line-height: 1.5; }
+.spa-pos-flow .tbk-pcard__price { color: #16a34a; font-weight: 800; font-size: 1rem; }
+.spa-pos-flow .tbk-pcard__save { color: #16a34a; font-weight: 700; font-size: .72rem; margin-inline-start: 6px; }
+.spa-pos-flow .tbk-select { margin-top: auto; background: #4b2e83; color: #fff; border: none; border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer; }
+.spa-pos-flow .tbk-select:hover { background: #3d2569; }
+
+/* ============ Inline full-screen booking (in the ProductScreen) ============ */
+.product-screen .tbk-screen {
+    position: absolute; inset: 0; z-index: 5;
+    background: #fff; overflow-y: auto; border-radius: 22px;
+    padding: 28px 34px;
+}
+.tbk-tcard__box { width: 26px; height: 26px; margin-top: 14px; border: 2px solid #cfd5db; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; }
+.tbk-tcard.is-selected .tbk-tcard__box { background: var(--c); border-color: var(--c); }
+.tbk-actions { display: flex; gap: 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid #eef0f2; }
+.tbk-topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.tbk-close { width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; border: none; background: #f1f3f4; color: #555; cursor: pointer; font-size: 1.05rem; }
+.tbk-close:hover { background: #e4e6e7; }
+
+/* Packages pop-up box */
+.tbk-modal-overlay { position: fixed; inset: 0; z-index: 1060; background: rgba(15,23,32,.45); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.tbk-modal { background: #fff; border-radius: 18px; width: 100%; max-width: 640px; max-height: 88vh; overflow-y: auto; padding: 24px 28px; box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+.tbk-modal__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.tbk-modal__title { font-weight: 800; margin: 0; text-transform: uppercase; letter-spacing: .01em; color: #1f2a37; }
+
+/* ---- package details ---- */
+.spa-pos-flow .tp-pd__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.spa-pos-flow .tp-pd__head h3 { font-weight: 800; margin: 0; }
+.spa-pos-flow .tp-pd__price { font-weight: 800; font-size: 1.3rem; color: var(--tp-green); white-space: nowrap; }
+.spa-pos-flow .tp-detail { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--tp-line); }
+.spa-pos-flow .tp-detail__img { width: 100%; border-radius: 12px; margin-bottom: 8px; }
+.spa-pos-flow .tp-detail__sub { color: var(--tp-green-dark); font-weight: 600; font-size: .85rem; margin: 0 0 6px; }
+
+/* ---- questions ---- */
+.spa-pos-flow .tp-qlist { display: flex; flex-direction: column; gap: 16px; }
+.sg-qa-sign { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px 0 4px; padding-top: 8px; border-top: 1px dashed #e2e6e2; }
+.sg-qa-sign__label { font-size: .78rem; color: #6B7280; text-transform: uppercase; letter-spacing: .04em; }
+.sg-qa-sign__img { max-width: 220px; max-height: 72px; border: 1px solid #e2e6e2; border-radius: 6px; padding: 3px; background: #fff; }
+.sg-qa-sign__none { font-size: .85rem; font-style: italic; }
+.sg-qa-sign__terms { font-size: .78rem; color: #15803D; }
+
+.spa-pos-flow .tp-signblock { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--tp-line); }
+.spa-pos-flow .tp-terms { margin-bottom: 16px; align-items: flex-start; }
+.spa-pos-flow .tp-qheading { font-weight: 800; font-size: 1rem; color: var(--tp-green-dark); text-transform: uppercase; letter-spacing: .02em; margin: 8px 0 -6px; padding-bottom: 6px; border-bottom: 1px solid var(--tp-line); }
+.spa-pos-flow .tp-qlist > .tp-qheading:first-child { margin-top: 0; }
+.spa-pos-flow .tp-question__label { font-weight: 600; margin: 0 0 8px; }
+.spa-pos-flow .tp-choices { display: flex; flex-direction: column; gap: 8px; }
+.spa-pos-flow .tp-choices--inline { flex-direction: row; gap: 10px; }
+.spa-pos-flow .tp-opt { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1.5px solid var(--tp-line); border-radius: 12px; cursor: pointer; margin: 0; }
+.spa-pos-flow .tp-choices--inline .tp-opt { flex: 1; }
+.spa-pos-flow .tp-opt:has(input:checked) { border-color: var(--tp-green); background: #E7F6EC; font-weight: 600; }
+.spa-pos-flow .tp-select, .spa-pos-flow .tp-text { max-width: 100%; }
+
+/* ---- customer details form ---- */
+.spa-pos-flow .tp-form { display: flex; flex-direction: column; gap: 14px; }
+.spa-pos-flow .tp-field { display: block; margin: 0; }
+.spa-pos-flow .tp-field span { display: block; font-size: .85rem; color: var(--tp-soft); margin-bottom: 6px; font-weight: 600; }
+
+/* ============================================================
+   Hide the raw product grid on the register screen — ordering is
+   done through the "Book Therapy" flow only. The order (cart) pane
+   expands to fill the screen.
+   ============================================================ */
+.product-screen .rightpane { display: none !important; }
+/* The register becomes a light-grey page with the order shown as a centred
+   rounded white card. */
+.product-screen { background: #f4f5f7 !important; }
+.product-screen .leftpane {
+    position: relative;
+    background: #fff !important;
+    width: 100% !important;
+    max-width: 100% !important;   /* full screen (was a 1120px centred card) */
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    flex: 1 1 auto !important;
+    overflow: hidden;
+}
+/* Remove the bottom control bar (Note / save / more) — the order card stays
+   clean; the Payment button still appears when there's an order. */
+.product-screen .control-buttons { display: none !important; }
+/* Keep the pay button a sensible height. */
+.product-screen .pay-button { padding-top: 14px !important; padding-bottom: 14px !important; }
+
+/* "Pay Later" — parks the order so the customer pays after the session. */
+.product-screen .sg-paylater {
+    display: block; width: 100%;
+    background: #fff; border: 1.5px solid #d7dde3; color: #3a4552;
+    font-weight: 700; padding: 13px 20px; border-radius: 12px;
+}
+.product-screen .sg-paylater:hover { background: #f6f8fa; border-color: #c3ccd4; }
+
+/* Company logo at the far left of the POS top bar. */
+.sg-navbar-logo { height: 36px; width: auto; max-width: 210px; object-fit: contain; border-radius: 6px; align-self: center; margin: 0 14px 0 4px; }
+.sg-pos-brand {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 110px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    z-index: 0;
+}
+.sg-pos-brand img { max-width: 90%; max-height: 62vh; object-fit: contain; opacity: 1; }
+
+/* ============================================================
+   Stretch & Go branded "New Question" dialog
+   ============================================================ */
+.nq-content { border-radius: 20px !important; overflow: hidden; }
+.nq { padding: 22px 26px 6px; --nq-green: #16A34A; --nq-soft: #E7F6EC; color: #23331f; }
+.nq-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.nq-logo { height: 44px; max-width: 240px; object-fit: contain; border-radius: 7px; }
+.nq-logo-text { font-weight: 800; font-size: 1.3rem; }
+.nq-x { border: none; background: #f1f3f4; color: #555; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; }
+.nq-x:hover { background: #e4e6e7; }
+.nq-titlerow { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.nq-ico { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; background: var(--nq-soft); color: var(--nq-green); display: flex; align-items: center; justify-content: center; font-size: 1.05rem; }
+.nq-ico--title { width: 52px; height: 52px; font-size: 1.3rem; }
+.nq-title { font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
+.nq-sub { color: #7a8a72; font-size: .95rem; }
+.nq-divider { position: relative; text-align: center; border-top: 2px solid #cfe9d6; margin: 20px 0 22px; }
+.nq-divider__mark { position: absolute; top: -15px; left: 50%; transform: translateX(-50%); background: #fff; padding: 0 12px; color: var(--nq-green); font-size: 1.2rem; }
+
+.nq-field { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #eef2ee; }
+.nq-field--options { align-items: flex-start; }
+.nq-label { width: 150px; flex-shrink: 0; font-weight: 700; }
+.nq-req { color: var(--nq-green); }
+.nq-control { position: relative; flex: 1; min-width: 0; }
+.nq-input { width: 100%; padding: 13px 16px; border: 1.5px solid #e2e8e2; border-radius: 12px; font: inherit; }
+.nq-input:focus { outline: 2px solid var(--nq-green); outline-offset: 1px; }
+.nq-select { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; border: 1.5px solid #e2e8e2; border-radius: 12px; cursor: pointer; background: #fff; }
+.nq-select.is-placeholder { color: #9aa79a; }
+.nq-chev { color: #9aa79a; }
+.nq-menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid #e2e8e2; border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.12); overflow: hidden; max-height: 260px; overflow-y: auto; }
+.nq-opt { padding: 12px 16px; cursor: pointer; }
+.nq-opt:hover { background: var(--nq-soft); }
+.nq-opt--ico { display: flex; align-items: center; gap: 12px; }
+.nq-opt__ico { color: var(--nq-green); }
+.nq-toggle { display: inline-flex; align-items: center; gap: 10px; border: none; background: none; font: inherit; cursor: pointer; padding: 0; }
+.nq-toggle__box { width: 30px; height: 30px; border-radius: 9px; border: 2px solid #d3ddd3; display: flex; align-items: center; justify-content: center; color: #fff; }
+.nq-toggle.is-on .nq-toggle__box { background: var(--nq-green); border-color: var(--nq-green); }
+.nq-opt-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.nq-opt-del { border: none; background: #f1f3f4; color: #888; width: 44px; border-radius: 10px; cursor: pointer; }
+.nq-add { border: 1.5px dashed #cfe9d6; background: #fff; color: var(--nq-green); border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 600; }
+.nq-error { color: #c0392b; margin: 12px 0 0; font-weight: 500; }
+
+/* footer buttons */
+.modal .nq-save { background: var(--nq-green, #16A34A); color: #fff; font-weight: 700; padding: 12px 26px; border-radius: 12px; }
+.modal .nq-save:hover { background: #12833b; }
+.modal .nq-discard { background: #fff; border: 1.5px solid #e2e8e2; color: #333; font-weight: 600; padding: 12px 22px; border-radius: 12px; }
+
+/* ---- Send Booking Link dialog extras ---- */
+.nq-field--stacked { display: block; }
+.nq-label-top { display: block; font-weight: 700; margin-bottom: 8px; }
+.nq-help { color: #7a8a72; font-size: .9rem; margin-top: 8px; }
+.sl-phone { display: flex; align-items: stretch; position: relative; border: 1.5px solid #e2e8e2; border-radius: 12px; }
+.sl-phone:focus-within { outline: 2px solid #6c4bb6; outline-offset: 1px; }
+.sl-cc { display: flex; align-items: center; gap: 8px; padding: 13px 14px; border-inline-end: 1.5px solid #eef2ee; cursor: pointer; white-space: nowrap; font-weight: 600; }
+.sl-flag { font-size: 1.2rem; line-height: 1; }
+.sl-cc-chev { color: #9aa79a; font-size: .8rem; }
+.sl-number { border: none; background: transparent; padding: 13px 16px; flex: 1; min-width: 0; font: inherit; outline: none; }
+.sl-cc-menu { position: absolute; z-index: 30; top: calc(100% + 4px); inset-inline-start: 0; min-width: 260px; background: #fff; border: 1.5px solid #e2e8e2; border-radius: 12px; box-shadow: 0 12px 28px rgba(0,0,0,.14); max-height: 280px; overflow-y: auto; }
+.sl-cc-opt { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; }
+.sl-cc-opt:hover { background: #E7F6EC; }
+.sl-cc-code { margin-inline-start: auto; color: #8a8a8a; }
+.modal .sl-generate { background: #6c4bb6; color: #fff; font-weight: 700; padding: 12px 24px; border-radius: 12px; }
+.modal .sl-generate:hover { background: #5b3ea0; }
+.modal .sl-generate:disabled { opacity: .6; }
+.modal .sl-wa { background: #25D366; color: #fff; font-weight: 700; padding: 12px 20px; border-radius: 12px; }
+
+/* ============================================================
+   Branded Orders screen (cards + footer)
+   ============================================================ */
+.spa-booking-list { background: #f7f8fa !important; padding: 16px 18px !important; }
+.sg-card {
+    display: flex; align-items: center; gap: 16px;
+    background: #fff; border: 1px solid #eef0f2; border-radius: 16px;
+    padding: 16px 20px; margin-bottom: 14px; cursor: pointer;
+    box-shadow: 0 1px 3px rgba(16,23,32,.03);
+    transition: box-shadow .15s;
+}
+.sg-card:hover { box-shadow: 0 8px 22px rgba(16,23,32,.08); }
+.sg-av { width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+.sg-av--green { background: #E7F6EC; color: #16A34A; }
+.sg-av--red { background: #FDECEC; color: #DC2626; }
+.sg-av--purple { background: #EEE9FA; color: #6c4bb6; }
+.sg-card__main { flex: 1; min-width: 0; }
+.sg-card__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.sg-card__ref { font-weight: 700; font-size: 1.05rem; color: #1f2a37; }
+.sg-card__svc { color: #8a94a0; margin-top: 5px; }
+.sg-card__price { color: #16A34A; font-weight: 700; margin-top: 4px; }
+.sg-pill { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
+.sg-pill--green { background: #E7F6EC; color: #16A34A; }
+.sg-pill--red { background: #FDECEC; color: #DC2626; }
+.sg-pill--blue { background: #E8EEFF; color: #3B5BDB; }
+.sg-pill--gray { background: #EEF0F3; color: #556; }
+.sg-card__meta { display: flex; gap: 34px; }
+.sg-meta { display: flex; align-items: center; gap: 9px; }
+.sg-meta > i { color: #b7bec7; font-size: 1.05rem; }
+.sg-meta__k { display: block; font-size: .74rem; color: #9aa4af; }
+.sg-meta__v { display: block; font-weight: 600; color: #3a4552; white-space: nowrap; }
+.sg-card__chev { color: #c3c9d0; font-size: 1.15rem; }
+@media (max-width: 900px) { .sg-card__meta { display: none; } }
+
+/* branded footer */
+.sg-orders-foot { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; color: #9aa4af; letter-spacing: .18em; font-size: .82rem; font-weight: 600; text-transform: uppercase; }
+.sg-orders-foot i { color: #16A34A; font-size: 1.1rem; }
+
+/* active nav item shown as a soft green pill */
+.navbar-menu .btn.active { background: #E7F6EC !important; color: #16A34A !important; }
+
+/* ---- status sub-tabs (Online/Web/Tab) ---- */
+.sg-subtabs { display: flex; flex-wrap: wrap; gap: 28px; border-bottom: 1px solid #e8ebee; margin-bottom: 18px; }
+.sg-subtab { border: none; background: none; padding: 10px 2px; color: #8a94a0; font-weight: 600; border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; }
+.sg-subtab i { margin-inline-end: 7px; }
+.sg-subtab:hover { color: #6c4bb6; }
+.sg-subtab.is-active { color: #6c4bb6; border-bottom-color: #6c4bb6; }
+
+.sg-pill--purple { background: #EEE9FA; color: #6c4bb6; }
+
+/* ---- branded booking card ---- */
+.sg-bcard { background: #fff; border: 1px solid #eef0f2; border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(16,23,32,.03); }
+.sg-bcard__top { display: flex; align-items: flex-start; gap: 16px; }
+.sg-bcard__head { flex: 1; min-width: 0; }
+.sg-bcard__title { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.sg-bcard__meta { color: #6b7682; margin-top: 8px; }
+.sg-sep { color: #cfd5db; margin: 0 10px; }
+.sg-bcard__pref { color: #E08A00; font-weight: 600; margin-top: 8px; }
+.sg-bcard__answers { display: flex; align-items: flex-start; gap: 12px; background: #f5f6fa; border-radius: 12px; padding: 14px 16px; margin-top: 16px; color: #5a6472; }
+.sg-ans-ico { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; background: #ECEBF7; color: #6c4bb6; display: flex; align-items: center; justify-content: center; }
+.sg-ans-text { flex: 1; line-height: 1.7; }
+.sg-ans-list { flex: 1; min-width: 0; }
+.sg-ans-row { display: flex; align-items: flex-start; gap: 16px; padding: 8px 0; border-bottom: 1px solid #e4e7ee; }
+.sg-ans-row:first-child { padding-top: 0; }
+.sg-ans-row:last-child { padding-bottom: 0; border-bottom: 0; }
+.sg-ans-q { flex: 1 1 auto; min-width: 0; color: #5a6472; line-height: 1.5; word-break: break-word; }
+.sg-ans-a { flex: 0 0 38%; font-weight: 600; color: #2f3742; line-height: 1.5; word-break: break-word; }
+.sg-bcard__actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+
+/* card buttons */
+.sg-btn-out { display: inline-flex; align-items: center; background: #fff; border: 1.5px solid #e2e6ea; color: #3a4552; font-weight: 600; padding: 9px 16px; border-radius: 12px; cursor: pointer; }
+.sg-btn-out:hover { border-color: #cdd3d9; }
+.sg-btn-approve, .sg-btn-reject, .sg-btn-secondary, .sg-btn-load { display: inline-flex; align-items: center; border: none; color: #fff; font-weight: 700; padding: 11px 22px; border-radius: 12px; cursor: pointer; }
+.sg-btn-approve { background: #1EA34A; }
+.sg-btn-approve:hover { background: #178a3e; }
+.sg-btn-reject { background: #E23B3B; }
+.sg-btn-reject:hover { background: #c92f2f; }
+.sg-btn-secondary { background: #6b7682; }
+.sg-btn-load { background: #6c4bb6; }
+.sg-btn-load:hover { background: #5b3ea0; }
+
+/* ============================================================
+   Redeem Session dialog (in-POS prepaid session redemption).
+   ============================================================ */
+.sg-redeem { display: flex; flex-direction: column; gap: 6px; min-width: 420px; }
+.sg-redeem__logo { height: 52px; max-width: 280px; align-self: center; object-fit: contain; border-radius: 8px; margin: 8px 0 20px; }
+.sg-redeem__sub { font-size: 1.15rem; color: #3c4650; margin: 0 0 16px; }
+
+/* branded dialog header */
+.sg-redeem-dialog .modal-header { align-items: center; gap: 10px; padding: 16px 22px; }
+.sg-redeem__mark { display: inline-flex; align-items: center; }
+.sg-redeem__dialog-title { font-weight: 800; font-size: 1.35rem; color: #1f2a37; margin: 0; }
+.sg-redeem-dialog .modal-body { padding: 22px 26px 8px; }
+
+/* search field: person icon + rounded box + green button */
+.sg-redeem__search { display: flex; align-items: stretch; border: 1.5px solid #cfe3d6; border-radius: 14px;
+    overflow: hidden; background: #fff; box-shadow: 0 1px 2px rgba(16,23,32,.05); }
+.sg-redeem__search:focus-within { border-color: #16a34a; box-shadow: 0 0 0 3px rgba(22,163,74,.15); }
+.sg-redeem__search-ico { display: flex; align-items: center; padding: 0 6px 0 20px; color: #9aa4ae; font-size: 1.2rem; }
+.sg-redeem__search-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent;
+    padding: 17px 14px; font-size: 1.2rem; color: #1f2a37; }
+.sg-redeem__search-input::placeholder { color: #9aa4ae; }
+.sg-redeem__search-btn { border: 0; background: #2f9e44; color: #fff; font-weight: 700; font-size: 1.15rem;
+    padding: 0 30px; display: flex; align-items: center; cursor: pointer; transition: background .12s; }
+.sg-redeem__search-btn:hover { background: #268038; }
+
+/* green "Use a Session" + soft Close buttons */
+.sg-redeem__use { border: 0; background: #2f9e44; color: #fff; font-weight: 700; border-radius: 12px;
+    padding: 12px 20px; font-size: 1.05rem; cursor: pointer; transition: background .12s; }
+.sg-redeem__use:hover { background: #268038; }
+.sg-redeem__use:disabled { opacity: .6; cursor: default; }
+.sg-redeem__closebtn { border: 1.5px solid #dcebe1; background: #f6faf7; color: #1f2a37; font-weight: 600;
+    border-radius: 12px; padding: 11px 30px; cursor: pointer; transition: background .12s, border-color .12s; }
+.sg-redeem__closebtn:hover { background: #ecf7f0; border-color: #16a34a; }
+.sg-redeem__list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.sg-redeem__cust { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    border: 1px solid #e5e7eb; background: #fff; border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+.sg-redeem__cust:hover { border-color: #16a34a; background: #f6fdf9; }
+.sg-redeem__cust-name { font-weight: 700; }
+.sg-redeem__cust-phone { margin-left: auto; }
+.sg-redeem__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.sg-redeem__who { font-size: 1.15rem; font-weight: 800; }
+.sg-redeem__passes { display: flex; flex-direction: column; gap: 8px; }
+.sg-redeem__pass { display: flex; flex-direction: column; gap: 10px;
+    border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 16px; background: #fff; }
+.sg-redeem__pass-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sg-redeem__pass-name { font-weight: 800; font-size: 1.05rem; }
+.sg-redeem__pass-count { color: #6b7280; }
+.sg-redeem__pass-count b { color: #16a34a; font-size: 1.1rem; }
+.sg-redeem__sched { display: flex; align-items: center; gap: 8px; border-top: 1px dashed #e5e7eb; padding-top: 10px; }
+.sg-redeem__sched-label { font-weight: 600; color: #374151; white-space: nowrap; margin: 0; }
+.sg-redeem__sched .form-control { max-width: 220px; }
+.sg-pill--prepaid { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+
+/* Invoice button on a paid order card */
+.sg-card__invbtn { border: 1.5px solid #cfe0b4; background: #f6faf0; color: #4b6b1f; font-weight: 700;
+    border-radius: 10px; padding: 8px 14px; white-space: nowrap; cursor: pointer; align-self: center; }
+.sg-card__invbtn:hover { background: #eef6e2; border-color: #7cb342; }
+
+/* "Select a package" hint under the therapy detail (Book Therapy) */
+.spa-pos-flow .tp-select-hint { color: #16a34a; font-weight: 700; margin: 10px 0 0; }
+
+/* Personal-information form (Book Therapy details) */
+.spa-pos-flow .tp-form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.spa-pos-flow .tp-check { display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 4px 0 2px; font-weight: 600; color: #374151; }
+.spa-pos-flow .tp-check input { width: 20px; height: 20px; flex: 0 0 auto; }
+
+/* Customer profile block in the Redeem dialog */
+.sg-redeem__profile { background: #f6faf7; border: 1px solid #e3ede6; border-radius: 12px; padding: 10px 14px; margin: 4px 0 10px; display: flex; flex-direction: column; gap: 4px; }
+.sg-redeem__prow { color: #374151; font-size: .95rem; }
+.sg-redeem__prow b { color: #16a34a; }
+
+/* Customer Details dialog — sessions list */
+.sg-cust-summary { display: flex; gap: 18px; margin: 2px 0 8px; color: #374151; }
+.sg-cust-summary b { color: #16a34a; font-size: 1.1rem; }
+.sg-cust-pass { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; background: #fff; }
+.sg-cust-pass.is-done { opacity: .65; }
+.sg-cust-pass__name { font-weight: 700; }
+.sg-cust-pass__count { color: #6b7280; font-size: .9rem; }
+.sg-cust-pass__count b { color: #16a34a; }
+
+/* per-package drill-down buttons (Q&A + Reports) */
+.sg-cust-pass__btns { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.sg-pass-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 38px;
+    padding: 0 12px; border: 1.5px solid #d9dde3; border-radius: 10px; background: #fff;
+    color: #4b5563; font-weight: 600; cursor: pointer; }
+.sg-pass-btn:hover { border-color: #6c4bb6; color: #6c4bb6; }
+.sg-pass-btn--report { color: #6c4bb6; border-color: #cdc3e8; background: #f7f5fd; }
+.sg-pass-btn--report:hover { background: #6c4bb6; color: #fff; border-color: #6c4bb6; }
+
+/* Q&A groups (per booking) */
+.sg-qa-group { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; background: #fff; }
+.sg-qa-group__head { font-size: .9rem; margin-bottom: 4px; }
+.sg-qa-src { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+    background: #f0f1f4; color: #6b7280; font-size: .75rem; text-transform: uppercase; letter-spacing: .3px; }
+
+/* per-service report */
+.sg-rep-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 18px;
+    background: #f6faf7; border: 1px solid #e3ede6; border-radius: 12px; padding: 10px 14px; margin: 4px 0 12px; }
+.sg-rep-meta__row { display: flex; justify-content: space-between; gap: 10px; font-size: .95rem; }
+.sg-rep-meta__row span { color: #6b7280; }
+.sg-rep-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 6px; }
+.sg-rep-tile { border: 1px solid #e5e7eb; border-radius: 12px; padding: 10px 12px; background: #fff;
+    display: flex; flex-direction: column; gap: 2px; }
+.sg-rep-tile span { color: #6b7280; font-size: .85rem; }
+.sg-rep-tile b { font-size: 1.15rem; }
+.sg-rep-tile.is-paid b { color: #16a34a; }
+.sg-rep-tile.is-due { border-color: #f3c2c2; background: #fdf5f5; }
+.sg-rep-tile.is-due b { color: #dc2626; }
+.sg-rep-scroll { overflow-x: auto; margin-bottom: 6px; }
+.sg-rep-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.sg-rep-table th { text-align: left; color: #6b7280; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding: 6px 8px; white-space: nowrap; }
+.sg-rep-table td { border-bottom: 1px solid #f0f1f4; padding: 7px 8px; vertical-align: middle; }
+.sg-rep-table tr:last-child td { border-bottom: 0; }
+.sg-rep-row--open td { color: #9ca3af; }
+.sg-pill--blue { background: #e6efff; color: #1d4ed8; }
+.sg-pill--amber { background: #fff3e0; color: #b45309; }
+.sg-rep-row--due td { background: #fdf7f7; }
+.sg-rep-row--due td:last-child { color: #dc2626; font-weight: 700; }
+.sg-rep-row--total td { border-top: 1px solid #cbd0d8; border-bottom: 0; font-weight: 700; }
+.sg-rep-print { background: #fff !important; border: 1.5px solid #cdc3e8 !important; color: #6c4bb6 !important; }
+.sg-rep-print:hover { background: #6c4bb6 !important; color: #fff !important; }
+
+
+/* --- Send Booking Link dialog: contact picker + disabled Send button ------ */
+.sl-generate:disabled,
+.sl-generate[disabled] {
+    opacity: .45;
+    filter: grayscale(100%);
+    cursor: not-allowed;
+}
+.sl-partner {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.sl-partner .nq-input {
+    flex: 1 1 auto;
+}
+.sl-partner-clear {
+    position: absolute;
+    right: .35rem;
+    border: 0;
+    background: transparent;
+    color: #888;
+}
+.sl-partner-menu {
+    top: 100%;
+    left: 0;
+    right: 0;
+}
+
+
+/* --- Book Therapy: "who does this number belong to?" panel ---------------- */
+.spa-pos-flow .tp-match { margin: -4px 0 2px; }
+.spa-pos-flow .tp-match__msg { font-size: .9rem; color: var(--tp-soft); margin: 0 0 8px; }
+.spa-pos-flow .tp-match__chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #f6fdf9; border: 1px solid #16a34a; color: #14532d;
+    border-radius: 999px; padding: 4px 12px; font-size: .9rem; margin-bottom: 8px;
+}
+.spa-pos-flow .tp-match__new { display: inline-flex; align-items: center; }
+
+/* --- Send Booking Link: which WhatsApp number sends it -------------------- */
+.sl-session { font-size: 1rem; }
+.sl-session-one { font-weight: 600; color: #14532d; padding: 6px 0; }
+
+/* --- booking card: customer's number, next to the status pill ------------- */
+.spa-pos-flow .sg-bcard__phone,
+.sg-bcard__phone {
+    color: #6b7682;
+    font-size: .9rem;
+    white-space: nowrap;
+}
+
+
+/* --- Book Therapy: customer signature (res.partner.spa_signature) --------- */
+.spa-pos-flow .tp-sign__box,
+.spa-pos-flow .tp-sign__pad {
+    display: block;
+    width: 100%;
+    height: 150px;
+    background: #fff;
+    border: 1.5px solid var(--tp-line);
+    border-radius: 12px;
+}
+.spa-pos-flow .tp-sign__pad {
+    /* pointermove must draw, not scroll the booking page on a tablet */
+    touch-action: none;
+    cursor: crosshair;
+}
+.spa-pos-flow .tp-sign__box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 6px;
+}
+.spa-pos-flow .tp-sign__box--empty { border-style: dashed; }
+.spa-pos-flow .tp-sign__box span {
+    display: inline; margin: 0; font-weight: 400; font-size: .9rem;
+}
+.spa-pos-flow .tp-sign__img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.spa-pos-flow .tp-sign__hint { font-size: .82rem; color: var(--tp-soft); margin: 6px 0 0; }
+.spa-pos-flow .tp-sign__tools {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
+}
+.spa-pos-flow .tp-sign__tools .btn { display: inline-flex; align-items: center; }
+
+
+/* --- shared signature field (SpaSignatureField) --------------------------
+   The same pad is used inside the Book Therapy form (.spa-pos-flow) and in the
+   Sign dialog, which is NOT inside it - so these rules are unscoped. */
+.tp-sign { display: block; margin: 0; }
+.tp-sign__label {
+    display: block; font-size: .85rem; color: #6B7280; margin-bottom: 6px; font-weight: 600;
+}
+.tp-sign__box,
+.tp-sign__pad {
+    display: block;
+    width: 100%;
+    height: 150px;
+    background: #fff;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 12px;
+}
+.tp-sign__pad {
+    /* pointermove must draw, not scroll the page on a tablet */
+    touch-action: none;
+    cursor: crosshair;
+}
+.tp-sign__box {
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; padding: 6px;
+}
+.tp-sign__box--empty { border-style: dashed; }
+.tp-sign__box span { display: inline; margin: 0; font-weight: 400; font-size: .9rem; }
+.tp-sign__img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.tp-sign__hint { font-size: .82rem; color: #6B7280; margin: 6px 0 0; }
+.tp-sign__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.tp-sign__tools .btn { display: inline-flex; align-items: center; }
+
+/* --- "Sign" button on an order card in the Orders list -------------------- */
+.sg-card__signbtn {
+    border: 1.5px solid #cdd7e3; background: #f4f7fb; color: #33507a; font-weight: 700;
+    border-radius: 10px; padding: 8px 14px; white-space: nowrap; cursor: pointer;
+    align-self: center;
+}
+.sg-card__signbtn:hover { background: #e9f0f9; border-color: #5b83bd; }
+
+/* --- Sign dialog --------------------------------------------------------- */
+.sg-sign .sg-qa-group { margin-bottom: 10px; }
+.sg-sign .tp-sign__pad { height: 170px; }

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.spa.online.booking</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Spa Online Booking" string="Spa Online Booking"
+                     name="spa_online_booking">
+                    <block title="Online Booking" name="spa_online_booking_block">
+                        <setting string="Minimum booking notice"
+                                 help="Customers can only book a slot at least this many hours in advance. 0 = same-day booking allowed up to the slot time.">
+                            <div class="content-group">
+                                <div class="mt16">
+                                    <field name="spa_min_lead_hours" class="o_light_label"/>
+                                    <span class="ms-2">hours</span>
+                                </div>
+                            </div>
+                        </setting>
+                        <setting string="Maximum booking notice"
+                                 help="Customers cannot book a slot more than this many hours in advance (e.g. 720 = 30 days). 0 = no maximum.">
+                            <div class="content-group">
+                                <div class="mt16">
+                                    <field name="spa_max_lead_hours" class="o_light_label"/>
+                                    <span class="ms-2">hours</span>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+                    <block title="WhatsApp Delivery" name="spa_whatsapp_block">
+                        <setting string="WhatsApp Session"
+                                 help="Booking links are sent directly on this WhatsApp session. If empty or disconnected, the first connected session is used.">
+                            <field name="spa_whatsapp_session_id"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Under Settings -> Point of Sale: toggles for the Orders-screen tabs. -->
+    <record id="res_config_settings_view_form_pos_spa" model="ir.ui.view">
+        <field name="name">res.config.settings.pos.spa.channels</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="point_of_sale.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='restaurant_section']" position="after">
+                <block title="Spa Order Tabs" name="spa_channels_section"
+                       help="Choose which channel tabs appear in the POS Orders screen.">
+                    <setting string="Online tab"
+                             help="Show the Online (link booking) tab in the POS Orders screen.">
+                        <field name="pos_spa_show_online"/>
+                    </setting>
+                    <setting string="Web tab"
+                             help="Show the Web (manual) tab in the POS Orders screen.">
+                        <field name="pos_spa_show_web"/>
+                    </setting>
+                    <setting string="Tab tab"
+                             help="Show the Tab (tablet kiosk) tab in the POS Orders screen.">
+                        <field name="pos_spa_show_tab"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_spa_online_booking_config" model="ir.actions.act_window">
+        <field name="name">Settings</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="context">{'module': 'spa_online_booking'}</field>
+    </record>
+
+    <menuitem id="menu_spa_online_booking_config"
+              name="Online Booking Settings"
+              parent="point_of_sale.menu_point_config_product"
+              action="action_spa_online_booking_config"
+              sequence="90"/>
+
+</odoo>

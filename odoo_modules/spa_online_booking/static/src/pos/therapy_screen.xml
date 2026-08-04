@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.TherapyScreen">
+        <div class="tbk-screen spa-pos-flow">
+
+            <t t-if="state.loading">
+                <p class="text-muted">Loading therapies…</p>
+            </t>
+            <t t-elif="state.error and !state.therapies.length">
+                <p class="text-danger"><t t-esc="state.error"/></p>
+            </t>
+
+            <t t-else="">
+                <!-- ============ SELECT THERAPY + PACKAGES ============ -->
+                <t t-if="state.screen === 'select'">
+                    <!-- STEP 1: therapy grid -->
+                    <t t-if="!therapy">
+                        <div class="tbk-topbar">
+                            <div>
+                                <h2 class="tbk-h">Select Therapy</h2>
+                                <p class="text-muted mb-0">Choose a therapy to view its packages.</p>
+                            </div>
+                            <button class="tbk-close" t-on-click="() => this.closeBooking()" aria-label="Close">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+
+                        <div class="tbk-therapies">
+                            <t t-foreach="state.therapies" t-as="th" t-key="th.id">
+                                <button class="tbk-tcard" t-attf-style="--c: {{ therapyStyle(th).color }};"
+                                        t-on-click="() => this.openTherapy(th.id)">
+                                    <span class="tbk-tcard__media"
+                                          t-attf-style="{{ th.image_url ? 'background-image:url(' + th.image_url + ')' : '' }}"/>
+                                    <span class="tbk-tcard__icon"><i t-attf-class="fa {{ therapyStyle(th).icon }}"/></span>
+                                    <span class="tbk-tcard__name" t-esc="th.name"/>
+                                    <span class="tbk-tcard__tag" t-if="th.tagline" t-esc="th.tagline"/>
+                                    <span class="tbk-tcard__box"/>
+                                </button>
+                            </t>
+                        </div>
+                    </t>
+
+                    <!-- STEP 2: therapy detail + packages inline (like the website) -->
+                    <t t-else="">
+                        <div class="tbk-topbar">
+                            <button class="tbk-back" t-on-click="() => state.therapyId = null" aria-label="Back">
+                                <i class="fa fa-chevron-left"/>
+                            </button>
+                            <button class="tbk-close" t-on-click="() => this.closeBooking()" aria-label="Close">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+
+                        <div class="tp-banner">
+                            <div t-if="therapy.image_url" class="tp-banner__media">
+                                <img t-att-src="therapy.image_url" alt=""/>
+                            </div>
+                            <h2 class="tp-banner__name" t-esc="therapyTitle(therapy)"/>
+                            <div t-if="therapy.description" class="tp-banner__desc tp-rich" t-out="richDesc(therapy.description)"/>
+                            <p t-elif="therapy.tagline" class="tp-banner__desc" t-esc="therapy.tagline"/>
+                            <ul class="tp-info">
+                                <li t-if="therapy.duration_min"><span>Session Duration</span><b><t t-esc="therapy.duration_min"/> Minutes</b></li>
+                                <li t-if="therapy.ideal_for"><span>Ideal For</span><b t-esc="therapy.ideal_for"/></li>
+                                <li t-if="therapy.focus_areas"><span>Focus Areas</span><b t-esc="therapy.focus_areas"/></li>
+                            </ul>
+                            <p class="tp-select-hint">Select a package ⌄</p>
+                        </div>
+
+                        <h5 class="tp-section">Available Packages</h5>
+                        <div class="tp-plist">
+                            <t t-foreach="therapy.packages" t-as="p" t-key="p.id">
+                                <label class="tp-prow" t-att-class="{ 'is-selected': state.packageId === p.id }">
+                                    <input type="radio" name="tbk_pkg" t-att-checked="state.packageId === p.id"
+                                           t-on-change="() => this.pick(p.id)"/>
+                                    <span class="tp-prow__radio"/>
+                                    <span class="tp-prow__body">
+                                        <span class="tp-prow__name" t-esc="p.name"/>
+                                        <span class="tp-prow__sub" t-if="p.session_count"><t t-esc="p.session_count"/> Sessions</span>
+                                    </span>
+                                    <span class="tp-prow__price">
+                                        <span class="tp-prow__amt" t-esc="fmt(p.price)"/>
+                                        <span class="tp-prow__save" t-if="p.save">Save <t t-esc="fmt(p.save)"/></span>
+                                    </span>
+                                </label>
+                            </t>
+                        </div>
+
+                        <div class="tbk-actions">
+                            <button class="btn btn-secondary btn-lg" t-on-click="() => state.therapyId = null">Back</button>
+                            <button class="btn btn-primary btn-lg ms-auto"
+                                    t-att-disabled="!state.packageId" t-on-click="() => this.toDetails()">
+                                Continue
+                            </button>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- ============ QUESTIONS ============ -->
+                <t t-if="state.screen === 'questions'">
+                    <h2 class="tbk-h">A few questions</h2>
+                    <p class="text-muted mb-3">This helps us personalize the session.</p>
+                    <t t-if="!state.questions.length">
+                        <p class="text-muted">No questions for this therapy.</p>
+                    </t>
+                    <div class="tp-qlist">
+                        <t t-foreach="questionRows" t-as="row" t-key="row.q.id">
+                            <t t-set="q" t-value="row.q"/>
+                            <h3 t-if="row.heading" class="tp-qheading" t-esc="row.heading"
+                                t-att-style="row.style"/>
+                            <div class="tp-question">
+                                <p class="tp-question__label">
+                                    <t t-esc="row.num"/>. <t t-esc="q.text"/><span t-if="q.required" class="text-danger"> *</span>
+                                </p>
+                                <t t-if="q.type === 'yes_no'">
+                                    <div class="tp-choices tp-choices--inline">
+                                        <label class="tp-opt"><input type="radio" t-att-name="'q_' + q.id" value="Yes"
+                                               t-att-checked="answerVal(q) === 'Yes'" t-on-change="() => this.setAnswer(q, 'Yes')"/><span>Yes</span></label>
+                                        <label class="tp-opt"><input type="radio" t-att-name="'q_' + q.id" value="No"
+                                               t-att-checked="answerVal(q) === 'No'" t-on-change="() => this.setAnswer(q, 'No')"/><span>No</span></label>
+                                    </div>
+                                </t>
+                                <t t-elif="q.type === 'single_choice'">
+                                    <select class="form-select tp-select" t-on-change="(ev) => this.setAnswer(q, ev.target.value)">
+                                        <option value="" t-att-selected="!answerVal(q)" disabled="disabled">Choose…</option>
+                                        <t t-foreach="q.options" t-as="o" t-key="o_index">
+                                            <option t-att-value="o" t-att-selected="answerVal(q) === o" t-esc="o"/>
+                                        </t>
+                                    </select>
+                                </t>
+                                <t t-elif="q.type === 'multi_choice'">
+                                    <div class="tp-choices">
+                                        <t t-foreach="q.options" t-as="o" t-key="o_index">
+                                            <label class="tp-opt tp-opt--check">
+                                                <input type="checkbox" t-att-checked="isChecked(q, o)"
+                                                       t-on-change="(ev) => this.toggleMulti(q, o, ev.target.checked)"/>
+                                                <span t-esc="o"/>
+                                            </label>
+                                        </t>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <textarea class="form-control tp-text" rows="2" placeholder="Type the answer here…"
+                                              t-att-value="answerVal(q)" t-on-input="(ev) => this.setAnswer(q, ev.target.value)"/>
+                                </t>
+                            </div>
+                        </t>
+                    </div>
+
+                    <!-- Consent for THIS service, taken right under the
+                         questions it belongs to. Asked again for every
+                         service - never carried over from the contact. -->
+                    <div class="tp-signblock">
+                        <label class="tp-check tp-terms">
+                            <input type="checkbox" t-model="state.custTerms"/>
+                            <span>I agree to the terms and conditions and confirm the details above are correct. <span class="text-danger">*</span></span>
+                        </label>
+                        <SpaSignatureField sig="state.sig" label="'Signature *'"
+                                           hint="'The customer signs here for this service.'"/>
+                    </div>
+                </t>
+
+                <!-- ============ CUSTOMER DETAILS ============ -->
+                <t t-if="state.screen === 'details'">
+                    <h2 class="tbk-h">Personal information</h2>
+                    <p class="text-muted mb-3">Enter the phone number first - if we already know the customer the rest fills in automatically.</p>
+                    <div class="tp-form">
+                        <div class="tp-field">
+                            <span>Phone number *</span>
+                            <div class="sl-phone">
+                                <div class="sl-cc" t-on-click="() => state.ccOpen = !state.ccOpen">
+                                    <span class="sl-flag" t-esc="selectedCountry.flag"/>
+                                    <span t-esc="selectedCountry.code"/>
+                                    <i class="fa fa-chevron-down sl-cc-chev"/>
+                                </div>
+                                <input type="tel" class="sl-number" placeholder="9XXXXXXX"
+                                       t-model="state.custMobile" t-on-input="() => this.onPhoneInput()"/>
+                                <div t-if="state.ccOpen" class="sl-cc-menu">
+                                    <div t-foreach="countries" t-as="c" t-key="c.code"
+                                         class="sl-cc-opt" t-on-click="() => this.selectCountry(c.code)">
+                                        <span class="sl-flag" t-esc="c.flag"/>
+                                        <span t-esc="c.name"/>
+                                        <span class="sl-cc-code" t-esc="c.code"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Who does this number belong to? A number is often shared
+                             by a whole family, so we never assume a match. -->
+                        <div class="tp-match" t-if="state.custLookupBusy or state.custLookupDone">
+                            <p t-if="state.custLookupBusy" class="tp-match__msg">Checking contacts...</p>
+                            <t t-else="">
+                                <t t-if="state.custNewMode">
+                                    <p class="tp-match__msg">
+                                        <i class="fa fa-user-plus me-1"/>Adding a <b>new</b> customer on this number.
+                                        <button t-if="state.custMatches.length" class="btn btn-link btn-sm p-0 ms-1"
+                                                t-on-click="() => this.chooseExistingInstead()">Choose an existing one instead</button>
+                                    </p>
+                                </t>
+                                <t t-else="">
+                                    <div t-if="selectedCustomer" class="tp-match__chip">
+                                        <i class="fa fa-user me-1"/>
+                                        <span>Selected: <b t-esc="selectedCustomer.name"/></span>
+                                    </div>
+                                    <t t-else="">
+                                        <p t-if="!state.custMatches.length" class="tp-match__msg">
+                                            No contact with this number - enter the details below.
+                                        </p>
+                                        <t t-else="">
+                                            <p class="tp-match__msg">
+                                                <t t-esc="state.custMatches.length"/> customers use this number - choose one:
+                                            </p>
+                                            <div class="sg-redeem__list mb-2">
+                                                <button t-foreach="state.custMatches" t-as="c" t-key="c.id"
+                                                        class="sg-redeem__cust" t-on-click="() => this.pickCustomer(c)">
+                                                    <span class="sg-redeem__cust-name" t-esc="c.name"/>
+                                                    <span class="sg-redeem__cust-phone text-muted" t-esc="c.phone"/>
+                                                </button>
+                                            </div>
+                                        </t>
+                                    </t>
+                                    <!-- Always available, in every state: one number can
+                                         legitimately have several customers. -->
+                                    <button class="btn btn-outline-primary btn-sm tp-match__new"
+                                            t-on-click="() => this.newCustomerOnThisNumber()">
+                                        <i class="fa fa-plus me-1"/>Add new customer on this number
+                                    </button>
+                                </t>
+                            </t>
+                        </div>
+
+                        <label class="tp-field">
+                            <span>Full name *</span>
+                            <input type="text" class="form-control form-control-lg" placeholder="Enter full name" t-model="state.custName"/>
+                        </label>
+                        <label class="tp-field">
+                            <span>Date of birth *</span>
+                            <input type="date" class="form-control form-control-lg" t-model="state.custDob"/>
+                        </label>
+                        <div class="tp-form__row">
+                            <label class="tp-field">
+                                <span>Age</span>
+                                <input type="text" class="form-control form-control-lg" readonly="readonly"
+                                       t-att-value="custAge === '' ? 'Auto' : custAge"/>
+                            </label>
+                            <label class="tp-field">
+                                <span>Gender *</span>
+                                <select class="form-select form-select-lg" t-model="state.custGender">
+                                    <option value="">Select</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </label>
+                        </div>
+                        <label class="tp-check">
+                            <input type="checkbox" t-model="state.custWaSame"/>
+                            <span>WhatsApp number same as phone number</span>
+                        </label>
+                        <div class="tp-field" t-if="!state.custWaSame">
+                            <span>WhatsApp number *</span>
+                            <div class="sl-phone">
+                                <div class="sl-cc" t-on-click="() => state.waCcOpen = !state.waCcOpen">
+                                    <span class="sl-flag" t-esc="selectedWaCountry.flag"/>
+                                    <span t-esc="selectedWaCountry.code"/>
+                                    <i class="fa fa-chevron-down sl-cc-chev"/>
+                                </div>
+                                <input type="tel" class="sl-number" placeholder="9XXXXXXX"
+                                       t-model="state.custWhatsapp"/>
+                                <div t-if="state.waCcOpen" class="sl-cc-menu">
+                                    <div t-foreach="countries" t-as="c" t-key="c.code"
+                                         class="sl-cc-opt" t-on-click="() => this.selectWaCountry(c.code)">
+                                        <span class="sl-flag" t-esc="c.flag"/>
+                                        <span t-esc="c.name"/>
+                                        <span class="sl-cc-code" t-esc="c.code"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <label class="tp-field">
+                            <span>Email</span>
+                            <input type="email" class="form-control form-control-lg"
+                                   placeholder="name@example.com - leave blank if none"
+                                   t-model="state.custEmail"/>
+                        </label>
+
+                    </div>
+                </t>
+
+                <p t-if="state.error and state.therapies.length" class="text-danger mt-3 mb-0"><t t-esc="state.error"/></p>
+
+                <!-- footer actions (not on the select screen) -->
+                <div t-if="state.screen !== 'select'" class="tbk-actions">
+                    <button class="btn btn-secondary btn-lg" t-on-click="() => this.back()">Back</button>
+                    <button t-if="state.screen === 'details'" class="btn btn-primary btn-lg ms-auto"
+                            t-on-click="() => this.toQuestions()">Continue</button>
+                    <button t-if="state.screen === 'questions'" class="btn btn-primary btn-lg ms-auto"
+                            t-att-disabled="state.busy" t-on-click="() => this.confirm()">
+                        <t t-esc="state.busy ? 'Adding…' : 'Add to Order'"/>
+                    </button>
+                </div>
+            </t>
+
+        </div>
+    </t>
+
+</templates>

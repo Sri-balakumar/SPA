@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="pos_spa_header.SpaQuestionsDialog">
+        <Dialog title="'Service Questions'">
+            <div class="spa-questions">
+                <t t-foreach="props.questions" t-as="q" t-key="q.id">
+                    <!-- Section title, printed once above the first question
+                         under it - the list arrives already grouped. -->
+                    <h5 class="mt-4 mb-2 pb-1 border-bottom" t-esc="q.heading" t-att-style="q.heading_style"
+                        t-if="q.heading &amp;&amp; (q_index === 0 || props.questions[q_index - 1].heading_id !== q.heading_id)"/>
+                    <div class="mb-3">
+                        <label class="fw-bold d-block mb-1">
+                            <t t-esc="q.name"/><t t-if="q.required"> *</t>
+                        </label>
+                        <t t-if="q.type === 'text'">
+                            <input type="text" class="form-control form-control-lg"
+                                   t-model="state.answers[q.id]"/>
+                        </t>
+                        <t t-elif="q.type === 'yes_no'">
+                            <select class="form-select form-select-lg" t-model="state.answers[q.id]">
+                                <option value="">--</option>
+                                <option value="Yes">Yes</option>
+                                <option value="No">No</option>
+                            </select>
+                        </t>
+                        <t t-elif="q.type === 'single_choice'">
+                            <select class="form-select form-select-lg" t-model="state.answers[q.id]">
+                                <option value="">--</option>
+                                <t t-foreach="q.options" t-as="opt" t-key="opt">
+                                    <option t-att-value="opt"><t t-esc="opt"/></option>
+                                </t>
+                            </select>
+                        </t>
+                        <t t-elif="q.type === 'multi_choice'">
+                            <t t-foreach="q.options" t-as="opt" t-key="opt">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input"
+                                           t-model="state.multi[q.id][opt]"/>
+                                    <label class="form-check-label"><t t-esc="opt"/></label>
+                                </div>
+                            </t>
+                        </t>
+                    </div>
+                </t>
+            </div>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary btn-lg" t-on-click="confirm"
+                        t-att-disabled="!isValid()">Confirm</button>
+                <button class="btn btn-secondary btn-lg" t-on-click="() => this.skip()">Skip</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

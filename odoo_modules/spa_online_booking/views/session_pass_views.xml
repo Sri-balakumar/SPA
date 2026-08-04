@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Reference sequence: PASS/00001.
+         noupdate so `-u` never resets the prefix/padding of a live sequence. -->
+    <data noupdate="1">
+        <record id="seq_spa_session_pass" model="ir.sequence">
+            <field name="name">Session Pass</field>
+            <field name="code">spa.session.pass</field>
+            <field name="prefix">PASS/</field>
+            <field name="padding">5</field>
+            <field name="company_id" eval="False"/>
+        </record>
+    </data>
+
+    <!-- List: everyone's remaining sessions at a glance -->
+    <record id="view_spa_session_pass_list" model="ir.ui.view">
+        <field name="name">spa.session.pass.list</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <list string="Session Passes" decoration-muted="state == 'completed'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="channel"/>
+                <field name="sessions_total"/>
+                <field name="sessions_used"/>
+                <field name="sessions_left" decoration-bf="1"/>
+                <field name="purchase_date"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'active'"
+                       decoration-muted="state == 'completed'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form: with a "Use a session" button + usage history -->
+    <record id="view_spa_session_pass_form" model="ir.ui.view">
+        <field name="name">spa.session.pass.form</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <form string="Session Pass">
+                <header>
+                    <button name="action_use_session" type="object" string="Use a Session"
+                            class="btn-primary" icon="fa-check-circle"
+                            invisible="sessions_left &lt;= 0"/>
+                    <field name="state" widget="statusbar" statusbar_visible="active,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="partner_id"/>
+                            <field name="product_tmpl_id"/>
+                            <field name="channel"/>
+                            <field name="purchase_date"/>
+                        </group>
+                        <group>
+                            <field name="sessions_total"/>
+                            <field name="sessions_used"/>
+                            <field name="sessions_left"/>
+                            <field name="pos_order_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Sessions Used" name="uses">
+                            <field name="use_ids" readonly="1">
+                                <list>
+                                    <field name="date"/>
+                                    <field name="user_id"/>
+                                    <field name="note"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_spa_session_pass_search" model="ir.ui.view">
+        <field name="name">spa.session.pass.search</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <search string="Session Passes">
+                <field name="partner_id"/>
+                <field name="product_tmpl_id"/>
+                <filter name="f_active" string="Active" domain="[('state', '=', 'active')]"/>
+                <filter name="f_completed" string="Completed" domain="[('state', '=', 'completed')]"/>
+                <separator/>
+                <filter name="g_customer" string="Customer" context="{'group_by': 'partner_id'}"/>
+                <filter name="g_channel" string="Bought via" context="{'group_by': 'channel'}"/>
+                <filter name="g_state" string="Status" context="{'group_by': 'state'}"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_spa_session_pass" model="ir.actions.act_window">
+        <field name="name">Session Passes</field>
+        <field name="res_model">spa.session.pass</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'search_default_f_active': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No session passes yet</p>
+            <p>When a customer buys a multi-session package, a pass is created here
+               automatically. Each visit redeems one session.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_spa_session_pass"
+              name="Session Passes"
+              parent="point_of_sale.menu_point_root"
+              action="action_spa_session_pass"
+              sequence="90"/>
+
+</odoo>

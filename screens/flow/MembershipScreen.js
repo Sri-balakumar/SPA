@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
-import NexFooter from '../../components/NexFooter';
 import { checkInSession } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { formatDateTime, toDigits } from '../../dateFmt';
@@ -105,7 +104,6 @@ export default function MembershipScreen({ form, onBack, onHome, onDone }) {
             </TouchableOpacity>
           </View>
         </ScrollView>
-        <NexFooter />
       </View>
     );
   }

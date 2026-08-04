@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SpaSignatureField">
+        <div class="tp-sign">
+            <span t-if="label" class="tp-sign__label" t-esc="label"/>
+            <t t-if="sig.busy">
+                <div class="tp-sign__box tp-sign__box--empty">
+                    <span class="text-muted">Loading…</span>
+                </div>
+            </t>
+            <t t-elif="sig.mode === 'view'">
+                <div class="tp-sign__box">
+                    <img class="tp-sign__img" t-att-src="src" alt="Signature"/>
+                </div>
+                <p class="tp-sign__hint">
+                    <t t-if="sig.fromContact">Signature already taken for this service.</t>
+                    <t t-else="">Signature ready.</t>
+                </p>
+                <div class="tp-sign__tools">
+                    <button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.startDrawing()">
+                        <i class="fa fa-pencil me-1"/>Sign again
+                    </button>
+                    <label class="btn btn-outline-secondary btn-sm mb-0">
+                        <i class="fa fa-upload me-1"/>Upload image
+                        <input type="file" accept="image/*" class="d-none" t-on-change="(ev) => this.onFile(ev)"/>
+                    </label>
+                </div>
+            </t>
+            <t t-else="">
+                <canvas class="tp-sign__pad" t-ref="sigPad"
+                        t-on-pointerdown="onDown"
+                        t-on-pointermove="onMove"
+                        t-on-pointerup="onUp"
+                        t-on-pointercancel="onUp"
+                        t-on-pointerleave="onUp"/>
+                <p class="tp-sign__hint">
+                    <t t-if="props.hint" t-esc="props.hint"/>
+                    <t t-else="">Sign inside the box, or upload a picture of the signature.</t>
+                </p>
+                <div class="tp-sign__tools">
+                    <button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.clear()">
+                        <i class="fa fa-eraser me-1"/>Clear
+                    </button>
+                    <label class="btn btn-outline-secondary btn-sm mb-0">
+                        <i class="fa fa-upload me-1"/>Upload image
+                        <input type="file" accept="image/*" class="d-none" t-on-change="(ev) => this.onFile(ev)"/>
+                    </label>
+                    <button t-if="sig.original" class="btn btn-link btn-sm"
+                            t-on-click="() => this.cancelDrawing()">Keep the signature on file</button>
+                </div>
+            </t>
+            <p t-if="sig.message" class="text-danger tp-sign__hint" t-esc="sig.message"/>
+        </div>
+    </t>
+
+</templates>

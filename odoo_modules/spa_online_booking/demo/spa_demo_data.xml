@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Demo catalogue for the tablet app and the online booking page.
+
+        Shape mirrors what GET /api/spa/therapies returns:
+          THERAPY  = pos.category with spa_is_therapy = True
+          PACKAGE  = product.template (type=service) filed under that category
+          QUESTIONS= spa.question rows owned by the therapy, grouped by heading
+
+        Pricing follows the rule in the app's data/packages.js:
+          Single = 1x   Starter (4+1) = 4x   Commit (8+1) = 8x   Lifestyle (12+2) = 12x
+        so the "Save X" badge the controller computes has something to show.
+    -->
+
+    <!-- ============================================================
+         THERAPIES
+         ============================================================ -->
+
+    <record id="demo_therapy_ease" model="pos.category">
+        <field name="name">GO Ease</field>
+        <field name="spa_is_therapy" eval="True"/>
+        <field name="spa_sequence">10</field>
+        <field name="spa_tagline">Light, relaxing assisted stretching</field>
+        <field name="spa_description" type="html">
+            <p>A light and relaxing assisted stretching session designed to release
+               daily muscle tension and improve overall comfort. Perfect for a first
+               experience of assisted stretching, or a quick recovery session.</p>
+        </field>
+        <field name="spa_ideal_for">Beginners, Office Workers, Daily Tension Relief</field>
+        <field name="spa_focus_areas">Neck, Shoulders, Upper Back</field>
+    </record>
+
+    <record id="demo_therapy_flex" model="pos.category">
+        <field name="name">GO Flex</field>
+        <field name="spa_is_therapy" eval="True"/>
+        <field name="spa_sequence">20</field>
+        <field name="spa_tagline">Deeper release, better mobility</field>
+        <field name="spa_description" type="html">
+            <p>A focused assisted stretching session designed to release deeper muscle
+               tension and improve flexibility. Ideal for anyone looking for a more
+               complete stretch and better day-to-day body mobility.</p>
+        </field>
+        <field name="spa_ideal_for">Active Adults, Gym Goers, Improved Flexibility</field>
+        <field name="spa_focus_areas">Shoulders, Back, Hips, Hamstrings</field>
+    </record>
+
+    <record id="demo_therapy_relief" model="pos.category">
+        <field name="name">GO Relief</field>
+        <field name="spa_is_therapy" eval="True"/>
+        <field name="spa_sequence">30</field>
+        <field name="spa_tagline">Therapeutic relief and recovery</field>
+        <field name="spa_description" type="html">
+            <p>A therapeutic assisted stretching session designed to relieve deep muscle
+               pain, reduce tension and support better recovery. Ideal for anyone
+               experiencing stiffness, fatigue or muscle discomfort.</p>
+        </field>
+        <field name="spa_ideal_for">Chronic Tension, Post-Workout Recovery, Desk Fatigue</field>
+        <field name="spa_focus_areas">Neck, Back, Hips, Legs</field>
+    </record>
+
+    <record id="demo_therapy_release" model="pos.category">
+        <field name="name">GO Release</field>
+        <field name="spa_is_therapy" eval="True"/>
+        <field name="spa_sequence">40</field>
+        <field name="spa_tagline">Full-body deep release</field>
+        <field name="spa_description" type="html">
+            <p>An extended assisted stretching session designed for deep muscle release
+               and full-body relaxation. For a complete recovery experience and maximum
+               flexibility improvement.</p>
+        </field>
+        <field name="spa_ideal_for">Athletes, Deep Recovery, Full-Body Reset</field>
+        <field name="spa_focus_areas">Full Body — Neck, Shoulders, Back, Hips, Legs</field>
+    </record>
+
+    <!-- ============================================================
+         PACKAGES — GO Ease (30 min, single = 12)
+         ============================================================ -->
+
+    <record id="demo_pkg_ease_single" model="product.template">
+        <field name="name">GO Ease — Single Session</field>
+        <field name="type">service</field>
+        <field name="list_price">12.0</field>
+        <field name="spa_session_count">1</field>
+        <field name="spa_duration">30</field>
+        <field name="spa_session_desc">A light and relaxing assisted stretching session to release daily muscle tension and improve overall comfort.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_ease')])]"/>
+    </record>
+
+    <record id="demo_pkg_ease_starter" model="product.template">
+        <field name="name">GO Ease — Starter Pack (4+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">48.0</field>
+        <field name="spa_session_count">5</field>
+        <field name="spa_duration">30</field>
+        <field name="spa_session_desc">A great starter package for making stretching part of your weekly routine. Improves flexibility and gradually reduces muscle tension.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_ease')])]"/>
+    </record>
+
+    <record id="demo_pkg_ease_commit" model="product.template">
+        <field name="name">GO Ease — Commit Pack (8+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">96.0</field>
+        <field name="spa_session_count">9</field>
+        <field name="spa_duration">30</field>
+        <field name="spa_session_desc">For those committed to improving mobility and flexibility. Regular sessions enhance performance and reduce muscle tightness.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_ease')])]"/>
+    </record>
+
+    <record id="demo_pkg_ease_lifestyle" model="product.template">
+        <field name="name">GO Ease — Lifestyle Pack (12+2 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">144.0</field>
+        <field name="spa_session_count">14</field>
+        <field name="spa_duration">30</field>
+        <field name="spa_session_desc">Make stretching part of your lifestyle — regular sessions to improve flexibility, reduce tension and maintain an active, balanced body.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_ease')])]"/>
+    </record>
+
+    <!-- ============================================================
+         PACKAGES — GO Flex (40 min, single = 16)
+         ============================================================ -->
+
+    <record id="demo_pkg_flex_single" model="product.template">
+        <field name="name">GO Flex — Single Session</field>
+        <field name="type">service</field>
+        <field name="list_price">16.0</field>
+        <field name="spa_session_count">1</field>
+        <field name="spa_duration">40</field>
+        <field name="spa_session_desc">A focused session to release deeper muscle tension and improve flexibility.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_flex')])]"/>
+    </record>
+
+    <record id="demo_pkg_flex_starter" model="product.template">
+        <field name="name">GO Flex — Starter Pack (4+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">64.0</field>
+        <field name="spa_session_count">5</field>
+        <field name="spa_duration">40</field>
+        <field name="spa_session_desc">Begin improving flexibility and mobility. Regular sessions reduce tightness and support better movement.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_flex')])]"/>
+    </record>
+
+    <record id="demo_pkg_flex_commit" model="product.template">
+        <field name="name">GO Flex — Commit Pack (8+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">128.0</field>
+        <field name="spa_session_count">9</field>
+        <field name="spa_duration">40</field>
+        <field name="spa_session_desc">For those committed to flexibility and body performance. Consistent sessions enhance mobility and support recovery.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_flex')])]"/>
+    </record>
+
+    <record id="demo_pkg_flex_lifestyle" model="product.template">
+        <field name="name">GO Flex — Lifestyle Pack (12+2 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">192.0</field>
+        <field name="spa_session_count">14</field>
+        <field name="spa_duration">40</field>
+        <field name="spa_session_desc">Make stretching part of your lifestyle — improved flexibility, less tension, and a body that keeps moving freely.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_flex')])]"/>
+    </record>
+
+    <!-- ============================================================
+         PACKAGES — GO Relief (60 min, single = 22)
+         ============================================================ -->
+
+    <record id="demo_pkg_relief_single" model="product.template">
+        <field name="name">GO Relief — Single Session</field>
+        <field name="type">service</field>
+        <field name="list_price">22.0</field>
+        <field name="spa_session_count">1</field>
+        <field name="spa_duration">60</field>
+        <field name="spa_session_desc">A therapeutic session to relieve deep muscle pain, reduce tension and support recovery.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_relief')])]"/>
+    </record>
+
+    <record id="demo_pkg_relief_starter" model="product.template">
+        <field name="name">GO Relief — Starter Pack (4+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">88.0</field>
+        <field name="spa_session_count">5</field>
+        <field name="spa_duration">60</field>
+        <field name="spa_session_desc">Start addressing muscle tension and improving recovery. Releases deep tightness and supports better movement.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_relief')])]"/>
+    </record>
+
+    <record id="demo_pkg_relief_commit" model="product.template">
+        <field name="name">GO Relief — Commit Pack (8+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">176.0</field>
+        <field name="spa_session_count">9</field>
+        <field name="spa_duration">60</field>
+        <field name="spa_session_desc">For those committed to recovery and reducing chronic tension. Restores mobility and improves physical comfort.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_relief')])]"/>
+    </record>
+
+    <record id="demo_pkg_relief_lifestyle" model="product.template">
+        <field name="name">GO Relief — Lifestyle Pack (12+2 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">264.0</field>
+        <field name="spa_session_count">14</field>
+        <field name="spa_duration">60</field>
+        <field name="spa_session_desc">Maintain long-term muscle health — reduce pain, improve flexibility and keep your body balanced and relaxed.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_relief')])]"/>
+    </record>
+
+    <!-- ============================================================
+         PACKAGES — GO Release (90 min, single = 30)
+         ============================================================ -->
+
+    <record id="demo_pkg_release_single" model="product.template">
+        <field name="name">GO Release — Single Session</field>
+        <field name="type">service</field>
+        <field name="list_price">30.0</field>
+        <field name="spa_session_count">1</field>
+        <field name="spa_duration">90</field>
+        <field name="spa_session_desc">An extended session for deep muscle release and full-body relaxation.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_release')])]"/>
+    </record>
+
+    <record id="demo_pkg_release_starter" model="product.template">
+        <field name="name">GO Release — Starter Pack (4+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">120.0</field>
+        <field name="spa_session_count">5</field>
+        <field name="spa_duration">90</field>
+        <field name="spa_session_desc">Begin experiencing deeper stretching and improved mobility. Releases long-term tension and supports full-body recovery.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_release')])]"/>
+    </record>
+
+    <record id="demo_pkg_release_commit" model="product.template">
+        <field name="name">GO Release — Commit Pack (8+1 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">240.0</field>
+        <field name="spa_session_count">9</field>
+        <field name="spa_duration">90</field>
+        <field name="spa_session_desc">For those committed to flexibility, recovery and performance. Deeper muscle release and long-lasting relief.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_release')])]"/>
+    </record>
+
+    <record id="demo_pkg_release_lifestyle" model="product.template">
+        <field name="name">GO Release — Lifestyle Pack (12+2 Sessions)</field>
+        <field name="type">service</field>
+        <field name="list_price">360.0</field>
+        <field name="spa_session_count">14</field>
+        <field name="spa_duration">90</field>
+        <field name="spa_session_desc">The ultimate package — extended sessions that improve flexibility, release deep tension and keep your body balanced and energized.</field>
+        <field name="available_in_pos" eval="True"/>
+        <field name="pos_categ_ids" eval="[(6, 0, [ref('demo_therapy_release')])]"/>
+    </record>
+
+    <!-- ============================================================
+         QUESTION HEADINGS
+         A heading must belong to the SAME therapy as the questions filed
+         under it (_check_spa_heading_therapy), so each therapy gets its own.
+         ============================================================ -->
+
+    <record id="demo_heading_ease_health" model="spa.question.heading">
+        <field name="name">Health &amp; Safety</field>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+    </record>
+
+    <record id="demo_heading_ease_pref" model="spa.question.heading">
+        <field name="name">Your Preferences</field>
+        <field name="sequence">20</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+    </record>
+
+    <record id="demo_heading_flex_health" model="spa.question.heading">
+        <field name="name">Health &amp; Safety</field>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_flex"/>
+    </record>
+
+    <record id="demo_heading_relief_health" model="spa.question.heading">
+        <field name="name">Health &amp; Safety</field>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_relief"/>
+    </record>
+
+    <record id="demo_heading_release_health" model="spa.question.heading">
+        <field name="name">Health &amp; Safety</field>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_release"/>
+    </record>
+
+    <!-- ============================================================
+         QUESTIONS — GO Ease (covers all four question types)
+         ============================================================ -->
+
+    <record id="demo_q_ease_injury" model="spa.question">
+        <field name="name">Do you have any current injuries or recent surgery?</field>
+        <field name="question_type">yes_no</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+        <field name="heading_id" ref="demo_heading_ease_health"/>
+    </record>
+
+    <record id="demo_q_ease_conditions" model="spa.question">
+        <field name="name">Please list any medical conditions we should know about</field>
+        <field name="question_type">text</field>
+        <field name="required" eval="False"/>
+        <field name="sequence">20</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+        <field name="heading_id" ref="demo_heading_ease_health"/>
+    </record>
+
+    <record id="demo_q_ease_pressure" model="spa.question">
+        <field name="name">Preferred stretching pressure</field>
+        <field name="question_type">single_choice</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">30</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+        <field name="heading_id" ref="demo_heading_ease_pref"/>
+    </record>
+
+    <record id="demo_opt_ease_pressure_light" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_pressure"/>
+        <field name="name">Light</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="demo_opt_ease_pressure_medium" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_pressure"/>
+        <field name="name">Medium</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="demo_opt_ease_pressure_firm" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_pressure"/>
+        <field name="name">Firm</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <record id="demo_q_ease_focus" model="spa.question">
+        <field name="name">Which areas would you like us to focus on?</field>
+        <field name="question_type">multi_choice</field>
+        <field name="required" eval="False"/>
+        <field name="sequence">40</field>
+        <field name="pos_category_id" ref="demo_therapy_ease"/>
+        <field name="heading_id" ref="demo_heading_ease_pref"/>
+    </record>
+
+    <record id="demo_opt_ease_focus_neck" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_focus"/>
+        <field name="name">Neck</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="demo_opt_ease_focus_shoulders" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_focus"/>
+        <field name="name">Shoulders</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="demo_opt_ease_focus_back" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_focus"/>
+        <field name="name">Back</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="demo_opt_ease_focus_legs" model="spa.question.option">
+        <field name="question_id" ref="demo_q_ease_focus"/>
+        <field name="name">Legs</field>
+        <field name="sequence">40</field>
+    </record>
+
+    <!-- ============================================================
+         QUESTIONS — GO Flex
+         ============================================================ -->
+
+    <record id="demo_q_flex_injury" model="spa.question">
+        <field name="name">Do you have any current injuries or recent surgery?</field>
+        <field name="question_type">yes_no</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_flex"/>
+        <field name="heading_id" ref="demo_heading_flex_health"/>
+    </record>
+
+    <record id="demo_q_flex_activity" model="spa.question">
+        <field name="name">How active are you day to day?</field>
+        <field name="question_type">single_choice</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">20</field>
+        <field name="pos_category_id" ref="demo_therapy_flex"/>
+        <field name="heading_id" ref="demo_heading_flex_health"/>
+    </record>
+
+    <record id="demo_opt_flex_activity_low" model="spa.question.option">
+        <field name="question_id" ref="demo_q_flex_activity"/>
+        <field name="name">Mostly seated</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="demo_opt_flex_activity_mid" model="spa.question.option">
+        <field name="question_id" ref="demo_q_flex_activity"/>
+        <field name="name">Moderately active</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="demo_opt_flex_activity_high" model="spa.question.option">
+        <field name="question_id" ref="demo_q_flex_activity"/>
+        <field name="name">Very active / train regularly</field>
+        <field name="sequence">30</field>
+    </record>
+
+    <!-- ============================================================
+         QUESTIONS — GO Relief
+         ============================================================ -->
+
+    <record id="demo_q_relief_injury" model="spa.question">
+        <field name="name">Do you have any current injuries or recent surgery?</field>
+        <field name="question_type">yes_no</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_relief"/>
+        <field name="heading_id" ref="demo_heading_relief_health"/>
+    </record>
+
+    <record id="demo_q_relief_pain" model="spa.question">
+        <field name="name">Where are you feeling pain or stiffness right now?</field>
+        <field name="question_type">text</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">20</field>
+        <field name="pos_category_id" ref="demo_therapy_relief"/>
+        <field name="heading_id" ref="demo_heading_relief_health"/>
+    </record>
+
+    <!-- ============================================================
+         QUESTIONS — GO Release
+         ============================================================ -->
+
+    <record id="demo_q_release_injury" model="spa.question">
+        <field name="name">Do you have any current injuries or recent surgery?</field>
+        <field name="question_type">yes_no</field>
+        <field name="required" eval="True"/>
+        <field name="sequence">10</field>
+        <field name="pos_category_id" ref="demo_therapy_release"/>
+        <field name="heading_id" ref="demo_heading_release_health"/>
+    </record>
+
+    <record id="demo_q_release_goal" model="spa.question">
+        <field name="name">What would you like to get out of today's session?</field>
+        <field name="question_type">text</field>
+        <field name="required" eval="False"/>
+        <field name="sequence">20</field>
+        <field name="pos_category_id" ref="demo_therapy_release"/>
+        <field name="heading_id" ref="demo_heading_release_health"/>
+    </record>
+
+</odoo>

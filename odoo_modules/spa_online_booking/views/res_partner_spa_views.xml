@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Add a "Therapy Sessions" page to the contact form: their packages with
+         total / taken / remaining, and (per package) the sessions used. -->
+    <record id="view_partner_form_spa_sessions" model="ir.ui.view">
+        <field name="name">res.partner.form.spa.sessions</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Therapy Sessions" name="spa_sessions">
+                    <group>
+                        <group>
+                            <field name="spa_pass_count"/>
+                            <field name="spa_sessions_left"/>
+                            <field name="spa_sessions_used"/>
+                        </group>
+                    </group>
+                    <field name="spa_session_pass_ids" readonly="1">
+                        <list decoration-muted="state == 'completed'">
+                            <field name="name"/>
+                            <field name="product_tmpl_id"/>
+                            <field name="channel"/>
+                            <field name="sessions_total"/>
+                            <field name="sessions_used"/>
+                            <field name="sessions_left" decoration-bf="1"/>
+                            <field name="purchase_date"/>
+                            <field name="state" widget="badge"
+                                   decoration-success="state == 'active'"
+                                   decoration-muted="state == 'completed'"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Customers list: name / number / gender + session totals at a glance. -->
+    <record id="view_spa_customer_list" model="ir.ui.view">
+        <field name="name">res.partner.spa.customer.list</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <list string="Customers">
+                <field name="name"/>
+                <field name="phone"/>
+                <field name="whatsapp"/>
+                <field name="gender"/>
+                <field name="spa_sessions_left"/>
+                <field name="spa_sessions_used"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search by name / phone / WhatsApp. -->
+    <record id="view_spa_customer_search" model="ir.ui.view">
+        <field name="name">res.partner.spa.customer.search</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <search string="Customers">
+                <field name="name" string="Name / Phone / WhatsApp"
+                       filter_domain="['|', '|', ('name', 'ilike', self), ('phone', 'ilike', self), ('whatsapp', 'ilike', self)]"/>
+                <filter name="has_sessions" string="Has Sessions Left" domain="[('spa_sessions_left', '>', 0)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_spa_customers" model="ir.actions.act_window">
+        <field name="name">Customers</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('is_company', '=', False)]</field>
+        <field name="view_id" ref="view_spa_customer_list"/>
+        <field name="search_view_id" ref="view_spa_customer_search"/>
+        <field name="context">{'search_default_has_sessions': 0}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Find a customer</p>
+            <p>Search by name, phone or WhatsApp to see their details and the
+               therapy sessions they've taken.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_spa_customers"
+              name="Customers"
+              parent="point_of_sale.menu_point_root"
+              action="action_spa_customers"
+              sequence="85"/>
+
+</odoo>

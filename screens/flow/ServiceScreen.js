@@ -69,7 +69,7 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
         </View>
         {/* Client brand — long-press to end the session (reception only). */}
         <TouchableOpacity onLongPress={onHome} delayLongPress={800} activeOpacity={1} style={{ alignSelf: 'center' }}>
-          <Image source={require('../../assets/stretchandgo_black.png')} style={s.brandLogo} resizeMode="contain" />
+          <Image source={require('../../assets/nexgen_dark.png')} style={s.brandLogo} resizeMode="contain" />
         </TouchableOpacity>
         <Text style={[s.title, { fontSize: titleSize }]}>{t('chooseService')}</Text>
         <View style={s.divider}>
@@ -129,13 +129,6 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
         </ScrollView>
       )}
 
-      {/* Vendor brand — NexGenn POS */}
-      <View style={[s.footer, { paddingBottom: insets.bottom + 6 }]}>
-        <View style={s.footerLine} />
-        <Image source={require('../../assets/nexgen_dark.png')} style={s.footerLogo} resizeMode="contain" />
-        <View style={s.footerLine} />
-      </View>
-
       {/* Service detail — shows the exact description (from Odoo) when a service is tapped. */}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
         <View style={s.detailBackdrop}>
@@ -183,7 +176,9 @@ const s = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   line: { width: 46, height: 1, backgroundColor: '#D7C7EA', marginHorizontal: 8 },
   subtitle: { fontSize: 13.5, color: COLORS.muted, textAlign: 'center', marginTop: 8 },
-  brandLogo: { width: 190, height: 44, alignSelf: 'center', marginTop: 2, marginBottom: 2 },
+  // NexGenn brand, moved up from the footer (5:1 aspect, matching the header
+  // treatment on the Welcome and device config screens).
+  brandLogo: { width: 270, height: 54, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
   headRibbon: { width: 28, height: 38 },
 
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
@@ -229,8 +224,4 @@ const s = StyleSheet.create({
   detailDesc: { fontSize: 15, lineHeight: 23, color: COLORS.ink },
   detailBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.purple, borderRadius: 999, paddingVertical: 15, marginTop: 20 },
   detailBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
-
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: 8, paddingHorizontal: 20 },
-  footerLine: { flex: 1, height: 1, backgroundColor: COLORS.line, maxWidth: 55 },
-  footerLogo: { width: 150, height: 30, marginHorizontal: 12 },
 });

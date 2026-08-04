@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SessionPassDialog">
+        <Dialog size="'md'" title="'Redeem Session'" contentClass="'sg-redeem-dialog'">
+
+            <!-- branded header: title + close -->
+            <t t-set-slot="header">
+                <h4 class="modal-title flex-grow-1 sg-redeem__dialog-title">Redeem Session</h4>
+                <button type="button" class="btn-close" aria-label="Close" t-on-click="() => this.props.close()"/>
+            </t>
+
+            <div class="sg-redeem">
+                <img t-if="logoUrl" class="sg-redeem__logo" t-att-src="logoUrl" alt="Logo"/>
+
+                <!-- STEP 1: find the customer -->
+                <t t-if="!state.partner">
+                    <p class="sg-redeem__sub">Find the customer, then use one of their prepaid sessions.</p>
+                    <div class="sg-redeem__search">
+                        <i class="fa fa-user sg-redeem__search-ico"/>
+                        <input type="text" class="sg-redeem__search-input" placeholder="Customer name or phone…"
+                               t-model="state.term" t-on-keyup="(ev) => this.onSearchKey(ev)"/>
+                        <button class="sg-redeem__search-btn" t-on-click="() => this.searchCustomers()">
+                            <i class="fa fa-search me-2"/>Search
+                        </button>
+                    </div>
+
+                    <p t-if="state.loading" class="text-muted mt-3">Searching…</p>
+                    <p t-if="state.searched and !state.loading and !state.customers.length" class="text-muted mt-3">
+                        No customer found for "<t t-esc="state.term"/>".
+                    </p>
+
+                    <p t-if="state.customers.length > 1" class="text-muted mb-2">
+                        <t t-esc="state.customers.length"/> people match — pick the right one:
+                    </p>
+                    <div class="sg-redeem__list">
+                        <button t-foreach="state.customers" t-as="c" t-key="c.id"
+                                class="sg-redeem__cust" t-on-click="() => this.selectCustomer(c)">
+                            <span class="sg-redeem__cust-name" t-esc="c.name"/>
+                            <span class="sg-redeem__cust-phone text-muted" t-if="c.phone or c.whatsapp"
+                                  t-esc="c.phone or c.whatsapp"/>
+                            <i class="fa fa-chevron-right text-muted"/>
+                        </button>
+                    </div>
+                </t>
+
+                <!-- STEP 2: the customer's active passes -->
+                <t t-else="">
+                    <div class="sg-redeem__head">
+                        <div>
+                            <div class="sg-redeem__who"><i class="fa fa-user me-1"/><t t-esc="state.partner.name"/></div>
+                            <button class="btn btn-link p-0" t-on-click="() => this.changeCustomer()">
+                                <i class="fa fa-arrow-left me-1"/>Change customer
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- customer profile -->
+                    <div class="sg-redeem__profile">
+                        <div class="sg-redeem__prow" t-if="fmtAge(state.partner.dob) !== '' or state.partner.gender">
+                            <span t-if="fmtAge(state.partner.dob) !== ''"><i class="fa fa-birthday-cake me-1"/>Age <b t-esc="fmtAge(state.partner.dob)"/></span>
+                            <span t-if="state.partner.gender" class="ms-3"><i class="fa fa-venus-mars me-1"/><t t-esc="capGender(state.partner.gender)"/></span>
+                        </div>
+                        <div class="sg-redeem__prow" t-if="state.partner.phone"><i class="fa fa-phone me-1"/><t t-esc="state.partner.phone"/></div>
+                        <div class="sg-redeem__prow" t-if="state.partner.whatsapp"><i class="fa fa-whatsapp me-1"/><t t-esc="state.partner.whatsapp"/></div>
+                    </div>
+
+                    <p t-if="state.flash" class="alert alert-success py-2 my-2"><i class="fa fa-check-circle me-1"/><t t-esc="state.flash"/></p>
+
+                    <p t-if="state.loading" class="text-muted">Loading…</p>
+                    <p t-if="!state.loading and !state.passes.length" class="text-muted">
+                        No active packages for this customer.
+                    </p>
+
+                    <div class="sg-redeem__passes">
+                        <div t-foreach="state.passes" t-as="p" t-key="p.id" class="sg-redeem__pass">
+                            <div class="sg-redeem__pass-row">
+                                <div class="sg-redeem__pass-info">
+                                    <div class="sg-redeem__pass-name" t-esc="pkgName(p)"/>
+                                    <div class="sg-redeem__pass-count">
+                                        <b t-esc="p.sessions_left"/> of <t t-esc="p.sessions_total"/> sessions left
+                                    </div>
+                                </div>
+                                <button class="sg-redeem__use" t-att-disabled="state.busy === p.id"
+                                        t-on-click="() => this.useSession(p)">
+                                    <i class="fa fa-check me-1"/>
+                                    <t t-esc="state.busy === p.id ? 'Sending…' : 'Use a Session'"/>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <p t-if="state.error" class="text-danger mt-2 mb-0"><t t-esc="state.error"/></p>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="sg-redeem__closebtn" t-on-click="() => this.props.close()">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

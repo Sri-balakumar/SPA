@@ -9,6 +9,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, PlayfairDisplay_600SemiBold, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import { SessionProvider, useSession } from './SessionContext';
 import { LanguageProvider } from './LanguageContext';
+import { clearDeviceRegistered, clearCredentials } from './connection';
 import LoadingScreen from './screens/LoadingScreen';
 import LoginScreen from './screens/LoginScreen';
 import WelcomeScreen from './screens/flow/WelcomeScreen';
@@ -34,7 +35,9 @@ const EMPTY_FORM = {
   membership: null, selectedCustomer: null, selectedPackage: null,
   serviceId: null, service: '', servicePrice: 0, serviceObj: null,
   package: null, packageName: '',
-  fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', phone: '', whatsapp: '', whatsappSame: true,
+  // countryIso pairs with countryCode — the dial code alone can't identify a
+  // country, and the per-country phone rules key off the ISO.
+  fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', countryIso: 'OM', phone: '', whatsapp: '', whatsappSame: true,
   email: '', signature: '',
   answers: [],
   therapist: '', date: '', time: '', branch: '', specialRequests: '', paymentMode: 'offline',
@@ -56,6 +59,18 @@ function CustomerFlow() {
   ]);
   // Fresh start for the next customer — Welcome screen re-opens at language select.
   const restart = () => { setForm(EMPTY_FORM); setLangPicked(false); setStep('welcome'); };
+
+  // Hidden 7-tap gear → device config. This is a RE-CONFIGURE, so it undoes the
+  // device setup: clearing the registration makes the next login re-open the QR
+  // scanner, and clearing the saved staff login stops LoadingScreen from
+  // silently auto-logging back in and skipping the config screen entirely.
+  const openDeviceConfig = async () => {
+    try {
+      await clearDeviceRegistered();
+      await clearCredentials();
+    } catch (e) { /* best effort — still drop to the config screen */ }
+    logout();
+  };
 
   // Android hardware Back button: walk back one step in the flow instead of
   // closing the app. On Welcome/Success it does nothing (kiosk — no accidental exit).
@@ -88,8 +103,10 @@ function CustomerFlow() {
       <WelcomeScreen
         startChosen={langPicked}
         onChoose={() => setLangPicked(true)}
+        onUnchoose={() => setLangPicked(false)}
         onNew={() => setStep('service')}
         onExisting={() => setStep('identify')}
+        onDeviceConfig={openDeviceConfig}
         onHome={onHome} />
     );
   }

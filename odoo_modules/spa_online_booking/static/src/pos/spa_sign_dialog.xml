@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SpaSignDialog">
+        <Dialog size="'lg'" title="'Customer Signature'" contentClass="'sg-redeem-dialog'">
+            <t t-set-slot="header">
+                <h4 class="modal-title flex-grow-1 sg-redeem__dialog-title">Customer Signature</h4>
+                <button type="button" class="btn-close" aria-label="Close" t-on-click="() => this.props.close()"/>
+            </t>
+
+            <div class="sg-redeem sg-sign">
+                <div class="sg-redeem__head">
+                    <div>
+                        <div class="sg-redeem__who"><i class="fa fa-user me-1"/><t t-esc="sheet.customer"/></div>
+                        <div class="text-muted" t-if="sheet.title" t-esc="sheet.title"/>
+                    </div>
+                </div>
+
+                <div class="sg-rep-meta">
+                    <div class="sg-rep-meta__row"><span>Receipt No</span><b t-esc="sheet.order_ref or '—'"/></div>
+                    <div class="sg-rep-meta__row"><span>Invoice No</span><b t-esc="sheet.invoice or '—'"/></div>
+                    <div class="sg-rep-meta__row" t-if="sheet.date"><span>Date</span><b t-esc="sheet.date"/></div>
+                    <div class="sg-rep-meta__row" t-if="sheet.phone"><span>Phone</span><b t-esc="sheet.phone"/></div>
+                    <div class="sg-rep-meta__row" t-if="sheet.amount_total"><span>Total</span><b t-esc="money(sheet.amount_total)"/></div>
+                </div>
+
+                <h5 class="tp-section">Questions &amp; Answers</h5>
+                <p t-if="!sheet.groups or !sheet.groups.length" class="text-muted">
+                    No questionnaire answers recorded for this receipt.
+                </p>
+                <div t-foreach="sheet.groups or []" t-as="g" t-key="g_index" class="sg-qa-group">
+                    <div class="sg-qa-group__head">
+                        <i class="fa fa-file-text-o me-1 text-muted"/>
+                        <b t-esc="g.service or sheet.title"/>
+                        <span class="text-muted ms-2" t-esc="groupHead(g)"/>
+                    </div>
+                    <div class="sg-ans-row" t-foreach="g.rows or []" t-as="qa" t-key="qa_index">
+                        <div class="sg-ans-q"><t t-esc="qa.question"/></div>
+                        <div class="sg-ans-a"><t t-esc="qa.answer"/></div>
+                    </div>
+                </div>
+
+                <h5 class="tp-section">Signature</h5>
+                <SpaSignatureField sig="state.sig" label="''"
+                                   hint="'Ask the customer to sign inside the box, or upload a picture of the signature.'"/>
+
+                <p t-if="state.error" class="text-danger mt-2 mb-0"><t t-esc="state.error"/></p>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="sg-redeem__closebtn sg-rep-print" t-att-disabled="state.busy"
+                        t-on-click="() => this.saveAndPrint()">
+                    <i class="fa fa-print me-1"/>
+                    <t t-esc="state.busy ? 'Saving…' : 'Save &amp; Print'"/>
+                </button>
+                <button class="sg-redeem__closebtn" t-on-click="() => this.props.close()">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

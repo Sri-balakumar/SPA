@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Show the channel column in the back-office POS Orders list. -->
+    <record id="view_pos_order_tree_spa_channel" model="ir.ui.view">
+        <field name="name">pos.order.list.spa.channel</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_order_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='state']" position="before">
+                <field name="spa_channel" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Filter + group POS orders by channel (Online / Web / Tab). Grouping
+         shows the count and summed amount per channel = a per-channel report. -->
+    <record id="view_pos_order_filter_spa_channel" model="ir.ui.view">
+        <field name="name">pos.order.filter.spa.channel</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_order_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='partner_id']" position="after">
+                <field name="spa_channel"/>
+            </xpath>
+            <xpath expr="//filter[@name='status']" position="after">
+                <filter string="Spa Channel" name="spa_channel"
+                        domain="[]" context="{'group_by': 'spa_channel'}"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

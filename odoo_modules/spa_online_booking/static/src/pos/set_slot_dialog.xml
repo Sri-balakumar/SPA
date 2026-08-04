@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SetSlotDialog">
+        <Dialog title="'Set Appointment Time'">
+            <div class="spa-set-slot">
+                <p t-if="props.note" class="mb-2">
+                    <i class="fa fa-clock-o me-1"/>Customer's note:
+                    <strong t-esc="props.note"/>
+                </p>
+                <label class="fw-bold d-block mb-1">Date &amp; time</label>
+                <input type="datetime-local" class="form-control form-control-lg"
+                       t-model="state.value"/>
+                <p t-if="state.error" class="text-danger mt-2 mb-0" t-esc="state.error"/>
+            </div>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary btn-lg" t-on-click="() => this.confirm()">
+                    Set Time
+                </button>
+                <button class="btn btn-secondary btn-lg" t-on-click="() => this.props.close()">
+                    Cancel
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

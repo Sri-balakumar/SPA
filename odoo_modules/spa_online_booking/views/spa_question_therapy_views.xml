@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- On the "New Question" form (used by the POS "Questions" button and the
+         backend Questions list), replace the package-level "Services" field
+         with the THERAPY field, limited to the therapies (GO Ease / GO Flex /
+         GO Relief / GO Release). A question set on a therapy applies to every
+         package under it. -->
+    <record id="view_spa_question_form_therapy" model="ir.ui.view">
+        <field name="name">spa.question.form.therapy</field>
+        <field name="model">spa.question</field>
+        <field name="inherit_id" ref="spa_kiosk.view_spa_question_form"/>
+        <field name="arch" type="xml">
+            <field name="product_ids" position="replace">
+                <field name="pos_category_id" string="Therapy" required="1"
+                       domain="[('spa_is_therapy', '=', True)]"
+                       options="{'no_create': True, 'no_open': True}"/>
+            </field>
+            <field name="heading_id" position="attributes">
+                <attribute name="domain">[('pos_category_id', '=', pos_category_id)]</attribute>
+                <attribute name="context">{'default_pos_category_id': pos_category_id}</attribute>
+            </field>
+        </field>
+    </record>
+
+    <!-- The question LIST (also used by any m2m "Add:" selector) showed only
+         "Services", so two questions with the same wording on different
+         therapies rendered as identical rows with nothing to tell them apart.
+         Show the therapy instead - it is the level questions live at now. -->
+    <record id="view_spa_question_list_therapy" model="ir.ui.view">
+        <field name="name">spa.question.list.therapy</field>
+        <field name="model">spa.question</field>
+        <field name="inherit_id" ref="spa_kiosk.view_spa_question_list"/>
+        <field name="arch" type="xml">
+            <field name="product_ids" position="replace">
+                <field name="pos_category_id" string="Therapy"
+                       domain="[('spa_is_therapy', '=', True)]"
+                       options="{'no_create': True, 'no_open': True}"/>
+            </field>
+            <field name="heading_id" position="attributes">
+                <attribute name="domain">[('pos_category_id', '=', pos_category_id)]</attribute>
+            </field>
+        </field>
+    </record>
+
+    <!-- pos_category_id lives in this module, so the Therapy column on the
+         product form's read-only question list has to be added from here. -->
+    <record id="product_template_form_spa_questions_therapy" model="ir.ui.view">
+        <field name="name">product.template.form.spa.questions.therapy</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="spa_kiosk.product_template_form_spa_questions"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='spa_effective_question_ids']/list/field[@name='required']"
+                   position="after">
+                <field name="pos_category_id" string="Therapy"/>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

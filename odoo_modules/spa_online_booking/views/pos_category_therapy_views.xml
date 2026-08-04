@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- A POS category is also a THERAPY on the booking page. Add the therapy
+         tagline / description / questions to the category form. The image at
+         the top of the form (the category avatar) is reused as the therapy
+         photo shown online. -->
+    <record id="pos_category_form_therapy" model="ir.ui.view">
+        <field name="name">pos.category.form.therapy</field>
+        <field name="model">pos.category</field>
+        <field name="inherit_id" ref="point_of_sale.product_pos_category_form_view"/>
+        <field name="arch" type="xml">
+            <!-- Hint that the avatar image is the therapy photo. -->
+            <xpath expr="//field[@name='image_512']" position="after">
+                <span class="text-muted small d-block"
+                      invisible="not spa_is_therapy">Therapy photo (shown online)</span>
+            </xpath>
+
+            <xpath expr="//group" position="after">
+                <group string="Online Booking — Therapy">
+                    <field name="spa_is_therapy"/>
+                    <field name="spa_sequence" invisible="not spa_is_therapy"/>
+                    <field name="spa_tagline" invisible="not spa_is_therapy"
+                           placeholder="e.g. A light and relaxing stretch session"/>
+                    <field name="spa_ideal_for" invisible="not spa_is_therapy"
+                           placeholder="e.g. Beginners, Office Workers, Daily Tension Relief"/>
+                    <field name="spa_focus_areas" invisible="not spa_is_therapy"
+                           placeholder="e.g. Neck, Shoulders, Back, Hips, Legs"/>
+                </group>
+                <separator string="Therapy Description (shown when the therapy is selected)"
+                           invisible="not spa_is_therapy"/>
+                <field name="spa_description" invisible="not spa_is_therapy"
+                       placeholder="Description exactly as on the website…"/>
+                <separator string="Question Headings (the sections questions are grouped under)"
+                           invisible="not spa_is_therapy"/>
+                <group string="How every section title is drawn"
+                       invisible="not spa_is_therapy">
+                    <field name="spa_heading_color" widget="color"/>
+                    <field name="spa_heading_bold"/>
+                    <field name="spa_heading_italic"/>
+                    <field name="spa_heading_underline"/>
+                </group>
+                <field name="spa_heading_ids" invisible="not spa_is_therapy">
+                    <list editable="bottom">
+                        <field name="sequence" widget="handle"/>
+                        <field name="name" placeholder="e.g. General Health (PAR-Q)"/>
+                    </list>
+                </field>
+                <separator string="Questions (asked for every package in this therapy)"
+                           invisible="not spa_is_therapy"/>
+                <field name="spa_question_ids" invisible="not spa_is_therapy">
+                    <!-- Widths keep the row from pushing the delete icon off the
+                         right edge on a narrow window. -->
+                    <list editable="bottom">
+                        <field name="sequence" widget="handle"/>
+                        <field name="name"/>
+                        <field name="heading_id" width="220px" options="{'no_open': True}"
+                               domain="[('pos_category_id', '=', parent.id)]"
+                               context="{'default_pos_category_id': parent.id}"/>
+                        <field name="question_type" width="150px"/>
+                        <field name="required" width="100px"/>
+                    </list>
+                    <form>
+                        <group>
+                            <field name="name" placeholder="e.g. Any injuries we should know about?"/>
+                            <field name="heading_id" options="{'no_open': True}"
+                                   domain="[('pos_category_id', '=', parent.id)]"
+                                   context="{'default_pos_category_id': parent.id}"/>
+                            <field name="question_type"/>
+                            <field name="required"/>
+                        </group>
+                        <separator string="Options (for choice questions)"/>
+                        <field name="option_ids">
+                            <list editable="bottom">
+                                <field name="sequence" widget="handle"/>
+                                <field name="name"/>
+                            </list>
+                        </field>
+                    </form>
+                </field>
+                <p class="text-muted" invisible="not spa_is_therapy">
+                    On the booking page the customer picks this therapy, reads the
+                    description, then chooses one of its session packages (the
+                    products filed under this category). These questions are asked
+                    once, whichever package they choose.
+                    <br/>
+                    Name your sections in <b>Question Headings</b> above, then pick
+                    one in a question's <b>Heading</b>. Questions sharing a heading
+                    are shown as one block wherever they are asked, and the sections
+                    follow the order of the headings list - not the questions list.
+                    Leave the heading empty for a question that belongs to no
+                    section. A heading you have just added only appears in the
+                    dropdown once this therapy is saved.
+                    <br/>
+                    <b>Heading Colour</b>, <b>Bold</b>, <b>Italic</b> and
+                    <b>Underline</b> are set once above and apply to every section
+                    title of this therapy, wherever the questions are asked - in
+                    the POS, on the tablet and on the booking page. Leave the
+                    colour empty to keep the colour each screen uses by default.
+                    <br/>
+                    Use the delete icon at the end of a row to remove a question or
+                    a heading. Deleting a heading only unfiles its questions, it
+                    does not delete them; a question that customers have already
+                    answered is archived rather than deleted, so their answers stay
+                    on their record.
+                </p>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

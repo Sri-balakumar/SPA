@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_spa_booking_kanban" model="ir.ui.view">
+        <field name="name">spa.booking.kanban</field>
+        <field name="model">spa.booking</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state">
+                <field name="name"/>
+                <field name="partner_name"/>
+                <field name="product_id"/>
+                <field name="payment_mode"/>
+                <templates>
+                    <t t-name="card">
+                        <div class="p-2">
+                            <strong><field name="name"/> — <field name="partner_name"/></strong>
+                            <div><field name="product_id"/></div>
+                            <div class="text-muted">
+                                <field name="payment_mode"/> · <field name="source"/>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_spa_booking_list" model="ir.ui.view">
+        <field name="name">spa.booking.list</field>
+        <field name="model">spa.booking</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="create_date"/>
+                <field name="partner_name"/>
+                <field name="mobile"/>
+                <field name="product_id"/>
+                <field name="payment_mode"/>
+                <field name="source"/>
+                <field name="state" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_spa_booking_form" model="ir.ui.view">
+        <field name="name">spa.booking.form</field>
+        <field name="model">spa.booking</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_approve" string="Approve" type="object"
+                            class="btn-primary" invisible="state != 'pending'"/>
+                    <button name="action_reject" string="Reject" type="object"
+                            invisible="state != 'pending'"/>
+                    <button name="action_complete" string="Mark Completed" type="object"
+                            class="btn-primary" invisible="state != 'in_service'"/>
+                    <button name="action_mark_paid" string="Mark Paid" type="object"
+                            class="btn-primary" invisible="state != 'completed'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="pending,in_service,completed,paid"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="partner_name"/>
+                            <field name="mobile"/>
+                            <field name="product_id" readonly="1"/>
+                            <field name="price"/>
+                        </group>
+                        <group>
+                            <field name="payment_mode"/>
+                            <field name="source"/>
+                            <field name="reject_reason" invisible="state != 'rejected'"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Answers" name="answers">
+                            <field name="answer_ids">
+                                <list>
+                                    <field name="question_id"/>
+                                    <field name="value_text"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_booking" model="ir.actions.act_window">
+        <field name="name">Bookings</field>
+        <field name="res_model">spa.booking</field>
+        <field name="view_mode">kanban,list,form</field>
+    </record>
+</odoo>

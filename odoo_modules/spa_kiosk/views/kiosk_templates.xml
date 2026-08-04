@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Shared page skeleton with tablet-friendly styling -->
+    <template id="kiosk_layout" name="Spa Kiosk Layout">
+            <html>
+                <head>
+                    <meta charset="utf-8"/>
+                    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+                    <title>Danat Spa</title>
+                    <style>
+                        * { box-sizing: border-box; font-family: system-ui, sans-serif; }
+                        body { margin: 0; background: #f2efe9; color: #1d3b34; }
+                        .wrap { max-width: 760px; margin: 0 auto; padding: 24px; }
+                        h1 { text-align: center; color: #1f6f5c; }
+                        .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+                        a.card { display: block; background: #fff; border-radius: 14px; padding: 18px;
+                                 text-decoration: none; color: inherit; border: 2px solid #dfe8e4;
+                                 text-align: center; }
+                        a.card:active { border-color: #1f6f5c; }
+                        .card img { width: 100%; height: 120px; object-fit: cover; border-radius: 10px; }
+                        .price { color: #1f6f5c; font-weight: 700; font-size: 20px; }
+                        label { display: block; font-weight: 600; margin: 18px 0 6px; }
+                        .q-heading { margin: 28px 0 0; padding-bottom: 6px; font-size: 1.05rem;
+                                     border-bottom: 1px solid #e3e3e3; }
+                        input[type=text], input[type=tel], textarea, select {
+                            width: 100%; padding: 14px; font-size: 18px;
+                            border: 2px solid #dfe8e4; border-radius: 10px; }
+                        .opt { display: block; background: #fff; border: 2px solid #dfe8e4;
+                               border-radius: 10px; padding: 12px 14px; margin: 6px 0;
+                               font-size: 18px; }
+                        .btn { display: block; width: 100%; margin-top: 26px; padding: 18px;
+                               font-size: 20px; font-weight: 700; color: #fff;
+                               background: #1f6f5c; border: 0; border-radius: 12px; }
+                        .back { display: inline-block; margin-bottom: 10px; color: #1f6f5c; }
+                        .token { font-size: 42px; font-weight: 800; color: #1f6f5c;
+                                 text-align: center; margin: 24px 0; }
+                        .center { text-align: center; }
+                    </style>
+                </head>
+                <body>
+                    <div class="wrap">
+                        <t t-out="0"/>
+                    </div>
+                </body>
+            </html>
+    </template>
+
+    <!-- Step 1: service cards -->
+    <template id="kiosk_home" name="Spa Kiosk Home">
+        <t t-call="spa_kiosk.kiosk_layout">
+            <h1>Welcome to Danat Spa</h1>
+            <p class="center">Please select a service to begin</p>
+            <div class="cards">
+                <t t-foreach="services" t-as="service">
+                    <a class="card"
+                       t-attf-href="/spa/kiosk/form/{{ service.id }}?src={{ src }}">
+                        <img t-if="service.image_512"
+                             t-attf-src="data:image/png;base64,{{ service.image_512.decode() }}"/>
+                        <h3 t-out="service.name"/>
+                        <div class="price">
+                            <t t-out="'%.3f' % service.list_price"/> OMR ·
+                            <t t-out="service.spa_duration"/> min
+                        </div>
+                    </a>
+                </t>
+            </div>
+        </t>
+    </template>
+
+    <!-- Steps 2-4: details + dynamic questions + payment mode -->
+    <template id="kiosk_form" name="Spa Kiosk Form">
+        <t t-call="spa_kiosk.kiosk_layout">
+            <a class="back" t-attf-href="/spa/kiosk?src={{ src }}">&#8592; Change service</a>
+            <h1 t-out="service.name"/>
+            <form method="post" action="/spa/kiosk/submit">
+                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                <input type="hidden" name="service_id" t-att-value="service.id"/>
+                <input type="hidden" name="src" t-att-value="src"/>
+
+                <label>Your name *</label>
+                <input type="text" name="customer_name" required="required"/>
+
+                <label>Mobile number (with country code) *</label>
+                <input type="tel" name="mobile" required="required"
+                       placeholder="+968 9XXXXXXX"/>
+
+                <!-- Dynamic questions of the selected service -->
+                <t t-foreach="questions" t-as="question">
+                    <!-- Section title, printed once above the first question
+                         under it - the list arrives already grouped. -->
+                    <h3 class="q-heading" t-out="question.heading_id.name"
+                        t-att-style="question.heading_id._spa_heading_style()"
+                        t-if="question.heading_id and (question_index == 0 or questions[question_index - 1].heading_id != question.heading_id)"/>
+                    <label>
+                        <t t-out="question.name"/>
+                        <t t-if="question.required"> *</t>
+                    </label>
+
+                    <t t-if="question.question_type == 'text'">
+                        <input type="text" t-attf-name="q_{{ question.id }}"
+                               t-att-required="'required' if question.required else None"/>
+                    </t>
+
+                    <t t-if="question.question_type == 'yes_no'">
+                        <label class="opt">
+                            <input type="radio" t-attf-name="q_{{ question.id }}"
+                                   value="Yes"
+                                   t-att-required="'required' if question.required else None"/>
+                            Yes
+                        </label>
+                        <label class="opt">
+                            <input type="radio" t-attf-name="q_{{ question.id }}"
+                                   value="No"/>
+                            No
+                        </label>
+                    </t>
+
+                    <t t-if="question.question_type == 'single_choice'">
+                        <t t-foreach="question.option_ids" t-as="opt">
+                            <label class="opt">
+                                <input type="radio" t-attf-name="q_{{ question.id }}"
+                                       t-att-value="opt.name"
+                                       t-att-required="'required' if question.required and opt_first else None"/>
+                                <t t-out="opt.name"/>
+                            </label>
+                        </t>
+                    </t>
+
+                    <t t-if="question.question_type == 'multi_choice'">
+                        <t t-foreach="question.option_ids" t-as="opt">
+                            <label class="opt">
+                                <input type="checkbox" t-attf-name="q_{{ question.id }}"
+                                       t-att-value="opt.name"/>
+                                <t t-out="opt.name"/>
+                            </label>
+                        </t>
+                    </t>
+                </t>
+
+                <label>How would you like to pay? *</label>
+                <label class="opt">
+                    <input type="radio" name="payment_mode" value="offline"
+                           checked="checked"/>
+                    At the counter (cash / card)
+                </label>
+                <label class="opt">
+                    <input type="radio" name="payment_mode" value="online"/>
+                    Online (payment link on WhatsApp)
+                </label>
+
+                <button class="btn" type="submit">Submit</button>
+            </form>
+        </t>
+    </template>
+
+    <!-- Step 5: confirmation with token, auto-return to start -->
+    <template id="kiosk_done" name="Spa Kiosk Done">
+        <t t-call="spa_kiosk.kiosk_layout">
+            <h1>Thank you!</h1>
+            <p class="center">Your booking number is</p>
+            <div class="token" t-out="token"/>
+            <p class="center">Please take a seat.<br/>
+               The receptionist will call you shortly.</p>
+            <p class="center"><a href="/spa/kiosk">Start a new booking</a></p>
+            <script>
+                setTimeout(function () { window.location = '/spa/kiosk'; }, 15000);
+            </script>
+        </t>
+    </template>
+</odoo>

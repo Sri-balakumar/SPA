@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_spa_booking_session_user,spa.booking.session.user,model_spa_booking_session,base.group_user,1,1,1,1
+access_spa_product_detail_user,spa.product.detail.user,model_spa_product_detail,base.group_user,1,1,1,1
+access_spa_product_detail_pos,spa.product.detail.pos,model_spa_product_detail,point_of_sale.group_pos_user,1,0,0,0
+access_spa_product_detail_image_user,spa.product.detail.image.user,model_spa_product_detail_image,base.group_user,1,1,1,1
+access_spa_product_detail_image_pos,spa.product.detail.image.pos,model_spa_product_detail_image,point_of_sale.group_pos_user,1,0,0,0
+access_spa_session_pass_user,spa.session.pass.user,model_spa_session_pass,base.group_user,1,1,1,1
+access_spa_session_pass_pos,spa.session.pass.pos,model_spa_session_pass,point_of_sale.group_pos_user,1,1,1,0
+access_spa_session_pass_use_user,spa.session.pass.use.user,model_spa_session_pass_use,base.group_user,1,1,1,1
+access_spa_session_pass_use_pos,spa.session.pass.use.pos,model_spa_session_pass_use,point_of_sale.group_pos_user,1,1,1,0
+access_spa_service_signature_user,spa.service.signature.user,model_spa_service_signature,base.group_user,1,1,1,1
+access_spa_service_signature_pos,spa.service.signature.pos,model_spa_service_signature,point_of_sale.group_pos_user,1,1,1,0

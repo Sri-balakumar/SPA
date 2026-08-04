@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============ SERVICE ============ -->
+    <record id="view_spa_service_list" model="ir.ui.view">
+        <field name="name">spa.service.list</field>
+        <field name="model">spa.service</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="price"/>
+                <field name="duration"/>
+                <field name="kiosk_visible"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_spa_service_form" model="ir.ui.view">
+        <field name="name">spa.service.form</field>
+        <field name="model">spa.service</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <field name="image" widget="image" class="oe_avatar"/>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="e.g. Swedish Massage"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="price"/>
+                            <field name="duration"/>
+                        </group>
+                        <group>
+                            <field name="kiosk_visible"/>
+                            <field name="active"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Questions" name="questions">
+                            <field name="question_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="heading_id"/>
+                                    <field name="question_type"/>
+                                    <field name="required"/>
+                                </list>
+                                <form>
+                                    <group>
+                                        <field name="name"/>
+                                        <field name="heading_id"/>
+                                        <field name="question_type"/>
+                                        <field name="required"/>
+                                    </group>
+                                    <field name="option_ids"
+                                           invisible="question_type not in ('single_choice', 'multi_choice')">
+                                        <list editable="bottom">
+                                            <field name="sequence" widget="handle"/>
+                                            <field name="name"/>
+                                        </list>
+                                    </field>
+                                </form>
+                            </field>
+                        </page>
+                        <page string="Description" name="description">
+                            <field name="description"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_service" model="ir.actions.act_window">
+        <field name="name">Services</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="domain">[('type', '=', 'service')]</field>
+        <field name="context">{'default_type': 'service', 'default_spa_kiosk_visible': True}</field>
+    </record>
+
+    <!-- ============ QUESTION BANK (central place for all questions) ============ -->
+    <record id="view_spa_question_list" model="ir.ui.view">
+        <field name="name">spa.question.list</field>
+        <field name="model">spa.question</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="heading_id"/>
+                <field name="question_type"/>
+                <field name="required"/>
+                <field name="product_ids" widget="many2many_tags"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_spa_question_form" model="ir.ui.view">
+        <field name="name">spa.question.form</field>
+        <field name="model">spa.question</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="heading_id" options="{'no_open': True}"/>
+                        <field name="question_type"/>
+                        <field name="required"/>
+                        <field name="product_ids" widget="many2many_tags"/>
+                        <field name="active"/>
+                    </group>
+                    <field name="option_ids"
+                           invisible="question_type not in ('single_choice', 'multi_choice')">
+                        <list editable="bottom">
+                            <field name="sequence" widget="handle"/>
+                            <field name="name"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_question" model="ir.actions.act_window">
+        <field name="name">Questions</field>
+        <field name="res_model">spa.question</field>
+        <field name="view_mode">list,form</field>
+    </record>
+</odoo>

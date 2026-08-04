@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_spa_booking_session_list" model="ir.ui.view">
+        <field name="name">spa.booking.session.list</field>
+        <field name="model">spa.booking.session</field>
+        <field name="arch" type="xml">
+            <list string="Online Booking Sessions">
+                <field name="whatsapp_number"/>
+                <field name="booking_url" widget="CopyClipboardChar"/>
+                <field name="state"/>
+                <field name="expires_at"/>
+                <field name="booking_id"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_spa_booking_session_form" model="ir.ui.view">
+        <field name="name">spa.booking.session.form</field>
+        <field name="model">spa.booking.session</field>
+        <field name="arch" type="xml">
+            <form string="Online Booking Session">
+                <header>
+                    <button name="action_share_whatsapp" type="object"
+                            string="Send on WhatsApp" class="btn-primary"
+                            icon="fa-whatsapp"
+                            invisible="not whatsapp_number"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="partner_id"/>
+                        <field name="customer_name"/>
+                        <field name="whatsapp_number" placeholder="e.g. +911234567890"/>
+                        <field name="state"/>
+                        <field name="expires_at"/>
+                        <field name="booking_id" readonly="1"/>
+                    </group>
+                    <group string="Shareable Link">
+                        <field name="booking_url" widget="CopyClipboardChar"
+                               readonly="1" nolabel="1" colspan="2"
+                               placeholder="Save the record to generate the link"/>
+                        <field name="whatsapp_share_url" invisible="1"/>
+                        <field name="token" invisible="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_booking_session" model="ir.actions.act_window">
+        <field name="name">Booking Sessions</field>
+        <field name="res_model">spa.booking.session</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create a session to generate a WhatsApp booking link for a customer.
+            </p>
+        </field>
+    </record>
+
+    <!-- No "Online Booking" root menu: everything is reached from the POS.
+         The booking link and its settings sit under Point of Sale >
+         Configuration so they remain reachable without a second sidebar app. -->
+
+    <menuitem id="menu_spa_booking_session"
+              name="Booking Sessions"
+              parent="point_of_sale.menu_point_config_product"
+              action="action_spa_booking_session"
+              sequence="10"/>
+
+</odoo>

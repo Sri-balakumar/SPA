@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- "Details" tab on the product form: a table of detail blocks you can
+         "Add a line" to — each with heading, subheading, description and a
+         photo (so a service can have several sections/photos). -->
+    <record id="product_template_form_spa_details" model="ir.ui.view">
+        <field name="name">product.template.form.spa.details</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Details" name="spa_service_details">
+                    <group>
+                        <group>
+                            <field name="spa_session_count"/>
+                        </group>
+                    </group>
+                    <separator string="Session description (this package)"/>
+                    <field name="spa_session_desc"
+                           placeholder="Short description of this session package…"/>
+                    <separator string="Photos / sections"/>
+                    <field name="spa_detail_ids">
+                        <list>
+                            <field name="sequence" widget="handle"/>
+                            <field name="image" widget="image"
+                                   options="{'size': [45, 45]}"/>
+                            <field name="heading"/>
+                            <field name="subheading"/>
+                        </list>
+                        <form>
+                            <sheet>
+                                <field name="image" widget="image" class="oe_avatar"/>
+                                <group>
+                                    <field name="heading"
+                                           placeholder="e.g. Assisted Stretching"/>
+                                    <field name="subheading"
+                                           placeholder="e.g. One-on-one guided session"/>
+                                </group>
+                                <separator string="Description"/>
+                                <field name="description"
+                                       placeholder="Full description, exactly as on the website…"/>
+                                <separator string="More Photos"/>
+                                <field name="image_ids">
+                                    <list editable="bottom">
+                                        <field name="sequence" widget="handle"/>
+                                        <field name="image" widget="image"
+                                               options="{'size': [70, 70]}"/>
+                                        <field name="name" placeholder="Caption (optional)"/>
+                                    </list>
+                                </field>
+                            </sheet>
+                        </form>
+                    </field>
+                    <p class="text-muted">
+                        Add a line for each section — the heading, text and photo shown
+                        to the customer when they pick this service. Click a row to edit
+                        its description and photo.
+                    </p>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

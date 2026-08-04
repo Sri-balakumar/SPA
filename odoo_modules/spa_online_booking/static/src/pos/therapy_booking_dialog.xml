@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.TherapyBookingDialog">
+        <Dialog size="'xl'" title="dialogTitle" bodyClass="'spa-pos-flow'">
+
+            <t t-if="state.loading">
+                <p class="text-muted p-3">Loading therapies…</p>
+            </t>
+
+            <t t-elif="state.error and !state.therapies.length">
+                <p class="text-danger p-3"><t t-esc="state.error"/></p>
+            </t>
+
+            <t t-else="">
+                <!-- ============ SELECT THERAPY + ITS PACKAGES ============ -->
+                <t t-if="state.screen === 'select'">
+                    <h3 class="tbk-h">Select Therapy</h3>
+                    <p class="text-muted mb-3">Choose a therapy to view its packages.</p>
+
+                    <div class="tbk-therapies">
+                        <t t-foreach="state.therapies" t-as="th" t-key="th.id">
+                            <button class="tbk-tcard" t-att-class="{ 'is-selected': state.therapyId === th.id }"
+                                    t-attf-style="--c: {{ therapyStyle(th).color }};"
+                                    t-on-click="() => this.openTherapy(th.id)">
+                                <span t-if="state.therapyId === th.id" class="tbk-tcard__check"><i class="fa fa-check"/></span>
+                                <span class="tbk-tcard__media"
+                                      t-attf-style="{{ th.image_url ? 'background-image:url(' + th.image_url + ')' : '' }}"/>
+                                <span class="tbk-tcard__icon"><i t-attf-class="fa {{ therapyStyle(th).icon }}"/></span>
+                                <span class="tbk-tcard__name" t-esc="th.name"/>
+                                <span class="tbk-tcard__tag" t-if="th.tagline" t-esc="th.tagline"/>
+                            </button>
+                        </t>
+                    </div>
+
+                    <!-- packages of the selected therapy -->
+                    <t t-if="therapy">
+                        <hr class="tbk-sep"/>
+                        <div class="tbk-pkg-head">
+                            <button class="tbk-back" t-on-click="() => state.therapyId = null" aria-label="Back">
+                                <i class="fa fa-chevron-left"/>
+                            </button>
+                            <h4 class="tbk-pkg-title"><t t-esc="therapy.name"/> Packages</h4>
+                            <div class="tbk-viewtoggle">
+                                <button t-att-class="state.pkgView === 'grid' ? 'is-on' : ''"
+                                        t-on-click="() => state.pkgView = 'grid'"><i class="fa fa-th"/></button>
+                                <button t-att-class="state.pkgView === 'list' ? 'is-on' : ''"
+                                        t-on-click="() => state.pkgView = 'list'"><i class="fa fa-bars"/></button>
+                            </div>
+                        </div>
+
+                        <div t-attf-class="tbk-pkgs {{ state.pkgView === 'list' ? 'tbk-pkgs--list' : 'tbk-pkgs--grid' }}">
+                            <t t-foreach="therapy.packages" t-as="p" t-key="p.id">
+                                <div class="tbk-pcard">
+                                    <span class="tbk-pcard__img"
+                                          t-attf-style="{{ p.image_url ? 'background-image:url(' + p.image_url + ')' : '' }}">
+                                        <i t-if="!p.image_url" class="fa fa-picture-o tbk-pcard__ph"/>
+                                    </span>
+                                    <div class="tbk-pcard__body">
+                                        <div class="tbk-pcard__name" t-esc="p.name"/>
+                                        <div class="tbk-pcard__meta" t-if="p.duration_minutes">
+                                            <i class="fa fa-clock-o me-1"/><t t-esc="p.duration_minutes"/> min
+                                        </div>
+                                        <div t-if="p.session_desc and state.pkgView === 'list'" class="tbk-pcard__desc" t-esc="p.session_desc"/>
+                                        <div class="tbk-pcard__price">
+                                            <t t-esc="fmt(p.price)"/>
+                                            <span t-if="p.save" class="tbk-pcard__save">Save <t t-esc="fmt(p.save)"/></span>
+                                        </div>
+                                        <button class="tbk-select" t-on-click="() => this.selectPackage(p.id)">Select</button>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- ============ QUESTIONS ============ -->
+                <t t-if="state.screen === 'questions'">
+                    <p class="text-muted mb-3">A few questions to help us personalize the session.</p>
+                    <t t-if="!state.questions.length">
+                        <p class="text-muted">No questions for this therapy.</p>
+                    </t>
+                    <div class="tp-qlist">
+                        <t t-foreach="questionRows" t-as="row" t-key="row.q.id">
+                            <t t-set="q" t-value="row.q"/>
+                            <h3 t-if="row.heading" class="tp-qheading" t-esc="row.heading"
+                                t-att-style="row.style"/>
+                            <div class="tp-question">
+                                <p class="tp-question__label">
+                                    <t t-esc="row.num"/>. <t t-esc="q.text"/><span t-if="q.required" class="text-danger"> *</span>
+                                </p>
+                                <t t-if="q.type === 'yes_no'">
+                                    <div class="tp-choices tp-choices--inline">
+                                        <label class="tp-opt"><input type="radio" t-att-name="'q_' + q.id" value="Yes"
+                                               t-att-checked="answerVal(q) === 'Yes'" t-on-change="() => this.setAnswer(q, 'Yes')"/><span>Yes</span></label>
+                                        <label class="tp-opt"><input type="radio" t-att-name="'q_' + q.id" value="No"
+                                               t-att-checked="answerVal(q) === 'No'" t-on-change="() => this.setAnswer(q, 'No')"/><span>No</span></label>
+                                    </div>
+                                </t>
+                                <t t-elif="q.type === 'single_choice'">
+                                    <select class="form-select tp-select" t-on-change="(ev) => this.setAnswer(q, ev.target.value)">
+                                        <option value="" t-att-selected="!answerVal(q)" disabled="disabled">Choose…</option>
+                                        <t t-foreach="q.options" t-as="o" t-key="o_index">
+                                            <option t-att-value="o" t-att-selected="answerVal(q) === o" t-esc="o"/>
+                                        </t>
+                                    </select>
+                                </t>
+                                <t t-elif="q.type === 'multi_choice'">
+                                    <div class="tp-choices">
+                                        <t t-foreach="q.options" t-as="o" t-key="o_index">
+                                            <label class="tp-opt tp-opt--check">
+                                                <input type="checkbox" t-att-checked="isChecked(q, o)"
+                                                       t-on-change="(ev) => this.toggleMulti(q, o, ev.target.checked)"/>
+                                                <span t-esc="o"/>
+                                            </label>
+                                        </t>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <textarea class="form-control tp-text" rows="2" placeholder="Type the answer here…"
+                                              t-att-value="answerVal(q)" t-on-input="(ev) => this.setAnswer(q, ev.target.value)"/>
+                                </t>
+                            </div>
+                        </t>
+                    </div>
+                </t>
+
+                <!-- ============ CUSTOMER DETAILS ============ -->
+                <t t-if="state.screen === 'details'">
+                    <p class="text-muted mb-3">Enter the customer's details.</p>
+                    <div class="tp-form">
+                        <label class="tp-field">
+                            <span>Full name *</span>
+                            <input type="text" class="form-control form-control-lg" t-model="state.custName"/>
+                        </label>
+                        <label class="tp-field">
+                            <span>WhatsApp number</span>
+                            <input type="tel" class="form-control form-control-lg"
+                                   placeholder="+968 9XXXXXXX" t-model="state.custWhatsapp"/>
+                        </label>
+                        <label class="tp-field">
+                            <span>Mobile number</span>
+                            <input type="tel" class="form-control form-control-lg"
+                                   placeholder="+968 9XXXXXXX" t-model="state.custMobile"/>
+                        </label>
+                    </div>
+                </t>
+
+                <p t-if="state.error and state.therapies.length" class="text-danger mt-2 mb-0">
+                    <t t-esc="state.error"/>
+                </p>
+            </t>
+
+            <!-- ============ FOOTER ============ -->
+            <t t-set-slot="footer">
+                <div class="d-flex gap-2 w-100">
+                    <button t-if="state.screen !== 'select'" class="btn btn-secondary btn-lg"
+                            t-on-click="() => this.back()">Back</button>
+
+                    <button t-if="state.screen === 'questions'" class="btn btn-primary btn-lg ms-auto"
+                            t-on-click="() => this.toDetails()">Continue</button>
+
+                    <button t-if="state.screen === 'details'" class="btn btn-primary btn-lg ms-auto"
+                            t-att-disabled="state.busy" t-on-click="() => this.confirm()">
+                        <t t-esc="state.busy ? 'Adding…' : 'Add to Order'"/>
+                    </button>
+
+                    <button t-if="state.screen === 'select'" class="btn btn-secondary btn-lg ms-auto"
+                            t-on-click="() => this.props.close()">Cancel</button>
+                </div>
+            </t>
+
+        </Dialog>
+    </t>
+
+</templates>

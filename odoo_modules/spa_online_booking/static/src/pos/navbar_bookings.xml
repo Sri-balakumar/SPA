@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Add a "Send Link" button after the "Questions" button that
+         pos_spa_header adds to the POS top bar. -->
+    <t t-inherit="point_of_sale.Navbar" t-inherit-mode="extension">
+        <xpath expr="//button[hasclass('questions-button')]" position="after">
+            <button class="send-link-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickSendLink()">
+                <i class="fa fa-fw fa-link"/>
+                <span t-if="!ui.isSmall" class="ms-1">Send Link</span>
+            </button>
+        </xpath>
+    </t>
+
+</templates>

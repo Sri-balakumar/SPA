@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Show the company logo centered on the empty order screen (branding),
+         and a "Pay Later" button that parks the order so the customer can pay
+         after the session (it then shows under Orders as Ongoing). -->
+    <t t-inherit="point_of_sale.ProductScreen" t-inherit-mode="extension">
+        <xpath expr="//OrderSummary" position="after">
+            <TherapyScreen t-if="pos.showTherapyBooking"/>
+            <div t-elif="currentOrder?.isEmpty()" class="sg-pos-brand">
+                <img t-att-src="pos.brandLogoUrl" alt="Logo"/>
+            </div>
+        </xpath>
+        <xpath expr="//ActionpadWidget" position="after">
+            <button t-if="!currentOrder?.isEmpty()" class="btn sg-paylater"
+                    t-on-click="() => this.pos.clickSaveOrder()">
+                <i class="fa fa-clock-o me-2"/>Pay Later
+            </button>
+        </xpath>
+    </t>
+
+</templates>

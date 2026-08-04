@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SendLinkDialog">
+        <Dialog size="'lg'" header="false" contentClass="'nq-content'" bodyClass="'nq-body'">
+            <div class="nq">
+
+                <!-- top: logo + close -->
+                <div class="nq-top">
+                    <img t-if="logoUrl" class="nq-logo" t-att-src="logoUrl" alt="Logo"/>
+                    <span t-else="" class="nq-logo-text">stretch &amp; go</span>
+                    <button class="nq-x" t-on-click="() => this.props.close()" aria-label="Close">
+                        <i class="fa fa-times"/>
+                    </button>
+                </div>
+
+                <!-- title -->
+                <div class="nq-titlerow">
+                    <span class="nq-ico nq-ico--title"><i class="fa fa-whatsapp"/></span>
+                    <div>
+                        <div class="nq-title">Send Booking Link</div>
+                        <div class="nq-sub">Sent on your own WhatsApp session to the customer's number.</div>
+                    </div>
+                </div>
+                <div class="nq-divider"><span class="nq-divider__mark"><i class="fa fa-child"/></span></div>
+
+                <!-- Which of our numbers sends it. Always visible so staff can
+                     see who the message comes from; a picker when there are
+                     several, plain text when there is only one. -->
+                <div class="nq-field nq-field--stacked" t-if="state.sessions.length">
+                    <label class="nq-label-top">WhatsApp Session</label>
+                    <select t-if="state.sessions.length > 1" class="form-select sl-session"
+                            t-on-change="(ev) => this.onSessionChange(ev)">
+                        <option t-foreach="state.sessions" t-as="s" t-key="s.id"
+                                t-att-value="s.id" t-att-selected="s.id === state.sessionId">
+                            <t t-esc="sessionLabel(s)"/>
+                        </option>
+                    </select>
+                    <div t-else="" class="sl-session-one">
+                        <i class="fa fa-whatsapp me-1"/><t t-esc="sessionLabel(state.sessions[0])"/>
+                    </div>
+                    <div t-if="state.waking" class="nq-help text-muted">
+                        <i class="fa fa-refresh fa-spin me-1"/>Reconnecting WhatsApp...
+                    </div>
+                    <div t-elif="selectedSession and !selectedSession.connected" class="nq-help text-danger">
+                        This session is not connected.
+                        <button t-if="state.canWake" class="btn btn-link btn-sm p-0 ms-1"
+                                t-on-click="() => this.reconnect()">Reconnect now</button>
+                        <t t-else="">Scan its QR under WhatsApp &gt; Sessions, or pick another one.</t>
+                    </div>
+                </div>
+
+                <div class="nq-field nq-field--stacked">
+                    <label class="nq-label-top">Mobile Number <span class="nq-req">*</span></label>
+                    <div class="sl-phone">
+                        <div class="sl-cc" t-on-click="() => state.ccOpen = !state.ccOpen">
+                            <span class="sl-flag" t-esc="selectedCountry.flag"/>
+                            <span t-esc="selectedCountry.code"/>
+                            <i class="fa fa-chevron-down sl-cc-chev"/>
+                        </div>
+                        <input type="tel" class="sl-number" placeholder="98765 43210"
+                               t-model="state.number"
+                               t-on-keyup="(ev) => ev.key === 'Enter' &amp;&amp; this.canSend ? this.send() : null"/>
+                        <div t-if="state.ccOpen" class="sl-cc-menu">
+                            <div t-foreach="countries" t-as="c" t-key="c.code"
+                                 class="sl-cc-opt" t-on-click="() => this.selectCountry(c.code)">
+                                <span class="sl-flag" t-esc="c.flag"/>
+                                <span t-esc="c.name"/>
+                                <span class="sl-cc-code" t-esc="c.code"/>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="nq-help">Include the country code, e.g. <t t-esc="selectedCountry.code"/>.</div>
+                </div>
+
+                <!-- The one permanent link. It is the same URL for every
+                     customer and never expires, so it is shown up front rather
+                     than in a second popup after sending. -->
+                <div class="nq-field nq-field--stacked">
+                    <label class="nq-label-top">Booking Link</label>
+                    <input type="text" class="nq-input sl-link-box" readonly="readonly"
+                           t-att-value="state.bookingUrl"
+                           placeholder="Loading the booking link…"
+                           t-on-focus="(ev) => ev.target.select()"/>
+                    <div class="nq-help">
+                        One permanent link - the same for every customer, it never expires.
+                    </div>
+                </div>
+
+                <!-- Result, inline: no second screen to dismiss. -->
+                <p t-if="state.sent" class="nq-help text-success mt-2 sl-result">
+                    <i class="fa fa-check-circle me-1"/>Sent on WhatsApp to <t t-esc="state.sentTo"/>
+                </p>
+                <p t-if="state.sendError" class="nq-help text-danger mt-2 sl-result" t-esc="state.sendError"/>
+                <p t-if="state.error" class="nq-error sl-result"><t t-esc="state.error"/></p>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="btn sl-generate" t-att-disabled="!canSend"
+                        t-on-click="() => this.send()">
+                    <i class="fa fa-whatsapp me-1"/><t t-esc="state.busy ? 'Sending…' : 'Send Message'"/>
+                </button>
+                <button class="btn nq-discard" t-att-disabled="!state.bookingUrl"
+                        t-on-click="() => this.copyLink()">
+                    <i class="fa fa-copy me-1"/><t t-esc="state.copied ? 'Copied' : 'Copy Link'"/>
+                </button>
+                <button class="btn nq-discard" t-on-click="() => this.props.close()">
+                    <i class="fa fa-times me-1"/>Cancel
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

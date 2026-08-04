@@ -20,6 +20,7 @@ import BrandHeader from '../../components/BrandHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
 import CodePicker from '../../components/CodePicker';
+import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 
@@ -75,7 +76,16 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   const [mode, setMode] = useState('lookup');       // 'lookup' | 'profiles' | 'form'
   const [prevMode, setPrevMode] = useState('lookup'); // where the form was opened from
   const [lookupCc, setLookupCc] = useState(form.countryCode || '+968');
+  const [lookupIso, setLookupIso] = useState(form.countryIso || 'OM');
   const [lookupNum, setLookupNum] = useState(form.phone || '');
+
+  // Digit count + validity per selected country, for the lookup field and for
+  // the two fields on the form (phone and WhatsApp share one country).
+  const lookupRule = phoneRule(lookupIso);
+  const badLookup = !!lookupNum && !lookupRule.isValid(lookupNum);
+  const formRule = phoneRule(form.countryIso || 'OM');
+  const badPhone = !!form.phone && !formRule.isValid(form.phone);
+  const badWa = !!form.whatsapp && !formRule.isValid(form.whatsapp);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -146,7 +156,11 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     setDobDate(selected);
     set({ dob: fmt(selected), dobISO: iso(selected), age: ageFrom(selected) });
   }
-  function onPhone(v) { set(form.whatsappSame ? { phone: v, whatsapp: v } : { phone: v }); }
+  // Sanitise once at the source, so the mirrored WhatsApp copy is clean too.
+  function onPhone(v) {
+    const n = digitsOnly(v);
+    set(form.whatsappSame ? { phone: n, whatsapp: n } : { phone: n });
+  }
   function toggleSame() {
     const nextSame = !form.whatsappSame;
     set({ whatsappSame: nextSame, whatsapp: nextSame ? form.phone : '' });
@@ -157,6 +171,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     if (!form.existingCustomerId && !form.dob) return Alert.alert(t('missing'), t('selectDob'));
     if (!form.gender) return Alert.alert(t('missing'), t('selectGender'));
     if (!form.phone.trim()) return Alert.alert(t('missing'), t('enterPhone'));
+    if (badPhone || badWa) return Alert.alert(t('missing'), t('phoneInvalid'));
     if (!form.whatsapp.trim()) return Alert.alert(t('missing'), t('enterWhatsapp'));
     if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim()))
       return Alert.alert(t('invalidEmail'), t('invalidEmailMsg'));
@@ -177,12 +192,14 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
           <ScrollView contentContainerStyle={s.centerScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={{ width: contentW }}>
               <Text style={[s.bLabel, rtl && s.rtl]}>{t('mobileNumber')}</Text>
-              <View style={s.bField}>
-                <CodePicker value={lookupCc} onChange={setLookupCc} />
-                <TextInput style={s.bInput} placeholder={t('enterMobilePh')} placeholderTextColor="#B4A9C4"
-                  keyboardType="phone-pad" value={lookupNum} onChangeText={(v) => { setLookupNum(v); setNotFound(false); }}
+              <View style={[s.bField, badLookup && s.fieldError]}>
+                <CodePicker value={lookupCc} onChange={(d, iso) => { setLookupCc(d); setLookupIso(iso); }} />
+                <TextInput style={s.bInput} placeholder={t('enterNDigits', { n: lookupRule.len })} placeholderTextColor="#B4A9C4"
+                  keyboardType="phone-pad" maxLength={lookupRule.len}
+                  value={lookupNum} onChangeText={(v) => { setLookupNum(digitsOnly(v)); setNotFound(false); }}
                   onSubmitEditing={find} returnKeyType="search" />
               </View>
+              {badLookup && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
               <TouchableOpacity style={[s.cta, loading && { opacity: 0.7 }]} activeOpacity={0.9} onPress={find} disabled={loading}>
                 {loading ? <ActivityIndicator color="#fff" /> : (
@@ -291,11 +308,12 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
 
           {/* Phone */}
           <Text style={s.label}>{t('phone')} <Text style={s.req}>*</Text></Text>
-          <View style={s.field}>
-            <CodePicker value={form.countryCode} onChange={(c) => set({ countryCode: c })} />
-            <TextInput style={s.input} placeholder={t('phonePh')} placeholderTextColor="#B4A9C4"
-              keyboardType="phone-pad" value={form.phone} onChangeText={onPhone} />
+          <View style={[s.field, badPhone && s.fieldError]}>
+            <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
+            <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
+              keyboardType="phone-pad" maxLength={formRule.len} value={form.phone} onChangeText={onPhone} />
           </View>
+          {badPhone && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
           {/* WhatsApp same-as-phone */}
           <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={toggleSame}>
@@ -307,12 +325,13 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
 
           {/* WhatsApp */}
           <Text style={s.label}>{t('whatsapp')} <Text style={s.req}>*</Text></Text>
-          <View style={[s.field, form.whatsappSame && s.readonly]}>
-            <CodePicker value={form.countryCode} onChange={(c) => set({ countryCode: c })} />
-            <TextInput style={s.input} placeholder={t('whatsappPh')} placeholderTextColor="#B4A9C4"
-              keyboardType="phone-pad" editable={!form.whatsappSame}
-              value={form.whatsapp} onChangeText={(v) => set({ whatsapp: v })} />
+          <View style={[s.field, form.whatsappSame && s.readonly, badWa && s.fieldError]}>
+            <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
+            <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
+              keyboardType="phone-pad" maxLength={formRule.len} editable={!form.whatsappSame}
+              value={form.whatsapp} onChangeText={(v) => set({ whatsapp: digitsOnly(v) })} />
           </View>
+          {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
           {/* Email */}
           <Text style={s.label}>{t('email')}</Text>
@@ -339,6 +358,8 @@ const s = StyleSheet.create({
     borderWidth: 1.4, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14, marginBottom: 14,
   },
   readonly: { backgroundColor: '#F0EAF7' },
+  fieldError: { borderColor: COLORS.red },
+  errTxt: { fontSize: 12.5, color: COLORS.red, marginTop: 6, marginLeft: 2 },
   input: { flex: 1, paddingVertical: 13, fontSize: 15, color: COLORS.ink },
   inputText: { flex: 1, paddingVertical: 14, fontSize: 15, color: COLORS.ink },
   calIcon: { fontSize: 16, paddingLeft: 6 },

@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-inherit="point_of_sale.TicketScreen" t-inherit-mode="extension">
+
+        <!-- All / Online / Web / Tab tabs, next to the search bar -->
+        <xpath expr="//SearchBar" position="after">
+            <div class="spa-order-tabs btn-group flex-wrap" role="group">
+                <button class="btn btn-lg"
+                        t-att-class="!state.spaType ? 'btn-primary' : 'btn-light'"
+                        t-on-click="() => this.setSpaType(null)">All</button>
+                <button t-if="pos.config.spa_show_online !== false" class="btn btn-lg"
+                        t-att-class="state.spaType === 'online' ? 'btn-primary' : 'btn-light'"
+                        t-on-click="() => this.setSpaType('online')">Online</button>
+                <button t-if="pos.config.spa_show_web !== false" class="btn btn-lg"
+                        t-att-class="state.spaType === 'web' ? 'btn-primary' : 'btn-light'"
+                        t-on-click="() => this.setSpaType('web')">Web</button>
+                <button t-if="pos.config.spa_show_tab !== false" class="btn btn-lg"
+                        t-att-class="state.spaType === 'tab' ? 'btn-primary' : 'btn-light'"
+                        t-on-click="() => this.setSpaType('tab')">Tab</button>
+                <button class="btn btn-lg"
+                        t-att-class="state.spaType === 'sessions' ? 'btn-primary' : 'btn-light'"
+                        t-on-click="() => this.setSpaType('sessions')">
+                    <i class="fa fa-ticket me-1"/>Sessions
+                </button>
+            </div>
+            <div class="spa-date-filter d-flex align-items-center gap-1">
+                <input type="date" class="form-control form-control-lg"
+                       style="max-width: 12rem;"
+                       t-att-value="state.spaDate || ''"
+                       t-on-change="(ev) => this.setSpaDate(ev.target.value)"/>
+                <button t-if="state.spaDate" class="btn btn-light btn-lg"
+                        title="Clear date" t-on-click="() => this.setSpaDate('')">
+                    <i class="fa fa-times"/>
+                </button>
+            </div>
+        </xpath>
+
+        <!-- Hide the POS's built-in order table entirely — the spa tabs render
+             one unified card list (orders + bookings) instead. -->
+        <xpath expr="//div[hasclass('orders')]" position="attributes">
+            <attribute name="t-if">false</attribute>
+        </xpath>
+
+        <!-- Show the channel (Online / Web / Tab) on each order row (desktop). -->
+        <xpath expr="//td[hasclass('order-name')]" position="inside">
+            <div t-if="order.spa_channel" class="mt-1">
+                <span t-attf-class="badge rounded {{ spaChannelClass(order) }}"
+                      t-esc="spaChannelLabel(order)"/>
+            </div>
+        </xpath>
+
+        <!-- Same, for the mobile order list. -->
+        <xpath expr="//div[hasclass('order-name')]" position="inside">
+            <div t-if="order.spa_channel" class="mt-1">
+                <span t-attf-class="badge rounded {{ spaChannelClass(order) }}"
+                      t-esc="spaChannelLabel(order)"/>
+            </div>
+        </xpath>
+
+        <!-- Booking tab: list of bookings for the selected channel -->
+        <xpath expr="//div[hasclass('orders')]" position="before">
+            <div class="spa-booking-list overflow-y-auto flex-grow-1 rounded-bottom-3 bg-view p-2">
+
+                <!-- ALL tab: one unified card list — the day's orders (any
+                     channel) plus the day's paid bookings, same style. -->
+                <t t-if="!state.spaType">
+                    <t t-set="allOrders" t-value="getFilteredOrderList()"/>
+                    <t t-set="allPaid" t-value="spaAllPaidBookings()"/>
+                    <t t-if="!allOrders.length and !allPaid.length">
+                        <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
+                            Nothing for this day.
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div t-foreach="allOrders" t-as="o" t-key="o.uuid">
+                            <t t-call="spa_online_booking.SpaOrderRow"/>
+                        </div>
+                        <div t-foreach="allPaid" t-as="b" t-key="'apb' + b.id" class="sg-card">
+                            <div class="sg-av" t-att-class="spaBookingAvatarClass(b)"><i class="fa fa-user"/></div>
+                            <div class="sg-card__main">
+                                <div class="sg-card__title">
+                                    <span class="sg-card__ref"><t t-esc="b.name"/> — <t t-esc="b.partner_name"/></span>
+                                    <span class="sg-pill sg-pill--green">Paid</span>
+                                    <span t-if="b.channel_label" class="sg-pill sg-pill--gray"><t t-esc="b.channel_label"/></span>
+                                </div>
+                                <div class="sg-card__svc"><t t-esc="b.service_names.join(', ')"/></div>
+                            </div>
+                            <div class="sg-card__meta">
+                                <div class="sg-meta"><i class="fa fa-calendar-o"/><div><span class="sg-meta__k">Date</span><span class="sg-meta__v" t-esc="spaBookingDate(b)"/></div></div>
+                                <div t-if="spaSlot(b)" class="sg-meta"><i class="fa fa-clock-o"/><div><span class="sg-meta__k">Time</span><span class="sg-meta__v" t-esc="spaSlot(b)"/></div></div>
+                            </div>
+                            <i class="fa fa-chevron-right sg-card__chev"/>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- CHANNEL tabs (Online / Web / Tab): status sub-filter + grouped list -->
+                <!-- SESSIONS tab: prepaid session requests + today's redemptions -->
+                <t t-elif="state.spaType === 'sessions'">
+                    <div class="sg-subtabs">
+                        <button class="sg-subtab" t-att-class="state.spaSubFilter === 'pending' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('pending')">
+                            <i class="fa fa-hourglass-half"/> Pending (<t t-esc="state.spaSessions.pending.length"/>)
+                        </button>
+                        <button class="sg-subtab" t-att-class="state.spaSubFilter === 'taken' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('taken')">
+                            <i class="fa fa-check-circle-o"/> <t t-esc="state.spaDate ? 'Taken' : 'Taken Today'"/> (<t t-esc="state.spaSessions.taken.length"/>)
+                        </button>
+                    </div>
+
+                    <t t-if="state.spaSubFilter === 'taken'">
+                        <t t-if="!state.spaSessions.taken.length">
+                            <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
+                                <i class="fa fa-ticket fa-2x mb-2"/><div>No sessions taken today.</div>
+                            </div>
+                        </t>
+                        <div t-foreach="state.spaSessions.taken" t-as="u" t-key="u.id" class="sg-bcard">
+                            <div class="sg-bcard__top">
+                                <div class="sg-av sg-av--green"><i class="fa fa-check"/></div>
+                                <div class="sg-bcard__head">
+                                    <div class="sg-bcard__title">
+                                        <span class="sg-card__ref" t-esc="u.customer"/>
+                                        <span class="sg-pill sg-pill--prepaid">
+                                            <t t-esc="u.sessions_left"/> of <t t-esc="u.sessions_total"/> left
+                                        </span>
+                                    </div>
+                                    <div class="sg-bcard__meta">
+                                        <span><i class="fa fa-clock-o me-1"/><t t-esc="u.time"/></span>
+                                        <span class="sg-sep">|</span>
+                                        <span t-esc="u.package"/>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <t t-if="!state.spaSessions.pending.length">
+                            <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
+                                <i class="fa fa-hourglass-half fa-2x mb-2"/><div>No pending session requests.</div>
+                            </div>
+                        </t>
+                        <t t-foreach="state.spaSessions.pending" t-as="b" t-key="b.id">
+                            <t t-call="spa_online_booking.SpaBookingRow"/>
+                        </t>
+                    </t>
+                </t>
+
+                <t t-elif="state.spaType !== 'today'">
+                    <t t-set="groups" t-value="spaGroups()"/>
+                    <t t-set="chOrders" t-value="spaChannelOrders()"/>
+                    <t t-set="activeOrders" t-value="spaChannelActiveOrders()"/>
+                    <div class="sg-subtabs">
+                        <button t-if="state.spaType === 'online' or state.spaType === 'tab'" class="sg-subtab"
+                                t-att-class="state.spaSubFilter === 'pending' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('pending')">
+                            <i class="fa fa-hourglass-half"/> Pending Approval (<t t-esc="groups.pending.length"/>)
+                        </button>
+                        <button class="sg-subtab" t-att-class="state.spaSubFilter === 'today' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('today')">
+                            <i class="fa fa-calendar-o"/> <t t-esc="spaTodayLabel()"/> (<t t-esc="groups.today.length + activeOrders.length"/>)
+                        </button>
+                        <button t-if="state.spaType === 'online'" class="sg-subtab"
+                                t-att-class="state.spaSubFilter === 'upcoming' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('upcoming')">
+                            <i class="fa fa-clock-o"/> Upcoming (<t t-esc="groups.upcoming.length"/>)
+                        </button>
+                        <button class="sg-subtab" t-att-class="state.spaSubFilter === 'completed' ? 'is-active' : ''"
+                                t-on-click="() => this.setSpaSubFilter('completed')">
+                            <i class="fa fa-check-circle-o"/> Completed (<t t-esc="groups.completed.length + chOrders.length"/>)
+                        </button>
+                    </div>
+
+                    <t t-set="list" t-value="groups[state.spaSubFilter]"/>
+                    <t t-set="rowOrders"
+                       t-value="state.spaSubFilter === 'completed' ? chOrders : (state.spaSubFilter === 'today' ? activeOrders : [])"/>
+                    <t t-if="!list.length and !rowOrders.length">
+                        <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
+                            Nothing here.
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div t-foreach="list" t-as="b" t-key="b.id">
+                            <t t-call="spa_online_booking.SpaBookingRow"/>
+                        </div>
+                        <div t-foreach="rowOrders" t-as="o" t-key="o.uuid">
+                            <t t-call="spa_online_booking.SpaOrderRow"/>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- TODAY tab: unified list across channels for today -->
+                <t t-else="">
+                    <t t-set="bookings" t-value="spaFilteredBookings()"/>
+                    <t t-if="!bookings.length">
+                        <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
+                            Nothing for this day.
+                        </div>
+                    </t>
+                    <t t-else="">
+                        <div t-foreach="bookings" t-as="b" t-key="b.id">
+                            <t t-call="spa_online_booking.SpaBookingRow"/>
+                        </div>
+                    </t>
+                </t>
+
+            </div>
+            <div class="sg-orders-foot"><i class="fa fa-child"/> Move with Ease</div>
+        </xpath>
+
+    </t>
+
+    <!-- Reusable branded POS order card. -->
+    <t t-name="spa_online_booking.SpaOrderRow">
+        <div class="sg-card" t-on-click="() => this.spaOpenOrder(o)">
+            <div class="sg-av" t-att-class="spaAvatarClass(o)"><i class="fa fa-user"/></div>
+            <div class="sg-card__main">
+                <div class="sg-card__title">
+                    <span class="sg-card__ref"><t t-esc="o.pos_reference"/> — <t t-esc="spaOrderCustomer(o)"/></span>
+                    <span t-attf-class="sg-pill {{ spaOrderStatusPill(o) }}"><t t-esc="spaOrderStatusLabel(o)"/></span>
+                    <span class="sg-pill sg-pill--gray"><t t-esc="spaChannelLabel(o)"/></span>
+                </div>
+                <div t-if="spaOrderServices(o)" class="sg-card__svc"><t t-esc="spaOrderServices(o)"/></div>
+                <div class="sg-card__price"><t t-esc="spaOrderTotal(o)"/></div>
+            </div>
+            <button t-if="o.id > 0" class="sg-card__signbtn" title="Sign and print this order"
+                    t-on-click.stop="() => this.spaSignOrder(o)">
+                <i class="fa fa-pencil-square-o me-1"/>Sign
+            </button>
+            <div class="sg-card__meta">
+                <div class="sg-meta"><i class="fa fa-calendar-o"/><div><span class="sg-meta__k">Date</span><span class="sg-meta__v" t-esc="spaOrderDate(o)"/></div></div>
+                <div class="sg-meta"><i class="fa fa-clock-o"/><div><span class="sg-meta__k">Time</span><span class="sg-meta__v" t-esc="spaOrderTime(o)"/></div></div>
+            </div>
+            <button t-if="o.finalized and o.raw and o.raw.account_move" class="sg-card__invbtn"
+                    t-on-click.stop="() => this.spaDownloadInvoice(o)">
+                <i class="fa fa-file-text-o me-1"/>Invoice
+            </button>
+            <i class="fa fa-chevron-right sg-card__chev"/>
+        </div>
+    </t>
+
+    <!-- Reusable branded booking card (details + status-appropriate actions). -->
+    <t t-name="spa_online_booking.SpaBookingRow">
+        <div class="sg-bcard">
+            <div class="sg-bcard__top">
+                <div class="sg-av sg-av--purple"><i class="fa fa-user"/></div>
+                <div class="sg-bcard__head">
+                    <div class="sg-bcard__title">
+                        <span class="sg-card__ref"><t t-esc="b.name"/> — <t t-esc="b.partner_name"/></span>
+                        <span t-attf-class="sg-pill {{ spaBookingPill(b) }}"><t t-esc="b.state_label"/></span>
+                        <span t-if="b.prepaid" class="sg-pill sg-pill--prepaid"><i class="fa fa-ticket me-1"/>Prepaid</span>
+                        <span t-if="b.mobile" class="sg-bcard__phone">
+                            <i class="fa fa-phone me-1"/><t t-esc="b.mobile"/>
+                        </span>
+                    </div>
+                    <div class="sg-bcard__meta">
+                        <span><i class="fa fa-calendar-o me-1"/><t t-esc="spaBookingWhen(b)"/></span>
+                        <span class="sg-sep">|</span>
+                        <span t-esc="b.service_names.join(', ')"/>
+                    </div>
+                    <div t-if="b.time_note" class="sg-bcard__pref">
+                        <i class="fa fa-clock-o me-1"/>Preferred time: <t t-esc="b.time_note"/>
+                    </div>
+                </div>
+                <button t-if="b.state === 'pending' or b.state === 'approved' or b.state === 'in_service'"
+                        class="sg-btn-out sg-bcard__settime" t-on-click="() => this.setSpaSlot(b)">
+                    <i class="fa fa-clock-o me-1"/>Set Time
+                </button>
+            </div>
+
+            <div t-if="b.answer_rows and b.answer_rows.length" class="sg-bcard__answers">
+                <span class="sg-ans-ico"><i class="fa fa-question"/></span>
+                <div class="sg-ans-list">
+                    <div class="sg-ans-row" t-foreach="b.answer_rows" t-as="qa" t-key="qa_index">
+                        <div class="sg-ans-q"><t t-esc="qa.question"/></div>
+                        <div class="sg-ans-a"><t t-esc="qa.answer"/></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sg-bcard__actions">
+                <button t-if="b.state === 'pending'" class="sg-btn-approve"
+                        t-on-click="() => this.spaBookingAction(b.id, 'approve')">
+                    <i class="fa fa-check-circle me-1"/>Approve
+                </button>
+                <button t-if="b.state === 'pending' or b.state === 'approved'" class="sg-btn-reject"
+                        t-on-click="() => this.spaBookingAction(b.id, 'reject')">
+                    <i class="fa fa-times-circle me-1"/>Reject
+                </button>
+                <button t-if="b.state === 'in_service'" class="sg-btn-secondary"
+                        t-on-click="() => this.spaBookingAction(b.id, 'complete')">Mark Completed</button>
+                <button t-if="b.state === 'completed' and !b.prepaid" class="sg-btn-approve"
+                        t-on-click="() => this.spaBookingAction(b.id, 'paid')">Mark Paid</button>
+                <!-- prepaid session: finish it without a charge/Load step -->
+                <button t-if="b.prepaid and (b.state === 'approved' or b.state === 'in_service')"
+                        class="sg-btn-approve" t-on-click="() => this.spaBookingAction(b.id, 'session_done')">
+                    <i class="fa fa-check me-1"/>Session Done
+                </button>
+                <button t-if="spaCanLoad(b) and !b.prepaid" class="sg-btn-load"
+                        t-on-click="() => this.loadSpaBooking(b.id)">Load</button>
+            </div>
+        </div>
+    </t>
+
+</templates>

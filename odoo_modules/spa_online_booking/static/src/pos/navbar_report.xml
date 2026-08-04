@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- "Sales Report" hamburger-menu item removed per request.
+         The report route (/spa/sales_report) and dialog stay available if we
+         want to re-add an entry point later. -->
+
+</templates>

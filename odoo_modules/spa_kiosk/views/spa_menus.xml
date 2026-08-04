@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- No "Spa" root menu. The spa is operated entirely from inside the POS
+         (Book Therapy / Orders / Redeem), so a second top-level app in the
+         sidebar was noise. The back-office screens that are still occasionally
+         needed live under Point of Sale instead of disappearing. -->
+
+    <menuitem id="menu_spa_bookings" name="Spa Bookings"
+              parent="point_of_sale.menu_point_root"
+              action="action_spa_booking"
+              sequence="86"
+              groups="spa_kiosk.group_spa_receptionist"/>
+
+    <menuitem id="menu_spa_services" name="Spa Services"
+              parent="point_of_sale.menu_point_config_product"
+              action="action_spa_service"
+              sequence="80"
+              groups="spa_kiosk.group_spa_manager"/>
+
+    <menuitem id="menu_spa_questions" name="Spa Questions"
+              parent="point_of_sale.menu_point_config_product"
+              action="action_spa_question"
+              sequence="81"
+              groups="spa_kiosk.group_spa_manager"/>
+</odoo>

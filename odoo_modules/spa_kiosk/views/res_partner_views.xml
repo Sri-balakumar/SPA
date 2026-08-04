@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Back-office Contacts form: add the spa fields + Spa Visits tab -->
+    <record id="view_partner_form_spa_fields" model="ir.ui.view">
+        <field name="name">res.partner.form.spa.fields</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="priority" eval="20"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='vat']" position="after">
+                <field name="whatsapp"/>
+                <field name="date_of_birth"/>
+                <field name="age" readonly="1"/>
+                <field name="gender"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="Spa Visits" name="spa_visits"
+                      groups="point_of_sale.group_pos_user">
+                    <field name="pos_order_ids" readonly="1">
+                        <list>
+                            <field name="date_order" string="Date"/>
+                            <field name="pos_reference" string="Receipt"/>
+                            <field name="spa_service_summary" string="Service / Questions &amp; Answers"/>
+                            <field name="state"/>
+                            <field name="amount_total"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Minimal customer form used by the POS (only the fields the spa needs) -->
+    <record id="view_partner_form_spa_pos" model="ir.ui.view">
+        <field name="name">res.partner.form.spa.pos</field>
+        <field name="model">res.partner</field>
+        <field name="priority">100</field>
+        <field name="arch" type="xml">
+            <form string="Customer">
+                <sheet>
+                    <field name="is_company" invisible="1"/>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Customer Name" required="1"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="phone"/>
+                            <field name="whatsapp"/>
+                            <field name="email"/>
+                        </group>
+                        <group>
+                            <field name="date_of_birth"/>
+                            <field name="age" readonly="1"/>
+                            <field name="gender"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Spa Visits" name="spa_visits"
+                              groups="point_of_sale.group_pos_user">
+                            <field name="pos_order_ids" readonly="1">
+                                <list>
+                                    <field name="date_order" string="Date"/>
+                                    <field name="pos_reference" string="Receipt"/>
+                                    <field name="spa_service_summary" string="Service / Questions &amp; Answers"/>
+                                    <field name="state"/>
+                                    <field name="amount_total"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Make the POS "Edit Partner" action use the minimal form above -->
+    <record id="point_of_sale.res_partner_action_edit_pos" model="ir.actions.act_window">
+        <field name="view_id" ref="view_partner_form_spa_pos"/>
+    </record>
+</odoo>

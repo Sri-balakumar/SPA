@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="paperformat_pos_sales_report" model="report.paperformat">
+        <field name="name">POS Sales Report A4</field>
+        <field name="format">A4</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">10</field>
+        <field name="margin_bottom">10</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">5</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <record id="action_report_pos_sales" model="ir.actions.report">
+        <field name="name">POS Sales Report</field>
+        <field name="model">pos.config</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">spa_online_booking.pos_sales_report_document</field>
+        <field name="report_file">spa_online_booking.pos_sales_report_document</field>
+        <field name="paperformat_id" ref="paperformat_pos_sales_report"/>
+    </record>
+
+    <template id="pos_sales_report_document">
+        <t t-call="web.html_container">
+            <t t-set="cur" t-value="r.get('currency') or ''"/>
+            <div class="page" style="font-family: Arial, Helvetica, sans-serif; color:#333; font-size:12px;">
+
+                <!-- Header -->
+                <div style="text-align:center; margin-bottom:6px;">
+                    <div style="font-weight:bold; font-size:15px; letter-spacing:1px;">
+                        <t t-esc="r.get('company_name')"/>
+                    </div>
+                    <div style="font-size:22px; font-weight:bold; color:#6b3f6b; margin-top:8px;">
+                        <t t-esc="r.get('title')"/>
+                    </div>
+                    <div style="color:#555; margin-top:2px;">
+                        Period: <t t-esc="r.get('period_from')"/> to <t t-esc="r.get('period_to')"/>
+                    </div>
+                    <div style="color:#999; font-size:10px;">
+                        POS: <t t-esc="r.get('pos_name')"/> | Generated: <t t-esc="r.get('generated')"/>
+                    </div>
+                </div>
+
+                <!-- Summary tiles -->
+                <table style="width:100%; border-collapse:separate; border-spacing:6px; margin:8px 0 14px 0;">
+                    <tr>
+                        <td style="width:20%; text-align:center; border:1px solid #eee; border-radius:6px; padding:8px;">
+                            <div style="font-size:18px; font-weight:bold; color:#333;"><t t-esc="r['summary']['orders']"/></div>
+                            <div style="font-size:9px; color:#999; letter-spacing:1px;">ORDERS</div>
+                        </td>
+                        <td style="width:20%; text-align:center; border:1px solid #eee; border-radius:6px; padding:8px;">
+                            <div style="font-size:18px; font-weight:bold; color:#1a9d5a;"><t t-esc="'%.3f' % r['summary']['total_sales']"/></div>
+                            <div style="font-size:9px; color:#999; letter-spacing:1px;">TOTAL SALES</div>
+                        </td>
+                        <td style="width:20%; text-align:center; border:1px solid #eee; border-radius:6px; padding:8px;">
+                            <div style="font-size:18px; font-weight:bold; color:#2a7fb8;"><t t-esc="'%.3f' % r['summary']['tax']"/></div>
+                            <div style="font-size:9px; color:#999; letter-spacing:1px;">TAX</div>
+                        </td>
+                        <td style="width:20%; text-align:center; border:1px solid #eee; border-radius:6px; padding:8px;">
+                            <div style="font-size:18px; font-weight:bold; color:#c0392b;"><t t-esc="'%.3f' % r['summary']['discount']"/></div>
+                            <div style="font-size:9px; color:#999; letter-spacing:1px;">DISCOUNT</div>
+                        </td>
+                        <td style="width:20%; text-align:center; border:1px solid #eee; border-radius:6px; padding:8px;">
+                            <div style="font-size:18px; font-weight:bold; color:#333;"><t t-esc="'%.3f' % r['summary']['refund']"/></div>
+                            <div style="font-size:9px; color:#999; letter-spacing:1px;">REFUND</div>
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Per-day sections -->
+                <t t-if="not r['days']">
+                    <div style="text-align:center; color:#999; padding:20px;">No sales in this period.</div>
+                </t>
+                <t t-foreach="r['days']" t-as="day">
+                    <table style="width:100%; border-collapse:collapse; margin-top:10px;">
+                        <tr style="background:#6b3f6b; color:#fff;">
+                            <td style="padding:5px 8px; font-weight:bold;">Date: <t t-esc="day['date']"/></td>
+                            <td style="padding:5px 8px; text-align:right;">Orders: <t t-esc="day['orders']"/> | Total: <t t-esc="'%.3f' % day['total']"/></td>
+                        </tr>
+                    </table>
+
+                    <table style="width:100%; border-collapse:collapse; margin-top:2px;">
+                        <tr style="background:#f2f2f2; color:#555;">
+                            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid #ddd;">Product</th>
+                            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid #ddd;">Barcode</th>
+                            <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Qty</th>
+                            <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Unit Price</th>
+                            <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Subtotal</th>
+                        </tr>
+                        <t t-foreach="day['products']" t-as="p">
+                            <tr>
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0;"><t t-esc="p['name']"/></td>
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; color:#777;"><t t-esc="p['barcode']"/></td>
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right;"><t t-esc="'%.3f' % p['qty']"/></td>
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right;"><t t-esc="'%.3f' % p['unit']"/></td>
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:bold;"><t t-esc="'%.3f' % p['subtotal']"/></td>
+                            </tr>
+                        </t>
+                    </table>
+
+                    <!-- Payments + Summary -->
+                    <table style="width:100%; border-collapse:collapse; margin-top:6px;">
+                        <tr>
+                            <td style="width:55%; vertical-align:top;">
+                                <div style="font-weight:bold; color:#555; border-bottom:1px solid #ddd; padding-bottom:2px;">Payments</div>
+                                <t t-foreach="day['payments']" t-as="pay">
+                                    <div style="display:flex; justify-content:space-between; padding:2px 0;">
+                                        <span><t t-esc="pay['method']"/></span>
+                                        <span><t t-esc="'%.3f' % pay['amount']"/></span>
+                                    </div>
+                                </t>
+                            </td>
+                            <td style="width:45%; vertical-align:top; padding-left:20px;">
+                                <div style="display:flex; justify-content:space-between; padding:2px 0;"><span>Subtotal</span><span><t t-esc="'%.3f' % day['subtotal']"/></span></div>
+                                <div style="display:flex; justify-content:space-between; padding:2px 0;"><span>Tax</span><span><t t-esc="'%.3f' % day['tax']"/></span></div>
+                                <div style="display:flex; justify-content:space-between; padding:2px 0;"><span>Discount</span><span><t t-esc="'%.3f' % day['discount']"/></span></div>
+                                <div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid #333; font-weight:bold;"><span>TOTAL</span><span><t t-esc="'%.3f' % day['total']"/></span></div>
+                            </td>
+                        </tr>
+                    </table>
+                </t>
+
+                <!-- Grand total -->
+                <table style="width:100%; border-collapse:collapse; margin-top:16px;">
+                    <tr style="background:#6b3f6b; color:#fff;">
+                        <td style="padding:8px; font-weight:bold; font-size:13px;">GRAND TOTAL</td>
+                        <td style="padding:8px; text-align:center;">Orders: <t t-esc="r['summary']['orders']"/></td>
+                        <td style="padding:8px; text-align:center;">Tax: <t t-esc="'%.3f' % r['summary']['tax']"/></td>
+                        <td style="padding:8px; text-align:center;">Discount: <t t-esc="'%.3f' % r['summary']['discount']"/></td>
+                        <td style="padding:8px; text-align:right; font-weight:bold; font-size:14px;"><t t-esc="'%.3f' % r['summary']['total_sales']"/></td>
+                    </tr>
+                </table>
+
+            </div>
+        </t>
+    </template>
+
+</odoo>

@@ -20,7 +20,7 @@ export default function LangButton() {
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={() => setOpen(false)}>
           <View style={s.sheet}>
-            <Text style={s.title}>Language / भाषा / اللغة</Text>
+            <Text style={s.title}>Language / اللغة</Text>
             {LANGS.map((l) => (
               <TouchableOpacity key={l.code} style={s.row} onPress={() => { setLang(l.code); setOpen(false); }}>
                 <Text style={[s.rowTxt, l.code === lang && { color: COLORS.purple, fontWeight: '800' }]}>{l.label}</Text>

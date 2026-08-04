@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.NewQuestionDialog">
+        <Dialog size="'lg'" header="false" contentClass="'nq-content'" bodyClass="'nq-body'">
+            <div class="nq">
+
+                <!-- top: logo + close -->
+                <div class="nq-top">
+                    <img t-if="logoUrl" class="nq-logo" t-att-src="logoUrl" alt="Logo"/>
+                    <span t-else="" class="nq-logo-text">stretch &amp; go</span>
+                    <button class="nq-x" t-on-click="() => this.props.close()" aria-label="Close">
+                        <i class="fa fa-times"/>
+                    </button>
+                </div>
+
+                <!-- title -->
+                <div class="nq-titlerow">
+                    <span class="nq-ico nq-ico--title"><i class="fa fa-commenting-o"/></span>
+                    <div>
+                        <div class="nq-title">New Question</div>
+                        <div class="nq-sub">Create a new question for your clients</div>
+                    </div>
+                </div>
+                <div class="nq-divider"><span class="nq-divider__mark"><i class="fa fa-child"/></span></div>
+
+                <!-- Question -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-question"/></span>
+                    <label class="nq-label">Question <span class="nq-req">*</span></label>
+                    <div class="nq-control">
+                        <input type="text" class="nq-input" placeholder="Enter your question here…"
+                               t-model="state.name"/>
+                    </div>
+                </div>
+
+                <!-- Heading: the section this question is asked under. The
+                     choices belong to the therapy, so it waits for one. -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-folder-o"/></span>
+                    <label class="nq-label">Heading</label>
+                    <div class="nq-control">
+                        <div t-if="!state.therapyId" class="nq-select is-placeholder">
+                            <span>Select a therapy first</span>
+                        </div>
+                        <t t-else="">
+                            <div class="nq-select" t-att-class="!state.headingId ? 'is-placeholder' : ''"
+                                 t-on-click="() => state.headingOpen = !state.headingOpen">
+                                <span t-esc="headingLabel or 'No section'"/>
+                                <i class="fa fa-chevron-down nq-chev"/>
+                            </div>
+                            <div t-if="state.headingOpen" class="nq-menu">
+                                <div class="nq-opt" t-on-click="() => this.selectHeading(null)">No section</div>
+                                <div t-foreach="headingOptions" t-as="h" t-key="h.id"
+                                     class="nq-opt nq-opt--ico" t-on-click="() => this.selectHeading(h.id)">
+                                    <i class="fa fa-folder-o nq-opt__ico"/><span t-att-style="h.style" t-esc="h.name"/>
+                                </div>
+                                <div class="nq-opt nq-opt--ico" t-on-click="() => this.selectHeading('new')">
+                                    <i class="fa fa-plus nq-opt__ico"/>New heading…
+                                </div>
+                            </div>
+                            <input t-if="isNewHeading" type="text" class="nq-input mt-2"
+                                   placeholder="Name the new section…" t-model="state.newHeading"/>
+                        </t>
+                    </div>
+                </div>
+
+                <!-- Question Type -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-list-ul"/></span>
+                    <label class="nq-label">Question Type <span class="nq-req">*</span></label>
+                    <div class="nq-control">
+                        <div class="nq-select" t-on-click="() => state.typeOpen = !state.typeOpen">
+                            <span t-esc="typeLabel"/>
+                            <i class="fa fa-chevron-down nq-chev"/>
+                        </div>
+                        <div t-if="state.typeOpen" class="nq-menu">
+                            <div t-foreach="typeOptions" t-as="o" t-key="o.value"
+                                 class="nq-opt" t-on-click="() => this.selectType(o.value)">
+                                <t t-esc="o.label"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mandatory -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-shield"/></span>
+                    <label class="nq-label">Mandatory <span class="nq-req">*</span></label>
+                    <div class="nq-control">
+                        <button class="nq-toggle" t-att-class="state.required ? 'is-on' : ''"
+                                t-on-click="() => state.required = !state.required">
+                            <span class="nq-toggle__box"><i t-if="state.required" class="fa fa-check"/></span>
+                            <span t-esc="state.required ? 'Yes' : 'No'"/>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Therapy -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-child"/></span>
+                    <label class="nq-label">Therapy <span class="nq-req">*</span></label>
+                    <div class="nq-control">
+                        <div class="nq-select" t-att-class="!state.therapyId ? 'is-placeholder' : ''"
+                             t-on-click="() => state.therapyOpen = !state.therapyOpen">
+                            <span t-esc="therapyLabel or 'Select a therapy'"/>
+                            <i class="fa fa-chevron-down nq-chev"/>
+                        </div>
+                        <div t-if="state.therapyOpen" class="nq-menu">
+                            <div t-if="!state.therapies.length" class="nq-opt text-muted">No therapies found.</div>
+                            <div t-foreach="state.therapies" t-as="t" t-key="t.id"
+                                 class="nq-opt nq-opt--ico" t-on-click="() => this.selectTherapy(t.id)">
+                                <i class="fa fa-child nq-opt__ico"/><t t-esc="t.name"/>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Options (choice types) -->
+                <div t-if="isChoice" class="nq-field nq-field--options">
+                    <span class="nq-ico"><i class="fa fa-check-square-o"/></span>
+                    <label class="nq-label">Options</label>
+                    <div class="nq-control">
+                        <div t-foreach="state.options" t-as="opt" t-key="opt_index" class="nq-opt-row">
+                            <input type="text" class="nq-input" placeholder="Option…"
+                                   t-att-value="opt"
+                                   t-on-input="(ev) => this.setOption(opt_index, ev.target.value)"/>
+                            <button class="nq-opt-del" t-on-click="() => this.removeOption(opt_index)">
+                                <i class="fa fa-times"/>
+                            </button>
+                        </div>
+                        <button class="nq-add" t-on-click="() => this.addOption()">
+                            <i class="fa fa-plus me-1"/>Add option
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active -->
+                <div class="nq-field">
+                    <span class="nq-ico"><i class="fa fa-star"/></span>
+                    <label class="nq-label">Active <span class="nq-req">*</span></label>
+                    <div class="nq-control">
+                        <button class="nq-toggle" t-att-class="state.active ? 'is-on' : ''"
+                                t-on-click="() => state.active = !state.active">
+                            <span class="nq-toggle__box"><i t-if="state.active" class="fa fa-check"/></span>
+                            <span t-esc="state.active ? 'Yes' : 'No'"/>
+                        </button>
+                    </div>
+                </div>
+
+                <p t-if="state.error" class="nq-error"><t t-esc="state.error"/></p>
+            </div>
+
+            <t t-set-slot="footer">
+                <button class="btn nq-save" t-att-disabled="state.busy" t-on-click="() => this.save()">
+                    <i class="fa fa-floppy-o me-1"/><t t-esc="state.busy ? 'Saving…' : 'Save'"/>
+                </button>
+                <button class="btn nq-discard" t-on-click="() => this.props.close()">
+                    <i class="fa fa-times me-1"/>Discard
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

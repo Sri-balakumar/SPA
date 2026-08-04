@@ -10,8 +10,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
-import NexFooter from '../../components/NexFooter';
 import CodePicker from '../../components/CodePicker';
+import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { useLang } from '../../LanguageContext';
 
 const GENDERS = ['Female', 'Male', 'Other'];
@@ -30,12 +30,19 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
   const [age, setAge] = useState(String(m.age || ''));
   const [gender, setGender] = useState(m.gender || 'Female');
   const [cc, setCc] = useState(form.countryCode || '+968');
+  const [ccIso, setCcIso] = useState(form.countryIso || 'OM');
   const [phone, setPhone] = useState(form.phone || '');
   const [waSame, setWaSame] = useState(m.whatsappSame !== false);
   const [wa, setWa] = useState('');
   const [genderOpen, setGenderOpen] = useState(false);
 
+  // Digit count + validity for the selected country (phone and WhatsApp share one).
+  const rule = phoneRule(ccIso);
+  const badPhone = !!phone && !rule.isValid(phone);
+  const badWa = !waSame && !!wa && !rule.isValid(wa);
+
   function save() {
+    if (badPhone || badWa) return;              // button is disabled, belt & braces
     const mobile = `${cc} ${phone.trim()}`;
     const whatsapp = waSame ? mobile : `${cc} ${wa.trim()}`;
     set({
@@ -77,10 +84,13 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           </View>
 
           <Text style={[s.label, rtl && s.rtlTxt]}>{t('phone')} *</Text>
-          <View style={s.inputRow}>
-            <CodePicker value={cc} onChange={setCc} />
-            <TextInput style={s.inputFlex} value={phone} onChangeText={setPhone} keyboardType="phone-pad" placeholder="9XXXXXXX" placeholderTextColor="#B4A9C4" />
+          <View style={[s.inputRow, badPhone && s.fieldError]}>
+            <CodePicker value={cc} onChange={(d, iso) => { setCc(d); setCcIso(iso); }} />
+            <TextInput style={s.inputFlex} value={phone} onChangeText={(v) => setPhone(digitsOnly(v))}
+              keyboardType="phone-pad" maxLength={rule.len}
+              placeholder={t('enterNDigits', { n: rule.len })} placeholderTextColor="#B4A9C4" />
           </View>
+          {badPhone && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
           <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={() => setWaSame((v) => !v)}>
             <View style={[s.box, waSame && s.boxOn]}>{waSame && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
@@ -88,18 +98,25 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           </TouchableOpacity>
 
           <Text style={[s.label, rtl && s.rtlTxt]}>{t('whatsapp')} *</Text>
-          <View style={[s.inputRow, waSame && { opacity: 0.5 }]}>
-            <CodePicker value={cc} onChange={setCc} />
-            <TextInput style={s.inputFlex} value={waSame ? phone : wa} onChangeText={setWa} editable={!waSame} keyboardType="phone-pad" placeholder="9XXXXXXX" placeholderTextColor="#B4A9C4" />
+          <View style={[s.inputRow, waSame && { opacity: 0.5 }, badWa && s.fieldError]}>
+            <CodePicker value={cc} onChange={(d, iso) => { setCc(d); setCcIso(iso); }} />
+            <TextInput style={s.inputFlex} value={waSame ? phone : wa} onChangeText={(v) => setWa(digitsOnly(v))}
+              editable={!waSame} keyboardType="phone-pad" maxLength={rule.len}
+              placeholder={t('enterNDigits', { n: rule.len })} placeholderTextColor="#B4A9C4" />
           </View>
+          {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
-          <TouchableOpacity style={s.cta} activeOpacity={0.9} onPress={save}>
+          <TouchableOpacity
+            style={[s.cta, (badPhone || badWa) && { opacity: 0.6 }]}
+            activeOpacity={0.9}
+            onPress={save}
+            disabled={badPhone || badWa}
+          >
             <Text style={s.ctaTxt}>{t('saveChanges')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      <NexFooter />
 
       <Modal visible={genderOpen} transparent animationType="fade" onRequestClose={() => setGenderOpen(false)}>
         <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={() => setGenderOpen(false)}>
@@ -125,6 +142,8 @@ const s = StyleSheet.create({
   label: { fontSize: 12.5, fontWeight: '800', color: COLORS.muted, marginBottom: 7, marginTop: 14, marginLeft: 2 },
   input: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14, height: 50, fontSize: 15, color: COLORS.ink },
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14, height: 50 },
+  fieldError: { borderColor: COLORS.red },
+  errTxt: { fontSize: 12.5, color: COLORS.red, marginTop: 6, marginLeft: 2 },
   inputFlex: { flex: 1, fontSize: 15, color: COLORS.ink },
   two: { flexDirection: 'row', gap: 12 },
 

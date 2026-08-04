@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
-import NexFooter from '../../components/NexFooter';
 import { useLang } from '../../LanguageContext';
 import { toDigits } from '../../dateFmt';
 
@@ -83,7 +82,6 @@ export default function AccountScreen({ form, onSelect, onEdit, onBack, onHome }
         </View>
       </ScrollView>
 
-      <NexFooter />
     </View>
   );
 }

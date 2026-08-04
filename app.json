@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Stretch & Go",
-    "slug": "spa-app",
+    "name": "NEXGENN SPA",
+    "slug": "spa",
     "owner": "stretchgo",
-    "scheme": "spaapp",
+    "scheme": "spa",
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.spa.app",
+      "package": "com.alphalize.spa",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"

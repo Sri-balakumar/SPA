@@ -13,7 +13,18 @@ import LangButton from './LangButton';
 const SERIF = 'PlayfairDisplay_700Bold';
 const hit = { top: 10, bottom: 10, left: 10, right: 10 };
 
-export default function BrandHeader({ title, subtitle, onBack, onHome, titleSize = 27 }) {
+// `logo` / `logoStyle` override the default brand mark for screens that show a
+// different one (the Welcome/language screen uses the NexGenn logo). Omitting
+// them keeps the original Stretch & Go header used by the rest of the flow.
+// `showLang={false}` hides the top-right language switcher — used on the
+// Welcome screen, where picking the language IS the content.
+// `onLogoPress` is the tap handler on the brand mark (the Welcome screen uses
+// it for the hidden 7-tap service gesture); `rightExtra` renders before the
+// language switcher in the top row — that's where the service gear goes.
+export default function BrandHeader({
+  title, subtitle, onBack, onHome, titleSize = 27, logo, logoStyle,
+  showLang = true, onLogoPress, rightExtra,
+}) {
   const insets = useSafeAreaInsets();
   return (
     <LinearGradient colors={['#EFE6F8', '#F5EFFb']} style={[s.header, { paddingTop: insets.top + 10 }]}>
@@ -21,10 +32,23 @@ export default function BrandHeader({ title, subtitle, onBack, onHome, titleSize
         {onBack
           ? <TouchableOpacity onPress={onBack} hitSlop={hit}><Ionicons name="chevron-back" size={26} color={COLORS.purpleDeep} /></TouchableOpacity>
           : <View style={{ width: 40 }} />}
-        <LangButton />
+        <View style={s.headRight}>
+          {rightExtra}
+          {showLang ? <LangButton /> : null}
+        </View>
       </View>
-      <TouchableOpacity onLongPress={onHome} delayLongPress={800} activeOpacity={1} style={{ alignSelf: 'center' }}>
-        <Image source={require('../assets/stretchandgo_black.png')} style={s.logo} resizeMode="contain" />
+      <TouchableOpacity
+        onPress={onLogoPress}
+        onLongPress={onHome}
+        delayLongPress={800}
+        activeOpacity={1}
+        style={{ alignSelf: 'center' }}
+      >
+        <Image
+          source={logo || require('../assets/nexgen_dark.png')}
+          style={[s.logo, logoStyle]}
+          resizeMode="contain"
+        />
       </TouchableOpacity>
       {!!title && <Text style={[s.title, { fontSize: titleSize }]}>{title}</Text>}
       {!!title && (
@@ -42,7 +66,11 @@ export default function BrandHeader({ title, subtitle, onBack, onHome, titleSize
 const s = StyleSheet.create({
   header: { paddingHorizontal: 18, paddingBottom: 16, borderBottomLeftRadius: 26, borderBottomRightRadius: 26 },
   headTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  logo: { width: 190, height: 44, alignSelf: 'center', marginTop: 2, marginBottom: 2 },
+  // Fixed min width keeps the row balanced whether or not the gear is showing.
+  headRight: { flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 40, justifyContent: 'flex-end' },
+  // NexGenn mark at its 5:1 aspect (so `resizeMode="contain"` doesn't
+  // letterbox), sized to match the Welcome/language screen.
+  logo: { width: 320, height: 68, alignSelf: 'center', marginTop: 10, marginBottom: 2 },
   title: { fontFamily: SERIF, color: COLORS.purpleDeep, textAlign: 'center', marginTop: 2 },
   divider: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   line: { width: 46, height: 1, backgroundColor: '#D7C7EA', marginHorizontal: 8 },

@@ -3,7 +3,7 @@
 //   1) Select Language  (English / العربية)
 //   2) after a language is picked, it cross-fades in place to the Welcome
 //      content (New Customer / Existing Customer) — no page change.
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, Image, StyleSheet, useWindowDimensions, Animated, Easing,
 } from 'react-native';
@@ -11,7 +11,6 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
-import NexFooter from '../../components/NexFooter';
 import { useLang } from '../../LanguageContext';
 
 const SERIF = 'PlayfairDisplay_700Bold';
@@ -31,14 +30,20 @@ function Divider() {
   );
 }
 
-export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen = false, onChoose }) {
+const SERVICE_TAPS = 7;      // taps on the logo that reveal the service gear
+const TAP_WINDOW_MS = 2000;  // idle gap that resets the count
+
+export default function WelcomeScreen({
+  onNew, onExisting, onHome, startChosen = false, onChoose, onUnchoose, onDeviceConfig,
+}) {
   const { t, lang, setLang } = useLang();
   const { width } = useWindowDimensions();
   const contentW = Math.min(width - 40, 540);
   // If the language was already picked earlier this session (e.g. we came Back
   // here), open straight on the New/Existing content — skip language select.
   const [chosen, setChosen] = useState(startChosen);
-  const [pick, setPick] = useState(lang);            // which language is ticked
+  // The ticked card reads straight from the language context (no local copy),
+  // so switching language via the header globe updates it immediately too.
   const anim = useRef(new Animated.Value(startChosen ? 1 : 0)).current; // 0 = language, 1 = welcome
 
   const rtl = lang === 'ar';
@@ -46,11 +51,43 @@ export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen =
 
   function choose(code) {
     setLang(code);
-    setPick(code);
     setChosen(true);
     onChoose && onChoose();      // tell the app the language step is done
     // smooth in-place cross-fade + slide (≈420ms)
     Animated.timing(anim, { toValue: 1, duration: 420, easing: Easing.inOut(Easing.ease), useNativeDriver: true }).start();
+  }
+
+  // Hidden service-mode entry: 7 quick taps on the NexGenn logo reveal a gear
+  // in the header that returns to the device config (login) screen. Lets staff
+  // re-point the tablet at another Odoo server without clearing app data.
+  // The count lives in a ref, so tapping doesn't re-render the whole screen.
+  const tapsRef = useRef(0);
+  const tapTimer = useRef(null);
+  const [gearVisible, setGearVisible] = useState(false);
+
+  useEffect(() => () => clearTimeout(tapTimer.current), []);   // tidy up on unmount
+
+  function onLogoTap() {
+    if (gearVisible) return;
+    clearTimeout(tapTimer.current);
+    tapsRef.current += 1;
+    if (tapsRef.current >= SERVICE_TAPS) {
+      tapsRef.current = 0;
+      setGearVisible(true);
+      return;
+    }
+    // Must be a quick run of taps — a pause resets it, so stray taps over a
+    // long kiosk session can never add up to the gesture.
+    tapTimer.current = setTimeout(() => { tapsRef.current = 0; }, TAP_WINDOW_MS);
+  }
+
+  // Back from the New/Existing panel → return to language selection. Needed
+  // because the top-right language switcher is hidden on this screen, so this
+  // is the only way to change a mis-tapped language.
+  function backToLang() {
+    setChosen(false);
+    onUnchoose && onUnchoose();   // let the app forget the language step
+    Animated.timing(anim, { toValue: 0, duration: 420, easing: Easing.inOut(Easing.ease), useNativeDriver: true }).start();
   }
 
   const langOpacity = anim.interpolate({ inputRange: [0, 0.5], outputRange: [1, 0], extrapolate: 'clamp' });
@@ -61,7 +98,23 @@ export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen =
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
-      <BrandHeader onHome={onHome} />
+      {/* NexGenn brand, moved up from the footer (replaces Stretch & Go here). */}
+      <BrandHeader
+        onHome={onHome}
+        logo={require('../../assets/nexgen_dark.png')}
+        logoStyle={{ width: 320, height: 68, marginTop: 18 }}
+        onBack={chosen ? backToLang : undefined}
+        onLogoPress={onLogoTap}
+        rightExtra={gearVisible ? (
+          <TouchableOpacity
+            onPress={onDeviceConfig}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="settings-sharp" size={22} color={COLORS.purpleDeep} />
+          </TouchableOpacity>
+        ) : null}
+      />
 
       <View style={s.body}>
         {/* fixed illustration */}
@@ -81,18 +134,22 @@ export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen =
 
             <View style={s.cards}>
               {LANG_CARDS.map((c) => (
-                <TouchableOpacity key={c.code} style={[s.opt, pick === c.code && s.optPrimary]} activeOpacity={0.9} onPress={() => choose(c.code)}>
+                <TouchableOpacity key={c.code} style={[s.opt, lang === c.code && s.optPrimary]} activeOpacity={0.9} onPress={() => choose(c.code)}>
                   <Text style={s.flag}>{c.flag}</Text>
                   <View style={{ flex: 1 }}>
                     <Text style={s.optTitle}>{c.name}</Text>
                     <Text style={s.optDesc}>{c.hint}</Text>
                   </View>
-                  <View style={[s.radio, pick === c.code && s.radioOn]}>
-                    {pick === c.code && <Ionicons name="checkmark" size={14} color="#fff" />}
+                  <View style={[s.radio, lang === c.code && s.radioOn]}>
+                    {lang === c.code && <Ionicons name="checkmark" size={14} color="#fff" />}
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
+
+            {/* Inside the language panel, so it fades out with it and never
+                appears on the New/Existing content. */}
+            <Text style={s.poweredBy}>Powered by 369ai | v1.0.0</Text>
           </Animated.View>
 
           {/* 2) WELCOME CONTENT (unchanged design) */}
@@ -126,8 +183,6 @@ export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen =
         </View>
       </View>
 
-      <Text style={s.poweredBy}>Powered by 369ai · v1.0.0</Text>
-      <NexFooter />
     </View>
   );
 }
@@ -135,10 +190,18 @@ export default function WelcomeScreen({ onNew, onExisting, onHome, startChosen =
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F5EEFB' },
   body: { flex: 1, alignItems: 'center', paddingHorizontal: 20, paddingTop: 4 },
-  hero: { width: 224, height: 184, marginTop: 6, marginBottom: 6 },
+  hero: { width: 224, height: 184, marginTop: 46, marginBottom: 6 },
 
-  stage: { flex: 1 },
-  panel: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center' },
+  stage: { flex: 1, alignSelf: 'center' },
+  // Both panels fill the stage and centre their content, so the language cards
+  // sit in the middle of the screen (same treatment as the device config page)
+  // and the cross-fade to the Welcome content stays aligned.
+  // Pinned just under the hero rather than centred, so "Select Language" sits
+  // close to the illustration instead of drifting toward the middle.
+  panel: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    alignItems: 'center', paddingTop: 4,
+  },
 
   title: { fontFamily: SERIF, fontSize: 32, lineHeight: 39, color: COLORS.purpleDeep, textAlign: 'center' },
   titleAlt: { fontSize: 20, color: COLORS.purpleDeep, textAlign: 'center', marginTop: 2, fontWeight: '700' },
@@ -161,5 +224,9 @@ const s = StyleSheet.create({
   radio: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#D7C7EA', alignItems: 'center', justifyContent: 'center' },
   radioOn: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
 
-  poweredBy: { textAlign: 'center', fontSize: 11.5, color: COLORS.muted, fontWeight: '600', letterSpacing: 0.3, paddingBottom: 6 },
+  poweredBy: {
+    textAlign: 'center', fontSize: 11.5, color: COLORS.muted,
+    fontWeight: '600', letterSpacing: 0.3, marginTop: 22,
+  },
+
 });

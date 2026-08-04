@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Add the new "Approved" stage + a "Start Service" button to the base
+         spa_kiosk booking form, so the back office matches the POS workflow:
+         Pending -> Approved -> In Service -> Completed -> Paid. -->
+    <record id="view_spa_booking_form_workflow" model="ir.ui.view">
+        <field name="name">spa.booking.form.workflow</field>
+        <field name="model">spa.booking</field>
+        <field name="inherit_id" ref="spa_kiosk.view_spa_booking_form"/>
+        <field name="arch" type="xml">
+
+            <xpath expr="//button[@name='action_approve']" position="after">
+                <button name="action_start_service" string="Start Service"
+                        type="object" class="btn-primary"
+                        invisible="state != 'approved'"/>
+            </xpath>
+
+            <xpath expr="//field[@name='state'][@widget='statusbar']"
+                   position="attributes">
+                <attribute name="statusbar_visible">pending,approved,in_service,completed,paid</attribute>
+            </xpath>
+
+            <!-- Show the customer's preferred-time note (from the booking page)
+                 so the receptionist can allocate a time. -->
+            <xpath expr="//field[@name='price']" position="after">
+                <field name="time_note" readonly="1"
+                       invisible="not time_note"/>
+                <field name="email" readonly="1" invisible="not email"/>
+                <field name="signature" widget="image" readonly="1"
+                       options="{'size': [260, 110]}"
+                       invisible="not signature"/>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>

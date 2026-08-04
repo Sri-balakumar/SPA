@@ -1,16 +1,16 @@
 // CONNECT & LOGIN — the Odoo-style four-field login the manager asked for:
 //   1) Server URL   2) Database (auto-fetched from the server)   3) Username   4) Password
-// Enter the URL and tap Connect → the app calls Odoo's /web/database/list and
-// fills the Database field (a dropdown when there are several). Then username +
+// Type the URL → once typing settles the app calls Odoo's /web/database/list on
+// its own and fills the Database dropdown (no Connect button). Then username +
 // password authenticate over JSON-RPC and open a real Odoo session.
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Image,
-  KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, FlatList,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Device from 'expo-device';
 import { useSession } from '../SessionContext';
@@ -28,7 +28,8 @@ export default function LoginScreen() {
   // Field 1 — server URL (prefilled from the last saved connection).
   const [url, setUrl] = useState(getBaseUrl());
   const [connecting, setConnecting] = useState(false);
-  const [connectMsg, setConnectMsg] = useState('');   // info/error under the URL field
+  const [connectMsg, setConnectMsg] = useState('');   // success info under the URL field
+  const [urlError, setUrlError] = useState('');       // bad URL → red border + red message
 
   // Field 2 — database.
   const [dbList, setDbList] = useState(null);          // array once fetched, else null
@@ -49,6 +50,14 @@ export default function LoginScreen() {
   const [pendingLogin, setPendingLogin] = useState(false); // true → after scan, continue login
   const [permission, requestPermission] = useCameraPermissions();
   const scanRecordRef = useRef(null); // record_id from the scanned QR (written to Odoo after login)
+  const authInfoRef = useRef(null);   // session_info held between auth and the QR scan
+
+  // In-app alert styled like the rest of the app, in place of the OS popup.
+  // tone: 'error' (red) | 'success' (green) | 'info' (purple).
+  const [alertBox, setAlertBox] = useState(null);   // { title, message, tone }
+  function showAlert(title, message, tone = 'error') {
+    setAlertBox({ title, message, tone });
+  }
 
   useEffect(() => {
     (async () => {
@@ -62,18 +71,18 @@ export default function LoginScreen() {
   async function openScanner() {
     if (!permission?.granted) {
       const r = await requestPermission();
-      if (!r?.granted) { Alert.alert('Camera needed', 'Please allow camera access to scan the QR.'); return false; }
+      if (!r?.granted) { showAlert('Camera needed', 'Please allow camera access to scan the QR.'); return false; }
     }
     setScanBusy(false);
     setScanning(true);
     return true;
   }
 
-  // Forget this device's registration → next Login re-opens the QR scanner.
+  // Forget this device's registration → next login re-opens the QR scanner.
   async function resetDevice() {
     await clearDeviceRegistered();
     setRegistered(false);
-    Alert.alert('Device reset', 'This device is no longer registered. Tap Login to scan the QR again.');
+    showAlert('Device reset', 'This device is no longer registered. Tap Scan & Login to scan the QR again.', 'info');
   }
 
   // A QR was scanned → register this device on Odoo.
@@ -84,7 +93,7 @@ export default function LoginScreen() {
     try { payload = JSON.parse(data); } catch (e) {}
     if (!payload || payload.a !== 'ng_reg' || !payload.d) {
       setScanning(false); setScanBusy(false);
-      Alert.alert('Invalid QR', 'This is not a NexGen device registration QR code.');
+      showAlert('Invalid QR', 'This is not a NexGen device registration QR code.');
       return;
     }
     // Remember which pre-registered record this QR belongs to. The device is
@@ -94,43 +103,62 @@ export default function LoginScreen() {
     await setDeviceRegistered(payload.d, true); setRegistered(true);
     setScanning(false); setScanBusy(false);
     if (pendingLogin) { setPendingLogin(false); doAuth(); }
-    else { Alert.alert('Ready ✅', 'Tap Login to finish registering this device.'); }
+    else { showAlert('Ready', 'Tap Scan & Login to finish registering this device.', 'success'); }
   }
 
-  // Tap "Connect" → normalize the URL and ask Odoo for its database list.
-  async function connect() {
-    if (!url.trim()) {
-      Alert.alert('Missing URL', 'Please enter your Odoo server address.');
+  // Auto-fetch the database list as soon as the URL settles — no Connect button.
+  // Debounced so we fire once the user stops typing, not on every keystroke.
+  // A stale request can't clobber a newer one: `cancelled` gates every setState.
+  useEffect(() => {
+    const raw = url.trim();
+    if (!raw) {
+      setDbList(null); setDbManual(false);
+      setConnectMsg(''); setUrlError('');
       return;
     }
-    const clean = setBaseUrl(url);   // normalize + store; reflect it back into the field
-    setUrl(clean);
-    setConnecting(true);
-    setConnectMsg('');
-    setDbList(null);
-    setDbManual(false);
-    try {
-      const dbs = await listDatabases();
-      if (!Array.isArray(dbs) || dbs.length === 0) {
-        // Server didn't list any databases (list_db off, or filtered) → let the user type it.
-        setDbManual(true);
-        setConnectMsg('Connected. Couldn’t list databases — type the database name.');
-      } else {
-        setDbList(dbs);
-        setConnectMsg(`Connected — ${dbs.length} database${dbs.length > 1 ? 's' : ''} found.`);
-        if (dbs.length === 1) {
-          setDbState(dbs[0]);
-          setDb(dbs[0]);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setBaseUrl(raw);            // normalize + store (not reflected back into the
+                                  // field — that would retrigger this effect)
+      setConnecting(true); setConnectMsg(''); setUrlError('');
+      setDbList(null); setDbManual(false);
+      try {
+        const dbs = await listDatabases();
+        if (cancelled) return;
+        if (!Array.isArray(dbs) || dbs.length === 0) {
+          // Reachable, but list_db is off or filtered → let the user type the name.
+          setDbManual(true);
+          setConnectMsg('Connected — couldn’t list databases, type the name below.');
+        } else {
+          setDbList(dbs);
+          setConnectMsg(`${dbs.length} database${dbs.length > 1 ? 's' : ''} found.`);
+          // Keep a still-valid saved pick; otherwise auto-select a lone database.
+          setDbState((prev) => {
+            if (prev && dbs.includes(prev)) { setDb(prev); return prev; }
+            if (dbs.length === 1) { setDb(dbs[0]); return dbs[0]; }
+            setDb(''); return '';
+          });
         }
+      } catch (e) {
+        if (cancelled) return;
+        if (e.odoo) {
+          // The server answered as Odoo but refused to list databases — almost
+          // always `list_db = False`, which is normal on production servers.
+          // The URL is CORRECT, so no red line: just let the user type the name.
+          setDbManual(true);
+          setConnectMsg('Connected — couldn’t list databases, type the name below.');
+        } else {
+          // No JSON-RPC reply at all: unreachable host, or not an Odoo server.
+          setUrlError(e.message || 'Could not reach this server. Check the address.');
+          setDbList(null); setDbManual(false);
+          setDbState(''); setDb('');
+        }
+      } finally {
+        if (!cancelled) setConnecting(false);
       }
-    } catch (e) {
-      // Reachability error, or list_db disabled → allow manual DB entry as a fallback.
-      setDbManual(true);
-      setConnectMsg(e.message || 'Could not fetch databases. Type the database name.');
-    } finally {
-      setConnecting(false);
-    }
-  }
+    }, 700);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [url]);
 
   function chooseDb(name) {
     setDbState(name);
@@ -138,20 +166,54 @@ export default function LoginScreen() {
     setPickerOpen(false);
   }
 
-  // Tap "Login" → if the device isn't approved yet, open the QR scanner first;
-  // after a successful scan it continues to authenticate automatically.
+  // Tap "Scan & Login" → STEP 1: prove the credentials against Odoo first.
+  // The camera only opens once Odoo has accepted BOTH the username and the
+  // password. Odoo raises the same AccessDenied for an unknown user as for a
+  // bad password, so either one exits here and never reaches the QR scanner.
   async function login() {
-    if (!getBaseUrl()) { Alert.alert('Missing URL', 'Enter the server URL and tap Connect.'); return; }
+    if (!getBaseUrl()) { showAlert('Missing URL', 'Enter the server URL first.'); return; }
     const chosenDb = dbManual ? db.trim() : db;
-    if (!chosenDb) { Alert.alert('Missing database', 'Choose or type your database.'); return; }
+    if (!chosenDb) { showAlert('Missing database', 'Choose or type your database.'); return; }
     if (!username.trim() || !password) {
-      Alert.alert('Missing details', 'Please enter your username and password.');
+      showAlert('Missing details', 'Please enter your username and password.');
       return;
     }
     setDb(chosenDb);
 
-    // Always scan the device registration QR after entering the details.
-    // After a successful scan, onScan() continues to authenticate + register.
+    setLoggingIn(true);
+    let info = null;
+    try {
+      info = await odooAuthenticate(username.trim(), password);
+    } catch (e) {
+      setLoggingIn(false);
+      // Odoo reports bad credentials as an AccessDenied error, not uid:false.
+      const denied = e.odoo?.data?.name === 'odoo.exceptions.AccessDenied'
+        || /access denied/i.test(e.message || '');
+      if (denied) showAlert('Login failed', 'Wrong username or password.');
+      else showAlert('Login error', e.message || 'Could not log in.');
+      return;                                   // no scanner
+    }
+    if (!info || !info.uid) {
+      setLoggingIn(false);
+      showAlert('Login failed', 'Wrong username or password.');
+      return;                                   // no scanner
+    }
+
+    // Credentials accepted.
+    authInfoRef.current = info;
+
+    // Registration is a ONE-TIME step per database. If this tablet already
+    // registered on the chosen db, skip the QR entirely and finish the login.
+    // Safe even if the flag is stale: doAuth() still runs the Odoo device gate,
+    // which re-registers or denies as needed.
+    if (await isDeviceRegistered(getDb())) {
+      setRegistered(true);
+      doAuth();
+      return;
+    }
+
+    // First time on this database → scan the Device Registry QR.
+    setLoggingIn(false);
     setPendingLogin(true);
     const opened = await openScanner();
     if (!opened) setPendingLogin(false);
@@ -183,21 +245,22 @@ export default function LoginScreen() {
     }
   }
 
-  // The actual Odoo authentication (runs directly, or after the device is approved).
+  // STEP 2 — runs after the QR scan, on the session login() already opened.
+  // Credentials are known-good by this point; this is purely the device gate.
   async function doAuth() {
+    const info = authInfoRef.current;
+    if (!info || !info.uid) {
+      showAlert('Login failed', 'Please enter your details and try again.');
+      return;
+    }
     setLoggingIn(true);
     try {
-      const info = await odooAuthenticate(username.trim(), password);
-      if (!info || !info.uid) {
-        Alert.alert('Login failed', 'Wrong username or password.');
-        return;
-      }
       // Security: only devices registered in Odoo's Device Registry may log in.
       const dId = await getDeviceId();
       let gate = await deviceGate(dId, getDb());
       if (gate === 'blocked') {
         await odooLogout();
-        Alert.alert('Device blocked', 'This device has been blocked by the administrator. Please contact them.');
+        showAlert('Device blocked', 'This device has been blocked by the administrator. Please contact them.');
         return;
       }
       if (gate === 'unregistered') {
@@ -207,20 +270,26 @@ export default function LoginScreen() {
       }
       if (gate === 'unregistered') {
         await odooLogout();
-        Alert.alert('Device not authorized',
+        showAlert('Device not authorized',
           'This device is not registered, so it cannot log in.\n\nDevice ID:\n' + dId +
           '\n\nAsk your admin to add this Device ID in the Device Registry.');
         return;
       }
+      // The gate allowed this device, so mark it registered for THIS database.
+      // Must be keyed on getDb(): registerDeviceNow() only runs when the gate
+      // said 'unregistered', and onScan() keys off the QR's own db name — so
+      // without this, an already-approved tablet never sets the flag and would
+      // be asked to scan on every single login.
+      await setDeviceRegistered(getDb(), true);
+      setRegistered(true);
+
       await saveConnection();   // remember URL + DB for next launch
       await saveCredentials(username.trim(), password);  // kiosk: open straight to services next time
       doLogin(info);
     } catch (e) {
-      // Odoo returns wrong credentials as an AccessDenied error, not a uid:false result.
-      const denied = e.odoo?.data?.name === 'odoo.exceptions.AccessDenied'
-        || /access denied/i.test(e.message || '');
-      if (denied) Alert.alert('Login failed', 'Wrong username or password.');
-      else Alert.alert('Login error', e.message || 'Could not log in.');
+      // Credentials were already accepted in login(), so anything here is a
+      // registry/network failure rather than a bad password.
+      showAlert('Login error', e.message || 'Could not complete login.');
     } finally {
       setLoggingIn(false);
     }
@@ -231,21 +300,16 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={s.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-        {/* Header — logo + decorative serif "Spa" */}
+      <ScrollView
+        // Centred, then biased upward: the extra bottom padding pulls the
+        // logo + card block above the true middle of the screen.
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: 140 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header — NexGenn logo (long-press to reset the device) */}
         <View style={[s.header, { paddingTop: insets.top + 24 }]}>
-          <Image source={require('../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
-
-          {/* small flower + dots above the title */}
-          <View style={s.topDeco}>
-            <View style={s.tinyDot} />
-            <MaterialCommunityIcons name="flower-tulip" size={20} color={COLORS.purple} style={{ marginHorizontal: 6 }} />
-            <View style={s.tinyDot} />
-          </View>
-
-          {/* Client brand — Stretch & Go (long-press to reset the device) */}
           <TouchableOpacity onLongPress={resetDevice} delayLongPress={1000} activeOpacity={1}>
-            <Image source={require('../assets/stretchandgo_black.png')} style={s.brandLogo} resizeMode="contain" />
+            <Image source={require('../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
           </TouchableOpacity>
 
           {/* three dots below */}
@@ -258,9 +322,9 @@ export default function LoginScreen() {
 
         {/* Card */}
         <View style={s.card}>
-          {/* 1 — Server URL */}
+          {/* 1 — Server URL (databases load automatically once typing settles) */}
           <Text style={s.label}>Server URL</Text>
-          <View style={s.field}>
+          <View style={[s.field, !!urlError && s.fieldError]}>
             <Text style={s.icon}>🌐</Text>
             <TextInput
               style={s.input}
@@ -271,19 +335,12 @@ export default function LoginScreen() {
               keyboardType="url"
               value={url}
               onChangeText={setUrl}
-              onSubmitEditing={connect}
-              returnKeyType="go"
+              returnKeyType="done"
             />
+            {connecting && <ActivityIndicator color={COLORS.purple} style={{ marginLeft: 6 }} />}
           </View>
-          <TouchableOpacity
-            style={[s.connectBtn, connecting && { opacity: 0.7 }]}
-            onPress={connect}
-            activeOpacity={0.9}
-            disabled={connecting}
-          >
-            {connecting ? <ActivityIndicator color={COLORS.purple} /> : <Text style={s.connectTxt}>Connect</Text>}
-          </TouchableOpacity>
-          {!!connectMsg && <Text style={s.msg}>{connectMsg}</Text>}
+          {!!urlError && <Text style={s.errTxt}>{urlError}</Text>}
+          {!urlError && !!connectMsg && <Text style={s.okTxt}>{connectMsg}</Text>}
 
           {/* 2 — Database */}
           <Text style={s.label}>Database</Text>
@@ -304,14 +361,14 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={s.field}
               activeOpacity={0.8}
-              disabled={!dbList || dbList.length <= 1}
+              disabled={!dbList || dbList.length === 0}
               onPress={() => setPickerOpen(true)}
             >
               <Text style={s.icon}>🗄️</Text>
               <Text style={[s.input, { paddingVertical: 15 }, !db && { color: '#B4A9C4' }]}>
-                {db || (dbList ? 'Select database' : 'Connect to load databases')}
+                {db || 'Select your database'}
               </Text>
-              {dbList && dbList.length > 1 && <Text style={s.chev}>▾</Text>}
+              {!!dbList && dbList.length > 0 && <Text style={s.chev}>▾</Text>}
             </TouchableOpacity>
           )}
 
@@ -353,7 +410,7 @@ export default function LoginScreen() {
             activeOpacity={0.9}
             disabled={loggingIn || !canLogin}
           >
-            {loggingIn ? <ActivityIndicator color="#fff" /> : <Text style={s.loginTxt}>Login</Text>}
+            {loggingIn ? <ActivityIndicator color="#fff" /> : <Text style={s.loginTxt}>Scan &amp; Login</Text>}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -375,6 +432,29 @@ export default function LoginScreen() {
             />
           </View>
         </TouchableOpacity>
+      </Modal>
+
+      {/* In-app alert — the app-styled replacement for the OS popup */}
+      <Modal visible={!!alertBox} transparent animationType="fade" onRequestClose={() => setAlertBox(null)}>
+        <View style={s.alertBackdrop}>
+          <View style={s.alertCard}>
+            <View style={[s.alertIcon, alertBox?.tone === 'success' && { backgroundColor: '#E6F5EE' },
+                                       alertBox?.tone === 'error' && { backgroundColor: '#FBE9E9' }]}>
+              <Ionicons
+                name={alertBox?.tone === 'success' ? 'checkmark-circle'
+                    : alertBox?.tone === 'info' ? 'information-circle' : 'alert-circle'}
+                size={34}
+                color={alertBox?.tone === 'success' ? COLORS.green
+                     : alertBox?.tone === 'info' ? COLORS.purple : COLORS.red}
+              />
+            </View>
+            <Text style={s.alertTitle}>{alertBox?.title}</Text>
+            <Text style={s.alertMsg}>{alertBox?.message}</Text>
+            <TouchableOpacity style={s.alertBtn} activeOpacity={0.9} onPress={() => setAlertBox(null)}>
+              <Text style={s.alertBtnTxt}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* Camera — scan the QR shown on Odoo's Device Registry */}
@@ -406,21 +486,14 @@ const s = StyleSheet.create({
   header: {
     paddingHorizontal: 24, paddingBottom: 22, alignItems: 'center',
   },
-  logo: { width: 260, height: 54, marginBottom: 14 },
-
-  topDeco: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  tinyDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#C9B6E4' },
-
-  spaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  dLine: { width: 46, height: 1, backgroundColor: '#D7C7EA', marginHorizontal: 10 },
-  spaTitle: { fontFamily: 'PlayfairDisplay_700Bold', fontSize: 52, color: COLORS.purpleDeep, lineHeight: 62 },
-  brandLogo: { width: 250, height: 58, marginVertical: 8 },
+  logo: { width: 320, height: 68, marginBottom: 14 },
 
   dotsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#C9B6E4', marginHorizontal: 4 },
 
   card: {
-    backgroundColor: '#fff', marginHorizontal: 18, marginTop: 6, marginBottom: 24, borderRadius: 24,
+    backgroundColor: '#fff', alignSelf: 'center', width: '92%', maxWidth: 520,
+    marginTop: 6, marginBottom: 24, borderRadius: 24,
     padding: 22, paddingTop: 22, ...SHADOW,
   },
   label: { fontSize: 12.5, fontWeight: '800', color: COLORS.muted, marginBottom: 7, marginTop: 4 },
@@ -434,12 +507,9 @@ const s = StyleSheet.create({
   chev: { fontSize: 16, color: COLORS.muted, paddingLeft: 6 },
   eye: { fontSize: 17, paddingLeft: 6 },
 
-  connectBtn: {
-    borderWidth: 1.5, borderColor: COLORS.purple, borderRadius: 12,
-    paddingVertical: 12, alignItems: 'center', marginBottom: 6,
-  },
-  connectTxt: { color: COLORS.purple, fontSize: 15, fontWeight: '800' },
-  msg: { fontSize: 12.5, color: COLORS.muted, marginBottom: 8, marginTop: 2 },
+  fieldError: { borderColor: COLORS.red },
+  errTxt: { fontSize: 12.5, color: COLORS.red, marginTop: -6, marginBottom: 10 },
+  okTxt: { fontSize: 12.5, color: COLORS.green, marginTop: -6, marginBottom: 10 },
 
   serverRow: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.field,
@@ -480,6 +550,32 @@ const s = StyleSheet.create({
     paddingVertical: 13, paddingHorizontal: 40,
   },
   camCancelTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
+
+  alertBackdrop: {
+    flex: 1, backgroundColor: 'rgba(46,36,64,0.55)',
+    alignItems: 'center', justifyContent: 'center', padding: 28,
+  },
+  alertCard: {
+    backgroundColor: '#fff', borderRadius: 24, paddingVertical: 26, paddingHorizontal: 24,
+    width: '100%', maxWidth: 380, alignItems: 'center', ...SHADOW,
+  },
+  alertIcon: {
+    width: 62, height: 62, borderRadius: 31, backgroundColor: COLORS.lavenderSoft,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+  },
+  alertTitle: {
+    fontFamily: 'PlayfairDisplay_700Bold', fontSize: 22,
+    color: COLORS.purpleDeep, textAlign: 'center',
+  },
+  alertMsg: {
+    fontSize: 14, color: COLORS.muted, textAlign: 'center',
+    marginTop: 8, lineHeight: 20,
+  },
+  alertBtn: {
+    backgroundColor: COLORS.purple, borderRadius: 999, paddingVertical: 13,
+    alignSelf: 'stretch', alignItems: 'center', marginTop: 20,
+  },
+  alertBtnTxt: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(15,23,42,0.45)', justifyContent: 'center', padding: 28 },
   sheet: { backgroundColor: '#fff', borderRadius: 18, paddingVertical: 8, maxHeight: '60%' },

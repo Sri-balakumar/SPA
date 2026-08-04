@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="product_template_form_spa_questions" model="ir.ui.view">
+        <field name="name">product.template.form.spa.questions</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Questions" name="spa_questions"
+                      groups="spa_kiosk.group_spa_manager">
+                    <group>
+                        <group>
+                            <field name="spa_duration"/>
+                        </group>
+                    </group>
+                    <div class="text-muted mb-2">
+                        These are the questions the customer is actually asked for
+                        this service. They are managed on the therapy, not here.
+                    </div>
+                    <field name="spa_effective_question_ids" nolabel="1" readonly="1">
+                        <list create="false" delete="false" edit="false">
+                            <field name="name"/>
+                            <field name="heading_id"/>
+                            <field name="question_type"/>
+                            <field name="required"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

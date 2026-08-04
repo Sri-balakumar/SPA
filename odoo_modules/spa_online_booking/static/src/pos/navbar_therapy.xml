@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Add a "Book Therapy" button to the POS top bar, before "Send Link",
+         and remove the old "Services" and "+ Service" buttons that
+         pos_spa_header adds (Book Therapy replaces that flow). -->
+    <t t-inherit="point_of_sale.Navbar" t-inherit-mode="extension">
+        <xpath expr="//button[hasclass('send-link-button')]" position="before">
+            <button class="book-therapy-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickBookTherapy()">
+                <i class="fa fa-fw fa-user-plus"/>
+                <span t-if="!ui.isSmall" class="ms-1">Book Therapy</span>
+            </button>
+            <button class="redeem-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickRedeem()">
+                <i class="fa fa-fw fa-ticket"/>
+                <span t-if="!ui.isSmall" class="ms-1">Redeem</span>
+            </button>
+            <button class="customer-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickCustomer()">
+                <i class="fa fa-fw fa-id-card-o"/>
+                <span t-if="!ui.isSmall" class="ms-1">Customer</span>
+            </button>
+        </xpath>
+        <xpath expr="//button[hasclass('register-label')]" position="replace"/>
+        <xpath expr="//button[hasclass('new-service-button')]" position="replace"/>
+        <xpath expr="//button[hasclass('customers-button')]" position="replace"/>
+
+        <!-- Remove "Create Product" from the hamburger (burger) menu. -->
+        <xpath expr="//DropdownItem[@t-if='showCreateProductButton']" position="replace"/>
+
+        <!-- Remove the "Search products..." bar (the therapy flow replaces the
+             product grid, so there's nothing to search). -->
+        <xpath expr="//Input[@debounceMillis='500']" position="replace"/>
+
+        <!-- Icons on the Orders / Questions buttons (large screens). -->
+        <xpath expr="//button[hasclass('orders-button')]//span" position="before">
+            <i class="fa fa-fw fa-calendar-o me-1" t-if="!ui.isSmall"/>
+        </xpath>
+        <xpath expr="//button[hasclass('questions-button')]//span" position="before">
+            <i class="fa fa-fw fa-question-circle-o me-1" t-if="!ui.isSmall"/>
+        </xpath>
+
+        <!-- Company logo at the far left of the top bar. -->
+        <xpath expr="//div[hasclass('navbar-menu')]" position="before">
+            <img class="sg-navbar-logo"
+                 t-att-src="'/web/image/res.company/' + pos.config.company_id.id + '/logo'"
+                 alt="Logo"/>
+        </xpath>
+    </t>
+
+</templates>

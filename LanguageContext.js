@@ -112,7 +112,9 @@ const STR = {
   goHome: { en: 'Go to Home', hi: 'होम पर जाएँ', ar: 'العودة للرئيسية' },
 
   // welcome screen (text only — design stays identical in both languages)
-  welcomeTitle: { en: 'Welcome to\nStretch & Go', hi: 'Welcome to\nStretch & Go', ar: 'مرحبًا بك في\nStretch & Go' },
+  // Standalone greeting — the Arabic drops the trailing في ("to"), which only
+  // made sense while a venue name followed it.
+  welcomeTitle: { en: 'Welcome', hi: 'Welcome', ar: 'مرحبًا بك' },
   howContinue: { en: 'How would you like to continue?', hi: 'How would you like to continue?', ar: 'كيف تود المتابعة؟' },
   newCustomer: { en: 'New Customer', hi: 'New Customer', ar: 'عميل جديد' },
   newCustomerDesc: { en: 'Book a new package and get started', hi: 'Book a new package and get started', ar: 'احجز باقة جديدة وابدأ' },
@@ -125,6 +127,9 @@ const STR = {
   enterMobile: { en: 'Enter your registered mobile number', ar: 'أدخل رقم هاتفك المسجل' },
   mobileNumber: { en: 'Mobile Number', ar: 'رقم الهاتف' },
   enterMobilePh: { en: 'Enter mobile number', ar: 'أدخل رقم الهاتف' },
+  // {n} is filled with the selected country's digit count.
+  enterNDigits: { en: 'Enter {n} digit number', ar: 'أدخل رقمًا من {n} أرقام' },
+  phoneInvalid: { en: 'Enter a valid mobile number for the selected country.', ar: 'أدخل رقم هاتف محمول صالحًا للدولة المختارة.' },
   findMyPackages: { en: 'Find My Packages', ar: 'ابحث عن باقاتي' },
   secureNote: { en: 'We use your number to find your active packages securely.', ar: 'نستخدم رقمك للعثور على باقاتك النشطة بأمان.' },
   needAssistance: { en: 'Need assistance? Please contact the reception desk.', ar: 'بحاجة إلى مساعدة؟ يرجى التواصل مع مكتب الاستقبال.' },
@@ -194,7 +199,12 @@ export function LanguageProvider({ children }) {
     AsyncStorage.setItem(KEY, code).catch(() => {});
   }
 
-  const t = (key) => (STR[key] ? (STR[key][lang] || STR[key].en) : key);
+  // t('key') as before; t('key', { n: 10 }) fills {n} placeholders in the string.
+  const t = (key, vars) => {
+    const str = STR[key] ? (STR[key][lang] || STR[key].en) : key;
+    if (!vars) return str;
+    return str.replace(/\{(\w+)\}/g, (_, k) => (vars[k] ?? ''));
+  };
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
 
   return (

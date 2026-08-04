@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.CustomerInfoDialog">
+        <Dialog size="state.view === 'report' ? 'lg' : 'md'" title="'Customer Details'" contentClass="'sg-redeem-dialog'">
+            <t t-set-slot="header">
+                <h4 class="modal-title flex-grow-1 sg-redeem__dialog-title">Customer Details</h4>
+                <button type="button" class="btn-close" aria-label="Close" t-on-click="() => this.props.close()"/>
+            </t>
+
+            <div class="sg-redeem">
+                <img t-if="logoUrl and state.view !== 'report'" class="sg-redeem__logo" t-att-src="logoUrl" alt="Logo"/>
+
+                <!-- STEP 1: search -->
+                <t t-if="state.view === 'search'">
+                    <p class="sg-redeem__sub">Find a customer to view their details and sessions.</p>
+                    <div class="sg-redeem__search">
+                        <i class="fa fa-user sg-redeem__search-ico"/>
+                        <input type="text" class="sg-redeem__search-input" placeholder="Customer name or phone…"
+                               t-model="state.term" t-on-keyup="(ev) => this.onKey(ev)"/>
+                        <button class="sg-redeem__search-btn" t-on-click="() => this.search()">
+                            <i class="fa fa-search me-2"/>Search
+                        </button>
+                    </div>
+
+                    <p t-if="state.loading" class="text-muted mt-3">Searching…</p>
+                    <p t-if="state.searched and !state.loading and !state.customers.length" class="text-muted mt-3">
+                        No customer found for "<t t-esc="state.term"/>".
+                    </p>
+                    <p t-if="state.customers.length > 1" class="text-muted mb-2">
+                        <t t-esc="state.customers.length"/> people match — pick one:
+                    </p>
+                    <div class="sg-redeem__list">
+                        <button t-foreach="state.customers" t-as="c" t-key="c.id"
+                                class="sg-redeem__cust" t-on-click="() => this.select(c)">
+                            <span class="sg-redeem__cust-name" t-esc="c.name"/>
+                            <span class="sg-redeem__cust-phone text-muted" t-if="c.phone or c.whatsapp"
+                                  t-esc="c.phone or c.whatsapp"/>
+                            <i class="fa fa-chevron-right text-muted"/>
+                        </button>
+                    </div>
+                </t>
+
+                <!-- STEP 2: the customer's full profile + sessions -->
+                <t t-if="state.view === 'profile'">
+                    <div class="sg-redeem__head">
+                        <div>
+                            <div class="sg-redeem__who"><i class="fa fa-user me-1"/><t t-esc="state.partner.name"/></div>
+                            <button class="btn btn-link p-0" t-on-click="() => this.back()">
+                                <i class="fa fa-arrow-left me-1"/>Back to search
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="sg-redeem__profile">
+                        <div class="sg-redeem__prow" t-if="fmtAge(state.partner.dob) !== '' or state.partner.gender">
+                            <span t-if="fmtAge(state.partner.dob) !== ''"><i class="fa fa-birthday-cake me-1"/>Age <b t-esc="fmtAge(state.partner.dob)"/></span>
+                            <span t-if="state.partner.gender" class="ms-3"><i class="fa fa-venus-mars me-1"/><t t-esc="capGender(state.partner.gender)"/></span>
+                        </div>
+                        <div class="sg-redeem__prow" t-if="state.partner.dob"><i class="fa fa-calendar me-1"/>DOB: <t t-esc="state.partner.dob"/></div>
+                        <div class="sg-redeem__prow" t-if="state.partner.phone"><i class="fa fa-phone me-1"/><t t-esc="state.partner.phone"/></div>
+                        <div class="sg-redeem__prow" t-if="state.partner.whatsapp"><i class="fa fa-whatsapp me-1"/><t t-esc="state.partner.whatsapp"/></div>
+                    </div>
+
+                    <h5 class="tp-section">Therapy Sessions</h5>
+                    <p t-if="state.loading" class="text-muted">Loading…</p>
+                    <p t-if="!state.loading and !hasHistory" class="text-muted">
+                        No therapy history for this customer.
+                    </p>
+                    <div t-if="state.passes.length" class="sg-cust-summary">
+                        <span><b t-esc="totalUsed"/> taken</span>
+                        <span><b t-esc="totalLeft"/> remaining</span>
+                    </div>
+                    <div class="sg-redeem__passes">
+                        <div t-foreach="state.passes" t-as="p" t-key="p.id" class="sg-cust-pass"
+                             t-att-class="{ 'is-done': p.state === 'completed' }">
+                            <div class="sg-cust-pass__info">
+                                <div class="sg-cust-pass__name" t-esc="pkgName(p)"/>
+                                <div class="sg-cust-pass__count">
+                                    <t t-esc="p.sessions_used"/> taken · <b t-esc="p.sessions_left"/> of <t t-esc="p.sessions_total"/> left
+                                </div>
+                            </div>
+                            <div class="sg-cust-pass__btns">
+                                <button class="sg-pass-btn" title="Questions this customer answered for this service"
+                                        t-on-click="() => this.openAnswers(p)">
+                                    <i class="fa fa-question-circle"/>
+                                </button>
+                                <button class="sg-pass-btn sg-pass-btn--report" title="Full report for this service"
+                                        t-on-click="() => this.openReport(p)">
+                                    <i class="fa fa-file-text-o me-1"/>Reports
+                                </button>
+                            </div>
+                            <span class="sg-pill" t-att-class="p.state === 'active' ? 'sg-pill--green' : 'sg-pill--gray'"
+                                  t-esc="p.state === 'active' ? 'Active' : 'Completed'"/>
+                        </div>
+                    </div>
+
+                    <!-- one-off sessions: no pass exists for these -->
+                    <t t-if="state.singles.length">
+                        <h5 class="tp-section">Single Sessions &amp; Visits</h5>
+                        <div class="sg-redeem__passes">
+                            <div t-foreach="state.singles" t-as="s" t-key="s.key" class="sg-cust-pass">
+                                <div class="sg-cust-pass__info">
+                                    <div class="sg-cust-pass__name" t-esc="s.name"/>
+                                    <div class="sg-cust-pass__count">
+                                        <t t-esc="s.date or '—'"/>
+                                        <t t-if="s.ref"> · <t t-esc="s.ref"/></t>
+                                    </div>
+                                </div>
+                                <div class="sg-cust-pass__btns">
+                                    <button class="sg-pass-btn" title="Questions this customer answered for this session"
+                                            t-on-click="() => this.openSingleAnswers(s)">
+                                        <i class="fa fa-question-circle"/>
+                                    </button>
+                                    <button class="sg-pass-btn sg-pass-btn--report" title="Full report for this session"
+                                            t-on-click="() => this.openSingleReport(s)">
+                                        <i class="fa fa-file-text-o me-1"/>Reports
+                                    </button>
+                                </div>
+                                <span class="sg-pill" t-att-class="s.is_paid ? 'sg-pill--green' : 'sg-pill--amber'"
+                                      t-esc="s.state_label"/>
+                            </div>
+                        </div>
+                    </t>
+                </t>
+
+                <!-- STEP 3: questions &amp; answers for ONE service -->
+                <t t-if="state.view === 'qa'">
+                    <div class="sg-redeem__head">
+                        <div>
+                            <div class="sg-redeem__who"><i class="fa fa-question-circle me-1"/><t t-esc="state.qa.package"/></div>
+                            <button class="btn btn-link p-0" t-on-click="() => this.backToProfile()">
+                                <i class="fa fa-arrow-left me-1"/>Back to customer
+                            </button>
+                        </div>
+                    </div>
+
+                    <h5 class="tp-section">Questions &amp; Answers</h5>
+                    <p t-if="!state.qa.groups.length" class="text-muted">
+                        No questionnaire answers recorded for this service.
+                    </p>
+                    <p t-if="state.qa.groups.length > 1" class="text-muted mb-2">
+                        <t t-esc="state.qa.groups.length"/> questionnaires on file — newest first.
+                    </p>
+                    <div t-foreach="state.qa.groups" t-as="g" t-key="g_index" class="sg-qa-group">
+                        <div class="sg-qa-group__head">
+                            <i t-att-class="g.from_receipt ? 'fa fa-file-text-o me-1 text-muted' : 'fa fa-calendar-o me-1 text-muted'"/>
+                            <b t-esc="g.booking"/>
+                            <span class="sg-qa-src" t-esc="g.from_receipt ? 'receipt' : 'booking'"/>
+                            <span t-if="g.date" class="text-muted ms-2"><t t-esc="g.date"/></span>
+                            <span t-if="g.services.length" class="text-muted ms-2">· <t t-esc="g.services.join(', ')"/></span>
+                        </div>
+                        <div class="sg-ans-row" t-foreach="g.rows" t-as="qa" t-key="qa_index">
+                            <div class="sg-ans-q"><t t-esc="qa.question"/></div>
+                            <div class="sg-ans-a"><t t-esc="qa.answer"/></div>
+                        </div>
+                        <!-- What the customer signed for THIS service, beside the
+                             answers they gave for it. -->
+                        <div class="sg-qa-sign">
+                            <span class="sg-qa-sign__label">Customer signature</span>
+                            <img t-if="g.signature" class="sg-qa-sign__img"
+                                 t-att-src="sigSrc(g.signature)" alt="Customer signature"/>
+                            <span t-else="" class="text-muted sg-qa-sign__none">
+                                Not signed for this visit.
+                            </span>
+                            <span t-if="g.terms_accepted" class="sg-qa-sign__terms">
+                                <i class="fa fa-check me-1"/>Terms accepted
+                            </span>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- STEP 4: full report for ONE service -->
+                <t t-if="state.view === 'report'">
+                    <div class="sg-redeem__head">
+                        <div>
+                            <div class="sg-redeem__who"><i class="fa fa-file-text-o me-1"/><t t-esc="rep.package"/></div>
+                            <button class="btn btn-link p-0" t-on-click="() => this.backToProfile()">
+                                <i class="fa fa-arrow-left me-1"/>Back to customer
+                            </button>
+                        </div>
+                        <span class="sg-pill" t-att-class="rep.state_label === 'Active' ? 'sg-pill--green' : 'sg-pill--gray'"
+                              t-esc="rep.state_label"/>
+                    </div>
+
+                    <div class="sg-rep-meta">
+                        <div class="sg-rep-meta__row"><span>Customer</span><b t-esc="rep.customer"/></div>
+                        <div class="sg-rep-meta__row">
+                            <span>Invoice No</span>
+                            <b t-esc="rep.invoices.length ? rep.invoices.join(', ') : '—'"/>
+                        </div>
+                        <div class="sg-rep-meta__row"><span>Receipt No</span><b t-esc="rep.receipt_ref or rep.order_ref or '—'"/></div>
+                        <div class="sg-rep-meta__row"><span>Purchased</span><b t-esc="rep.purchase_date or '—'"/></div>
+                        <div class="sg-rep-meta__row" t-if="rep.channel_label"><span>Bought via</span><b t-esc="rep.channel_label"/></div>
+                        <div class="sg-rep-meta__row">
+                            <span t-esc="rep.single ? 'Booking Ref' : 'Pass Ref'"/>
+                            <b t-esc="rep.pass_name or '—'"/>
+                        </div>
+                    </div>
+
+                    <div class="sg-rep-tiles">
+                        <div class="sg-rep-tile" t-if="rep.single">
+                            <span>Session price</span><b t-esc="money(rep.session_price)"/>
+                        </div>
+                        <div class="sg-rep-tile">
+                            <span>
+                                <t t-if="rep.single">Receipt total</t>
+                                <t t-else="">Billed<t t-if="rep.documents.length > 1"> (<t t-esc="rep.documents.length"/> receipts)</t></t>
+                            </span>
+                            <b t-esc="money(rep.amount_total)"/>
+                        </div>
+                        <div class="sg-rep-tile is-paid"><span>Paid</span><b t-esc="money(rep.amount_paid)"/></div>
+                        <div class="sg-rep-tile" t-att-class="{ 'is-due': rep.amount_due > 0 }">
+                            <span>Due</span><b t-esc="money(rep.amount_due)"/>
+                        </div>
+                        <div class="sg-rep-tile" t-if="!rep.single"><span>Per session</span><b t-esc="money(rep.per_session)"/></div>
+                    </div>
+
+                    <h5 class="tp-section">Invoices &amp; Receipts</h5>
+                    <p t-if="!rep.documents.length" class="text-muted">Nothing billed for this service yet.</p>
+                    <div t-if="rep.documents.length" class="sg-rep-scroll">
+                        <table class="sg-rep-table">
+                            <thead>
+                                <tr>
+                                    <th>Receipt No</th><th>Invoice No</th><th>Date</th>
+                                    <th class="text-end">Total</th><th class="text-end">Paid</th><th class="text-end">Due</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="rep.documents" t-as="d" t-key="d_index"
+                                    t-att-class="{ 'sg-rep-row--due': d.due > 0 }">
+                                    <td>
+                                        <t t-esc="d.receipt or d.order_ref"/>
+                                        <span t-if="d.is_source" class="text-muted"> · purchase</span>
+                                    </td>
+                                    <td t-esc="d.invoice or '—'"/>
+                                    <td t-esc="d.date or '—'"/>
+                                    <td class="text-end" t-esc="money(d.total)"/>
+                                    <td class="text-end" t-esc="money(d.paid)"/>
+                                    <td class="text-end" t-esc="money(d.due)"/>
+                                </tr>
+                                <tr t-if="rep.documents.length > 1" class="sg-rep-row--total">
+                                    <td colspan="3">Total</td>
+                                    <td class="text-end" t-esc="money(rep.amount_total)"/>
+                                    <td class="text-end" t-esc="money(rep.amount_paid)"/>
+                                    <td class="text-end" t-esc="money(rep.amount_due)"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="tp-section">
+                        <t t-if="rep.single">Session</t>
+                        <t t-else="">
+                            Sessions — <t t-esc="rep.sessions_used"/> of <t t-esc="rep.sessions_total"/> taken,
+                            <t t-esc="rep.sessions_left"/> remaining
+                        </t>
+                    </h5>
+                    <div class="sg-rep-scroll">
+                        <table class="sg-rep-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th><th>Date</th><th>Status</th><th>Note</th><th class="text-end">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="rep.sessions" t-as="s" t-key="s.no"
+                                    t-att-class="'sg-rep-row--' + s.status">
+                                    <td t-esc="s.no"/>
+                                    <td t-esc="s.date or '—'"/>
+                                    <td>
+                                        <span class="sg-pill"
+                                              t-att-class="s.status === 'completed' ? 'sg-pill--green' : (s.status === 'scheduled' ? 'sg-pill--blue' : 'sg-pill--gray')"
+                                              t-esc="s.status_label"/>
+                                    </td>
+                                    <td class="text-muted" t-esc="s.note or (s.by ? 'by ' + s.by : '')"/>
+                                    <td class="text-end" t-esc="money(s.value)"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="tp-section">Payments</h5>
+                    <p t-if="!rep.payments.length" class="text-muted">
+                        No payment recorded against this package
+                        <t t-if="rep.amount_due > 0"> — <b t-esc="money(rep.amount_due)"/> is still due.</t>
+                    </p>
+                    <div t-if="rep.payments.length" class="sg-rep-scroll">
+                        <table class="sg-rep-table">
+                            <thead><tr><th>Receipt No</th><th>Method</th><th>Date</th><th class="text-end">Amount</th></tr></thead>
+                            <tbody>
+                                <tr t-foreach="rep.payments" t-as="pay" t-key="pay_index">
+                                    <td t-esc="pay.receipt"/>
+                                    <td><t t-esc="pay.method"/><span t-if="pay.is_change" class="text-muted"> (change)</span></td>
+                                    <td t-esc="pay.date or '—'"/>
+                                    <td class="text-end" t-esc="money(pay.amount)"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="tp-section">Questions &amp; Answers</h5>
+                    <p t-if="!rep.answers.length" class="text-muted">No questionnaire answers recorded for this service.</p>
+                    <div t-foreach="rep.answers" t-as="g" t-key="g_index" class="sg-qa-group">
+                        <div class="sg-qa-group__head">
+                            <i t-att-class="g.from_receipt ? 'fa fa-file-text-o me-1 text-muted' : 'fa fa-calendar-o me-1 text-muted'"/>
+                            <b t-esc="g.booking"/>
+                            <span class="sg-qa-src" t-esc="g.from_receipt ? 'receipt' : 'booking'"/>
+                            <span t-if="g.date" class="text-muted ms-2"><t t-esc="g.date"/></span>
+                        </div>
+                        <div class="sg-ans-row" t-foreach="g.rows" t-as="qa" t-key="qa_index">
+                            <div class="sg-ans-q"><t t-esc="qa.question"/></div>
+                            <div class="sg-ans-a"><t t-esc="qa.answer"/></div>
+                        </div>
+                        <!-- What the customer signed for THIS service, beside the
+                             answers they gave for it. -->
+                        <div class="sg-qa-sign">
+                            <span class="sg-qa-sign__label">Customer signature</span>
+                            <img t-if="g.signature" class="sg-qa-sign__img"
+                                 t-att-src="sigSrc(g.signature)" alt="Customer signature"/>
+                            <span t-else="" class="text-muted sg-qa-sign__none">
+                                Not signed for this visit.
+                            </span>
+                            <span t-if="g.terms_accepted" class="sg-qa-sign__terms">
+                                <i class="fa fa-check me-1"/>Terms accepted
+                            </span>
+                        </div>
+                    </div>
+                </t>
+
+                <p t-if="state.error" class="text-danger mt-2 mb-0"><t t-esc="state.error"/></p>
+            </div>
+
+            <t t-set-slot="footer">
+                <button t-if="state.view === 'report'" class="sg-redeem__closebtn sg-rep-print"
+                        t-on-click="() => this.printReport()">
+                    <i class="fa fa-print me-1"/>Print
+                </button>
+                <button t-if="state.view === 'qa'" class="sg-redeem__closebtn sg-rep-print"
+                        t-on-click="() => this.openSign()">
+                    <i class="fa fa-pencil-square-o me-1"/>Sign
+                </button>
+                <button t-if="state.view === 'qa' or state.view === 'report'" class="sg-redeem__closebtn sg-redeem__backbtn"
+                        t-on-click="() => this.backToProfile()">Back</button>
+                <button class="sg-redeem__closebtn" t-on-click="() => this.props.close()">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

@@ -9,7 +9,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
-import NexFooter from '../../components/NexFooter';
 import { useLang } from '../../LanguageContext';
 
 const SERIF = 'PlayfairDisplay_700Bold';
@@ -36,9 +35,10 @@ export default function LanguageSelectScreen({ onDone, onHome }) {
       <StatusBar style="dark" />
 
       <View style={[s.top, { paddingTop: insets.top + 28 }]}>
-        {/* Long-press the logo to end the session (reception only). */}
+        {/* NexGenn brand, moved up from the footer.
+            Long-press the logo to end the session (reception only). */}
         <TouchableOpacity onLongPress={onHome} delayLongPress={800} activeOpacity={1}>
-          <Image source={require('../../assets/stretchandgo_black.png')} style={s.logo} resizeMode="contain" />
+          <Image source={require('../../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
         </TouchableOpacity>
       </View>
 
@@ -62,8 +62,6 @@ export default function LanguageSelectScreen({ onDone, onHome }) {
           </View>
         </View>
       </View>
-
-      <NexFooter />
     </View>
   );
 }
@@ -71,7 +69,7 @@ export default function LanguageSelectScreen({ onDone, onHome }) {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.lavender },
   top: { alignItems: 'center', paddingBottom: 8 },
-  logo: { width: 190, height: 46 },
+  logo: { width: 210, height: 42 },   // 5:1, matching nexgen_dark.png
 
   body: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   globe: { width: 74, height: 74, borderRadius: 37, backgroundColor: COLORS.lavenderSoft, alignItems: 'center', justifyContent: 'center' },

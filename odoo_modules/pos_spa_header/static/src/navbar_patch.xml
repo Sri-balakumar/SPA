@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-inherit="point_of_sale.Navbar" t-inherit-mode="extension">
+        <!-- Hide the 1001/1002 open-order tabs.
+             IMPORTANT: hide, do NOT delete. Other POS modules anchor xpaths on
+             this node (pos_total_discount does `//OrderTabs position="after"`),
+             and Odoo 19 resolves t-inherit in the BROWSER - so removing the
+             node makes their inheritance throw
+             "Element ... cannot be located in element tree" while building
+             point_of_sale.Navbar, which takes the whole POS chrome down. -->
+        <xpath expr="//OrderTabs" position="attributes">
+            <attribute name="t-if">false</attribute>
+        </xpath>
+
+        <!-- Remove the now-dangling separator -->
+        <xpath expr="//div[hasclass('navbar-separator')]" position="replace"/>
+
+        <!-- Relabel core's "Register" button to "Services" -->
+        <xpath expr="//button[hasclass('register-label')]/span" position="replace">
+            <span t-if="!ui.isSmall">Services</span>
+        </xpath>
+
+        <!-- Append the spa buttons to the left nav.
+             `inside`, NOT `replace`: pos_restaurant injects its "Tables" button
+             and rewires `orders-button` to onTicketButtonClick INTO this same
+             div earlier in the asset order, so replacing the div silently
+             destroyed both (no way back to the floor plan). -->
+        <xpath expr="//div[hasclass('navbar-menu')]" position="inside">
+            <button class="customers-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.pos.selectPartner()">
+                <span t-if="!ui.isSmall">Customers</span>
+                <i t-else="" class="fa fa-fw fa-user"/>
+            </button>
+            <button class="new-service-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickNewService()">
+                <span t-if="!ui.isSmall">+ Service</span>
+                <i t-else="" class="fa fa-fw fa-plus"/>
+            </button>
+            <button class="questions-button btn btn-lg btn-light lh-lg"
+                    t-on-click="() => this.onClickNewQuestion()">
+                <span t-if="!ui.isSmall">Questions</span>
+                <i t-else="" class="fa fa-fw fa-question-circle"/>
+            </button>
+        </xpath>
+
+        <!-- Always show the daily Sales Report ("Print Report"), even without a printer -->
+        <xpath expr="//DropdownItem[@t-if='hardwareProxy.printer']" position="attributes">
+            <attribute name="t-if">true</attribute>
+        </xpath>
+    </t>
+
+</templates>

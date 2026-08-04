@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SalesReportDialog">
+        <Dialog size="'md'" title="'Sales Report'">
+            <div class="p-2">
+                <p class="text-muted mb-2">Choose a period — the report opens as a PDF.</p>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button class="btn btn-lg btn-primary" t-on-click="() => this.today()">Today</button>
+                    <button class="btn btn-lg btn-primary" t-on-click="() => this.yesterday()">Yesterday</button>
+                    <button class="btn btn-lg btn-secondary" t-on-click="() => this.thisWeek()">This Week</button>
+                    <button class="btn btn-lg btn-secondary" t-on-click="() => this.lastWeek()">Last Week</button>
+                    <button class="btn btn-lg btn-info" t-on-click="() => this.thisMonth()">This Month</button>
+                    <button class="btn btn-lg btn-info" t-on-click="() => this.lastMonth()">Last Month</button>
+                </div>
+                <hr/>
+                <div class="d-flex align-items-end flex-wrap gap-2">
+                    <div>
+                        <label class="form-label mb-1">From</label>
+                        <input type="date" class="form-control" t-model="state.from"/>
+                    </div>
+                    <div>
+                        <label class="form-label mb-1">To</label>
+                        <input type="date" class="form-control" t-model="state.to"/>
+                    </div>
+                    <button class="btn btn-lg btn-success" t-on-click="() => this.custom()">
+                        <i class="fa fa-file-pdf-o me-1"/>Generate
+                    </button>
+                </div>
+            </div>
+            <t t-set-slot="footer">
+                <button class="btn btn-secondary" t-on-click="() => this.props.close()">Close</button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

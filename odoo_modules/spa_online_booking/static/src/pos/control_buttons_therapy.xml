@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Remove the "Customer" (Select Partner) button from the order screen:
+         the customer is entered inside the Book Therapy flow instead. -->
+    <t t-inherit="point_of_sale.ControlButtons" t-inherit-mode="extension">
+        <xpath expr="//SelectPartnerButton" position="replace"/>
+    </t>
+
+</templates>
