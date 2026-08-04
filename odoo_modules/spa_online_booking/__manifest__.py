@@ -24,11 +24,12 @@
         'views/session_pass_views.xml',
         'views/res_partner_spa_views.xml',
         'report/pos_sales_report.xml',
-    ],
-    # Sample therapies / packages / questions so a fresh database has a
-    # catalogue for the tablet app and booking page to show.
-    'demo': [
-        'demo/spa_demo_data.xml',
+        # Starter catalogue: therapies, session packages and their questions.
+        # Listed as DATA, not demo — Odoo only reads the 'demo' key when a
+        # database is CREATED with demonstration data, so on an existing
+        # database a demo file never loads and the tablet finds no services.
+        # The records are noupdate="1", so edits made in Odoo survive upgrades.
+        'data/spa_starter_catalogue.xml',
     ],
     'assets': {
         'point_of_sale._assets_pos': [

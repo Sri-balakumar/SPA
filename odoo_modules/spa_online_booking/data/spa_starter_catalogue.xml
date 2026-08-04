@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<odoo>
+<!--
+    noupdate="1" means these records are created once, on install, and are then
+    left alone by later module upgrades. Without it, every upgrade would reset
+    any price or wording the spa team edited in Odoo back to what's written here.
+-->
+<odoo noupdate="1">
     <!--
-        Demo catalogue for the tablet app and the online booking page.
+        Starter catalogue for the tablet app and the online booking page.
+
+        Loaded as DATA rather than demo: Odoo only reads a manifest's 'demo'
+        key when a database is CREATED with demonstration data, so on an
+        existing database a demo file never loads at all — which is why the
+        tablet showed "no services available yet".
 
         Shape mirrors what GET /api/spa/therapies returns:
           THERAPY  = pos.category with spa_is_therapy = True

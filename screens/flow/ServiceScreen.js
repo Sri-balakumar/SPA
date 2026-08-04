@@ -202,8 +202,12 @@ const s = StyleSheet.create({
     shadowColor: '#4A2F6B', shadowOpacity: 0.15, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
   name: { flex: 1, fontSize: 15, fontWeight: '800', color: COLORS.purpleDeep, lineHeight: 19 },
-  descBox: { height: 66, marginTop: 16 },
-  desc: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 16.5 },
+  // Fixed height keeps every card the same size in the grid, but it must be
+  // TALLER than numberOfLines x lineHeight or it clips the last line through
+  // the middle. Integer lineHeight (not 16.5) avoids Android rounding it up
+  // past the box; 4 x 17 = 68, plus slack for font-metric differences.
+  descBox: { height: 72, marginTop: 16, justifyContent: 'flex-start' },
+  desc: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
   priceBar: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.lavenderSoft,
     marginHorizontal: -14, marginTop: 14, paddingHorizontal: 14, paddingVertical: 15, borderTopLeftRadius: 22,
