@@ -13,7 +13,7 @@ import AppAlert from '../../components/AppAlert';
 import StepHeader from '../../components/StepHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
-import SignaturePad from '../../components/SignaturePad';
+import PersonBanner from '../../components/PersonBanner';
 import { loadQuestions } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 
@@ -36,16 +36,22 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
   const [questions, setQuestions] = useState(null);
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState({});   // { [qid]: string | string[] }
-  const [agree, setAgree] = useState(false);    // must accept before signing
 
   async function fetch() {
     setError('');
     try {
-      const qs = await loadQuestions(form.serviceId, lang);
+      const { questions: qs, disclaimer } = await loadQuestions(form.serviceId, lang);
       setQuestions(qs);
+      // Carried on the form so App.js can decide whether the disclaimer screen
+      // exists at all. It has to be known before Next is pressed here, which is
+      // why it rides along on this call rather than having its own.
+      set({ disclaimer });
     } catch (e) {
       setError(e.message || 'Could not load questions.');
       setQuestions([]);
+      // Do not strand the customer on a network blip: with no disclaimer the
+      // flow steps over that screen rather than showing an empty one.
+      set({ disclaimer: null });
     }
   }
   useEffect(() => { fetch(); }, [form.serviceId]);
@@ -55,6 +61,26 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
   const showAlert = (title, message, tone = 'error') => setAlertBox({ title, message, tone });
 
   const setAns = (qid, val) => setAnswers((a) => ({ ...a, [qid]: val }));
+
+  // Copy person 1's answers onto this person. Reads the SAVED lead, not the live
+  // form, because the form now holds this person's own working set.
+  function copyLeadAnswers() {
+    const lead = (form.members || [])[0];
+    const src = (lead && lead.answers) || [];
+    const byId = {};
+    src.forEach((a) => { if (a && a.questionId != null) byId[a.questionId] = a.value; });
+    // proceed() flattens a multi_choice answer to "a, b" on the way out, so it
+    // has to be split back into a list here or its options render unticked.
+    const next = {};
+    (questions || []).forEach((q) => {
+      const v = byId[q.id];
+      if (v == null || v === '') return;
+      next[q.id] = q.type === 'multi_choice'
+        ? String(v).split(',').map((x) => x.trim()).filter(Boolean)
+        : v;
+    });
+    setAnswers(next);
+  }
   function toggleMulti(qid, opt) {
     setAnswers((a) => {
       const cur = Array.isArray(a[qid]) ? a[qid] : [];
@@ -68,8 +94,8 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
       if (q.required && empty) return showAlert(t('required'), `${t('answerThis')} ${q.name}`);
     }
-    if (!agree) return showAlert(t('missing'), t('agreeFirst'));
-    if (!form.signature) return showAlert(t('missing'), t('signatureRequired'));
+    // Consent is checked on the disclaimer screen now, against the wording the
+    // customer was actually shown.
     const out = questions.map((q) => ({
       questionId: q.id,
       value: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : (answers[q.id] || ''),
@@ -90,6 +116,17 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+            <PersonBanner form={form} />
+
+            {/* Ten questions for a family of four is forty answers at a busy
+                counter; without this the family flow is unusable. Everything
+                stays editable afterwards. */}
+            {(form.memberIndex || 0) > 0 && questions.length ? (
+              <TouchableOpacity style={s.copyBtn} onPress={copyLeadAnswers} activeOpacity={0.8}>
+                <Text style={s.copyTxt}>{t('copyAnswers')}</Text>
+              </TouchableOpacity>
+            ) : null}
+
             {questions.length === 0 && (
               <Text style={s.none}>{t('noQuestions')}</Text>
             )}
@@ -141,20 +178,10 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
               </View>
             ))}
 
-            {/* Consent — must agree before the signature pad opens */}
-            <TouchableOpacity style={s.agree} activeOpacity={0.8} onPress={() => setAgree((v) => !v)}>
-              <View style={[s.abox, agree && s.aboxOn]}>{agree && <Text style={s.atick}>✓</Text>}</View>
-              <Text style={[s.agreeTxt, rtl && s.rtl]}>{t('agreeText')}</Text>
-            </TouchableOpacity>
-
-            {agree && (
-              <View style={{ marginBottom: 8 }}>
-                <SignaturePad
-                  label={t('signature')} required
-                  hint={t('signHint')} clearLabel={t('clearSign')}
-                  onChange={(sig) => set({ signature: sig })} rtl={rtl} />
-              </View>
-            )}
+            {/* No consent block here. The tick and the signature moved to the
+                disclaimer screen, so they are given on the page carrying the
+                wording being agreed to. A therapy with no waiver asks for
+                neither - the same as the POS and the booking page. */}
 
             <Button title={t('next')} onPress={proceed} style={{ marginTop: 12 }} />
           </ScrollView>
@@ -201,14 +228,11 @@ const s = StyleSheet.create({
     borderBottomWidth: 1.5, borderBottomColor: COLORS.line, paddingBottom: 8,
   },
   rtl: { textAlign: 'right', writingDirection: 'rtl' },
-
-  // consent + signature
-  agree: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 8, marginBottom: 14, paddingHorizontal: 2 },
-  abox: {
-    width: 24, height: 24, borderRadius: 7, borderWidth: 1.8, borderColor: COLORS.purple,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12, marginTop: 1, backgroundColor: '#fff',
+  copyBtn: {
+    alignSelf: 'flex-start', borderWidth: 1.5, borderColor: COLORS.purple, borderRadius: 999,
+    paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16,
   },
-  aboxOn: { backgroundColor: COLORS.purple },
-  atick: { color: '#fff', fontSize: 15, fontWeight: '900' },
-  agreeTxt: { flex: 1, fontSize: 13.5, color: COLORS.ink, fontWeight: '600', lineHeight: 19 },
+  copyTxt: { color: COLORS.purple, fontWeight: '800', fontSize: 13 },
+  // The consent and signature styles moved to DisclaimerScreen with the
+  // controls they belonged to.
 });

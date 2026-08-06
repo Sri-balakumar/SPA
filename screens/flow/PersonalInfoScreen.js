@@ -21,6 +21,7 @@ import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
 import CodePicker from '../../components/CodePicker';
 import AppAlert from '../../components/AppAlert';
+import PersonBanner from '../../components/PersonBanner';
 import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
@@ -74,8 +75,13 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   const { width } = useWindowDimensions();
   const contentW = Math.min(width - 32, 480);
 
-  const [mode, setMode] = useState('lookup');       // 'lookup' | 'profiles' | 'form'
-  const [prevMode, setPrevMode] = useState('lookup'); // where the form was opened from
+  // Only the LEAD goes through the phone lookup. Persons 2+ on a family booking
+  // may have no number at all - a parent books for their children - so there is
+  // nothing to look them up by, and the lead's matched contact must not be
+  // replaced by theirs. They open straight on the form.
+  const isLead = (form.memberIndex || 0) === 0;
+  const [mode, setMode] = useState(isLead ? 'lookup' : 'form');
+  const [prevMode, setPrevMode] = useState(isLead ? 'lookup' : 'form'); // where the form was opened from
   const [lookupCc, setLookupCc] = useState(form.countryCode || '+968');
   const [lookupIso, setLookupIso] = useState(form.countryIso || 'OM');
   const [lookupNum, setLookupNum] = useState(form.phone || '');
@@ -141,6 +147,11 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       gender: normGender(c.gender),
       email: c.email || '',
       countryCode: cc,
+      // The ISO has to travel with the dial code. phoneRule() keys off the ISO,
+      // not the code, and it falls back to Oman - 8 digits - when the ISO is
+      // missing. So carrying +91 across without 'IN' left the form showing India
+      // while silently refusing the 9th and 10th digit.
+      countryIso: lookupIso,
       phone: phoneNum,
       whatsapp: same ? phoneNum : waNum,
       whatsappSame: same,
@@ -154,7 +165,10 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   function registerNew() {
     set({
       fullName: '', dob: '', dobISO: '', age: '', gender: '', email: '',
-      countryCode: lookupCc, phone: lookupNum.trim(), whatsapp: lookupNum.trim(),
+      // countryIso travels with the code - see selectProfile. Without it the
+      // form falls back to Oman's 8 digits whatever country was picked here.
+      countryCode: lookupCc, countryIso: lookupIso,
+      phone: lookupNum.trim(), whatsapp: lookupNum.trim(),
       whatsappSame: true, existingCustomerId: null,
     });
     setPrevMode(mode);                                    // remember lookup vs profiles for Back
@@ -182,11 +196,19 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     // DOB is required for brand-new customers; returning ones may not have it on file yet.
     if (!form.existingCustomerId && !form.dob) return showAlert(t('missing'), t('selectDob'));
     if (!form.gender) return showAlert(t('missing'), t('selectGender'));
-    if (!form.phone.trim()) return showAlert(t('missing'), t('enterPhone'));
-    if (badPhone || badWa) return showAlert(t('missing'), t('phoneInvalid'));
-    if (!form.whatsapp.trim()) return showAlert(t('missing'), t('enterWhatsapp'));
-    // Email is required and must be a Gmail address.
-    if (!emailOk) return showAlert(t('invalidEmail'), t('gmailOnly'));
+    // Contact details are the LEAD's: the booking is confirmed on that number
+    // and billed to that contact. Demanding one from everybody would make it
+    // impossible to book for a child.
+    if (isLead) {
+      if (!form.phone.trim()) return showAlert(t('missing'), t('enterPhone'));
+      if (badPhone || badWa) return showAlert(t('missing'), t('phoneInvalid'));
+      if (!form.whatsapp.trim()) return showAlert(t('missing'), t('enterWhatsapp'));
+      // Email is required and must be a Gmail address.
+      if (!emailOk) return showAlert(t('invalidEmail'), t('gmailOnly'));
+    } else if (form.email && !emailOk) {
+      // Optional for a member, but still has to be a real address if given.
+      return showAlert(t('invalidEmail'), t('gmailOnly'));
+    }
     // Belt & braces: the picker's maximumDate already blocks future dates, but
     // guard the stored value too in case it ever arrives from elsewhere.
     if (form.dobISO && new Date(form.dobISO) > new Date())
@@ -196,7 +218,10 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
 
   // Back: profiles → lookup; form → wherever it was opened from (profiles or lookup).
   const backToLookup = () => { setMode('lookup'); setNotFound(false); };
-  const backFromForm = () => { setMode(prevMode); };
+  // A member never came from the lookup, so there is nothing to go back to
+  // within this screen - hand Back to the flow, which returns to the previous
+  // person. Without this a member's Back button would do nothing at all.
+  const backFromForm = () => { if (isLead) setMode(prevMode); else onBack(); };
 
   // ---------- 1) LOOKUP ----------
   if (mode === 'lookup') {
@@ -294,6 +319,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+          <PersonBanner form={form} />
+
           {/* Full Name */}
           <Text style={s.label}>{t('fullName')} <Text style={s.req}>*</Text></Text>
           <View style={s.field}>
@@ -334,35 +361,56 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
             </View>
           </View>
 
-          {/* Phone */}
-          <Text style={s.label}>{t('phone')} <Text style={s.req}>*</Text></Text>
-          <View style={[s.field, badPhone && s.fieldError]}>
-            <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
-            <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
-              keyboardType="phone-pad" maxLength={formRule.len} value={form.phone} onChangeText={onPhone} />
-          </View>
-          {badPhone && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
+          {/* Contact details — LEAD ONLY. The booking is confirmed on this
+              number and billed to this contact, so it belongs to the person who
+              is paying and must survive being on person 2's screen. */}
+          {isLead ? (
+            <>
+              {/* Phone */}
+              <Text style={s.label}>{t('phone')} <Text style={s.req}>*</Text></Text>
+              <View style={[s.field, badPhone && s.fieldError]}>
+                <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
+                <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
+                  keyboardType="phone-pad" maxLength={formRule.len} value={form.phone} onChangeText={onPhone} />
+              </View>
+              {badPhone && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
-          {/* WhatsApp same-as-phone */}
-          <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={toggleSame}>
-            <View style={[s.box, form.whatsappSame && s.boxOn]}>
-              {form.whatsappSame && <Text style={s.tick}>✓</Text>}
-            </View>
-            <Text style={s.checkTxt}>{t('whatsappSame')}</Text>
-          </TouchableOpacity>
+              {/* WhatsApp same-as-phone */}
+              <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={toggleSame}>
+                <View style={[s.box, form.whatsappSame && s.boxOn]}>
+                  {form.whatsappSame && <Text style={s.tick}>✓</Text>}
+                </View>
+                <Text style={s.checkTxt}>{t('whatsappSame')}</Text>
+              </TouchableOpacity>
 
-          {/* WhatsApp */}
-          <Text style={s.label}>{t('whatsapp')} <Text style={s.req}>*</Text></Text>
-          <View style={[s.field, form.whatsappSame && s.readonly, badWa && s.fieldError]}>
-            <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
-            <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
-              keyboardType="phone-pad" maxLength={formRule.len} editable={!form.whatsappSame}
-              value={form.whatsapp} onChangeText={(v) => set({ whatsapp: digitsOnly(v) })} />
-          </View>
-          {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
+              {/* WhatsApp */}
+              <Text style={s.label}>{t('whatsapp')} <Text style={s.req}>*</Text></Text>
+              <View style={[s.field, form.whatsappSame && s.readonly, badWa && s.fieldError]}>
+                <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
+                <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
+                  keyboardType="phone-pad" maxLength={formRule.len} editable={!form.whatsappSame}
+                  value={form.whatsapp} onChangeText={(v) => set({ whatsapp: digitsOnly(v) })} />
+              </View>
+              {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
+            </>
+          ) : (
+            /* Persons 2+ get one plain optional number. Its own field, not
+               `phone`: that one is the lead's and the booking rides on it. */
+            <>
+              <Text style={s.label}>{t('memberPhone')}</Text>
+              <View style={s.field}>
+                <TextInput style={s.input} placeholder={t('phonePh')} placeholderTextColor="#B4A9C4"
+                  keyboardType="phone-pad" maxLength={20}
+                  value={form.memberPhone} onChangeText={(v) => set({ memberPhone: digitsOnly(v) })} />
+              </View>
+            </>
+          )}
 
-          {/* Email */}
-          <Text style={s.label}>{t('email')} <Text style={s.req}>*</Text></Text>
+          {/* Email — required of the lead (the booking confirmation goes there),
+              optional for everyone else. */}
+          <Text style={s.label}>
+            {t('email')} {isLead ? <Text style={s.req}>*</Text> : null}
+          </Text>
           <View style={[s.field, badEmail && s.fieldError]}>
             <TextInput style={s.input} placeholder="name@gmail.com" placeholderTextColor="#B4A9C4"
               keyboardType="email-address" autoCapitalize="none" autoCorrect={false}

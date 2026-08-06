@@ -34,9 +34,55 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
       description: p.session_desc || (p.details && p.details[0] && p.details[0].description) || '',
       duration: p.duration_minutes || 0,
       price: p.price, save: p.save || 0,
+      // Carried through so the next screen can offer the extras and price the
+      // family sizes without re-fetching the catalogue.
+      //   addons - [{ id, name, price, image_url }], merged server-side from the
+      //            add-on product category and this package's own upsell list
+      //   prices - { member_type: amount }; a member type ABSENT from this map
+      //            means the package is not sold to that family size at all
+      addons: p.addons || [],
+      prices: p.prices || {},
     };
   });
   const [selected, setSelected] = useState(null);
+
+  // ---- Individual / Family tabs ----
+  const memberType = form.memberType || 'individual';
+
+  // Only the member types this therapy actually prices. A spa selling individual
+  // packages only then sees no tab bar at all, rather than three empty tabs.
+  // The labels come from the backend, so adding a type in Odoo reaches the
+  // tablet without a release.
+  const priced = new Set();
+  packages.forEach((p) => {
+    Object.keys(p.prices && Object.keys(p.prices).length ? p.prices : { individual: 0 })
+      .forEach((k) => priced.add(k));
+  });
+  const memberTabs = (form.memberTypes || []).filter((m) => priced.has(m.key));
+
+  // What one package costs on the selected tab, or null when it is not sold to
+  // that member type. Availability and price are the same question.
+  function priceFor(p) {
+    const map = p.prices || {};
+    // An older backend sends no prices map at all; fall back to the product's
+    // own price, which IS the individual price.
+    if (!Object.keys(map).length) return memberType === 'individual' ? p.price : null;
+    const v = map[memberType];
+    return v === undefined || v === null ? null : v;
+  }
+
+  // A package with no price for this tab is left out entirely - an empty cell
+  // means "not offered", not "same price as individual".
+  const visible = packages.filter((p) => priceFor(p) !== null);
+
+  function pickMemberType(key) {
+    // Clearing the selection is deliberate: the package list itself changes, so
+    // an index into the old list would point at the wrong row. `members` is
+    // deliberately NOT cleared - the same customer is still booking, and
+    // retyping person 1 because they switched Family 2 to Family 3 is needless.
+    setSelected(null);
+    set({ memberType: key, addonIds: [] });
+  }
 
   // Package names and descriptions come from Odoo and were captured on the
   // Service page in whatever language was active THEN — switching language here
@@ -57,9 +103,21 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
   }, [lang]);
 
   function cont() {
-    const pkg = packages[selected];
+    const pkg = visible[selected];
     // serviceId = the PACKAGE id — that's what /questions and /tab/submit expect.
-    set({ serviceId: pkg.id, package: pkg, packageName: pkg.name, servicePrice: pkg.price });
+    // addonIds is cleared here rather than merged: the extras on offer belong to
+    // the package, so an id ticked on a previous choice must not survive into a
+    // package that does not offer it.
+    // servicePrice is the price for the CHOSEN member type, not the individual
+    // one - a Family 3 customer must be quoted what they will actually be charged.
+    const price = priceFor(pkg);
+    set({
+      serviceId: pkg.id,
+      package: { ...pkg, price },
+      packageName: pkg.name,
+      servicePrice: price,
+      addonIds: [],
+    });
     next();
   }
 
@@ -77,8 +135,31 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 100 }]}>
         <View style={{ width: contentW }}>
+          {/* Shown only when this therapy really has more than one member type,
+              so a spa selling individual packages only never sees a row of tabs
+              where three of them are empty. */}
+          {memberTabs.length > 1 ? (
+            <>
+              <Text style={[s.sectionTitle, rtl && s.rtlTxt]}>{t('memberType')}</Text>
+              <View style={[s.mtabs, rtl && s.mtabsRtl]}>
+                {memberTabs.map((m) => {
+                  const on = m.key === memberType;
+                  return (
+                    <TouchableOpacity key={m.key} onPress={() => pickMemberType(m.key)}
+                      style={[s.mtab, on && s.mtabOn]} activeOpacity={0.85}>
+                      <Text style={[s.mtabTxt, on && s.mtabTxtOn]}>{m.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
           <Text style={[s.sectionTitle, rtl && s.rtlTxt]}>{t('availablePackages')}</Text>
-          {packages.map((p, i) => {
+          {!visible.length ? (
+            <Text style={[s.noPkg, rtl && s.rtlTxt]}>{t('noPackagesForOption')}</Text>
+          ) : null}
+          {visible.map((p, i) => {
             const active = selected === i;
             return (
               <TouchableOpacity key={p.key} activeOpacity={0.9} onPress={() => setSelected(i)}
@@ -91,12 +172,23 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
                   <Text style={[s.pkgSessions, rtl && s.rtlTxt]}>{p.sessionsLabel}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={s.pkgPrice}>OMR {toDigits(p.price, lang)}</Text>
-                  {p.save > 0 && <Text style={s.pkgSave}>{t('saveWord')} OMR {toDigits(p.save, lang)}</Text>}
+                  <Text style={s.pkgPrice}>OMR {toDigits(priceFor(p), lang)}</Text>
+                  {/* The "Save X" figure is computed against the individual
+                      price, so it only means anything on that tab. */}
+                  {p.save > 0 && memberType === 'individual'
+                    ? <Text style={s.pkgSave}>{t('saveWord')} OMR {toDigits(p.save, lang)}</Text>
+                    : null}
                 </View>
               </TouchableOpacity>
             );
           })}
+
+          {/* Commercial small print, e.g. "Prices in OMR • Valid 3 months".
+              Written in Odoo Settings rather than hard-coded here, because it
+              states terms that change without a release. */}
+          {form.packageNote ? (
+            <Text style={[s.pkgNote, rtl && s.rtlTxt]}>{form.packageNote}</Text>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -144,5 +236,22 @@ const s = StyleSheet.create({
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingTop: 10, backgroundColor: 'rgba(245,239,251,0.96)' },
   cta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.purple, borderRadius: 999, paddingVertical: 16 },
   ctaTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  pkgNote: { fontSize: 12.5, color: COLORS.muted, marginTop: 6, marginBottom: 4, lineHeight: 18, fontStyle: 'italic' },
+  noPkg: { fontSize: 14, color: COLORS.muted, textAlign: 'center', paddingVertical: 22 },
+
+  // Individual / Family tabs. Wraps rather than scrolls: four across is
+  // unreadable on a narrow tablet, and a hidden tab is a hidden price.
+  mtabs: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16 },
+  mtabsRtl: { flexDirection: 'row-reverse' },
+  mtab: {
+    paddingVertical: 10, paddingHorizontal: 18, borderRadius: 999, marginRight: 8, marginBottom: 8,
+    backgroundColor: '#fff', borderWidth: 1.6, borderColor: COLORS.line,
+  },
+  // The selected tab reads as selected on its own, not only by contrast with
+  // its neighbours - reception and customers scan this at a glance.
+  mtabOn: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
+  mtabTxt: { fontSize: 13.5, fontWeight: '700', color: COLORS.purpleDeep },
+  mtabTxtOn: { color: '#fff' },
+
   rtlTxt: { textAlign: 'right', writingDirection: 'rtl' },
 });

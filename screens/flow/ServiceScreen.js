@@ -42,6 +42,16 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
     try {
       const data = await loadTherapies(lang);
       setServices(data.therapies || []);
+      // Top-level catalogue settings, carried on the form because the screens
+      // that need them are further down the flow and do not re-fetch:
+      //   package_note  - commercial small print under the package list
+      //   member_types  - the Individual / Family tabs the spa actually offers
+      // Both come from the backend so adding one in Odoo reaches the tablet
+      // without a release.
+      set({
+        packageNote: data.package_note || '',
+        memberTypes: data.member_types || [],
+      });
     } catch (e) {
       setError(e.message || 'Could not load services.');
       setServices([]);

@@ -81,7 +81,32 @@ const STR = {
   clearSign: { en: 'Clear', hi: 'साफ़ करें', ar: 'مسح' },
   signatureRequired: { en: 'Please sign in the box to continue.', hi: 'जारी रखने के लिए कृपया बॉक्स में हस्ताक्षर करें।', ar: 'يرجى التوقيع في المربع للمتابعة.' },
   agreeText: { en: 'I agree to the terms and conditions and confirm the details above are correct.', hi: 'मैं नियम और शर्तों से सहमत हूँ और पुष्टि करता/करती हूँ कि ऊपर दिए गए विवरण सही हैं।', ar: 'أوافق على الشروط والأحكام وأؤكد أن التفاصيل أعلاه صحيحة.' },
-  agreeFirst: { en: 'Please tick “I agree” before signing.', hi: 'हस्ताक्षर करने से पहले कृपया "मैं सहमत हूँ" पर टिक करें।', ar: 'يرجى تحديد "أوافق" قبل التوقيع.' },
+  agreeFirst: { en: 'Please tick “I agree” before signing.', hi: 'हस्ताक्षर करने से पहले कृपया "मैं सहमत हूँ" पर टिक करें।', ar: 'يरجى تحديد "أوافق" قبل التوقيع.' },
+
+  // disclaimer screen — the waiver's own title and body are written per therapy
+  // in Odoo and translated there, so they are not repeated here. These are only
+  // the surrounding chrome.
+  disclaimerTitle: { en: 'Disclaimer', ar: 'إخلاء المسؤولية' },
+  disclaimerSub: { en: 'Please read and accept to continue', ar: 'يرجى القراءة والموافقة للمتابعة' },
+  clientInfo: { en: 'Client Information', ar: 'معلومات العميل' },
+  agreeToThis: { en: 'I have read and accept the above.', ar: 'لقد قرأت وأوافق على ما ورد أعلاه.' },
+
+  // member types / family bookings
+  memberType: { en: 'Who is this for?', ar: 'لمن هذا الحجز؟' },
+  noPackagesForOption: { en: 'No packages for this option yet.', ar: 'لا توجد باقات لهذا الخيار بعد.' },
+  // %1 = this person's number, %2 = how many the package covers
+  personOf: { en: 'Person %1 of %2', ar: 'الشخص %1 من %2' },
+  leadPersonNote: { en: 'Books and pays for the session.', ar: 'يحجز ويدفع مقابل الجلسة.' },
+  memberPersonNote: { en: 'Phone and email are optional for this person.', ar: 'الهاتف والبريد الإلكتروني اختياريان لهذا الشخص.' },
+  copyAnswers: { en: 'Same answers as Person 1', ar: 'نفس إجابات الشخص 1' },
+  memberPhone: { en: 'Phone Number (optional)', ar: 'رقم الهاتف (اختياري)' },
+  peopleLabel: { en: 'People', ar: 'الأشخاص' },
+
+  // optional extras
+  addonsTitle: { en: 'Optional Extras', ar: 'إضافات اختيارية' },
+  addonsHint: { en: 'Tick anything you would like to add.', ar: 'حدّد ما ترغب في إضافته.' },
+  reviewTotal: { en: 'Total', ar: 'الإجمالي' },
+  addonsLabel: { en: 'Extras', ar: 'الإضافات' },
 
   // health
   healthTitle: { en: 'Your Health & Preferences', hi: 'आपका स्वास्थ्य और प्राथमिकताएँ', ar: 'صحتك وتفضيلاتك' },

@@ -24,6 +24,7 @@ import PackagesScreen from './screens/flow/PackagesScreen';
 import PackageDetailsScreen from './screens/flow/PackageDetailsScreen';
 import PersonalInfoScreen from './screens/flow/PersonalInfoScreen';
 import HealthScreen from './screens/flow/HealthScreen';
+import DisclaimerScreen from './screens/flow/DisclaimerScreen';
 import ReviewScreen from './screens/flow/ReviewScreen';
 import SuccessScreen from './screens/flow/SuccessScreen';
 
@@ -40,6 +41,32 @@ const EMPTY_FORM = {
   fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', countryIso: 'OM', phone: '', whatsapp: '', whatsappSame: true,
   email: '', signature: '',
   answers: [],
+  // The chosen therapy's waiver, loaded with its questions on the Health screen:
+  // { title, body, allowUpload } or null. null means the therapy has none, and
+  // the disclaimer step is skipped rather than shown empty.
+  disclaimer: null,
+  terms: false,
+  // Optional extras: IDS ONLY. Prices are always read back off the package
+  // payload, so a stale number can never reach the total or the booking.
+  addonIds: [],
+  // Top-level catalogue settings, filled on the Service screen.
+  packageNote: '', memberTypes: [],
+  // Which Individual / Family option was chosen, and everyone it covers.
+  //
+  // ONE set of screens filled N times, not N copies on screen: the details form
+  // and the signature pad both reach for fixed refs, so a second copy at once
+  // would collide with the first. The scalar fields above (fullName, dob,
+  // gender, email, answers, signature, terms) are the WORKING SET for whoever
+  // is on screen; savePerson stores them into members[] and loadPerson brings
+  // the next person's back.
+  memberType: 'individual',
+  members: [],
+  memberIndex: 0,
+  // Persons 2+ type a plain optional number here. Kept OFF `phone` on purpose:
+  // that field, its country code and the matched contact belong to the lead and
+  // must survive being on person 2's screen - they are what the booking is
+  // contacted on.
+  memberPhone: '',
   therapist: '', date: '', time: '', branch: '', specialRequests: '', paymentMode: 'offline',
 };
 
@@ -51,6 +78,101 @@ function CustomerFlow() {
   // the New/Existing choice — not re-open language select. A fresh session resets it.
   const [langPicked, setLangPicked] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+
+  // ---- the people this booking covers ----
+  // How many the chosen family size covers. Mirrors spa_headcount() on the
+  // server, which re-checks - so a wrong number here is refused, not booked.
+  const headcount = () => ({ family_2: 2, family_3: 3, family_4: 4 }[form.memberType] || 1);
+  const isLastPerson = () => form.memberIndex >= headcount() - 1;
+
+  const blankPerson = () => ({
+    name: '', dob: '', dobISO: '', age: '', gender: '', phone: '', email: '',
+    answers: [], terms: false, signature: '',
+  });
+
+  // Snapshot the working set onto the person being filled, on the way out.
+  function savePerson(f) {
+    const people = [...(f.members || [])];
+    people[f.memberIndex] = {
+      name: f.fullName, dob: f.dob, dobISO: f.dobISO, age: f.age, gender: f.gender,
+      // The lead is contacted on `phone`; everyone else has their own optional one.
+      phone: f.memberIndex === 0 ? f.phone : f.memberPhone,
+      email: f.email, answers: f.answers, terms: f.terms, signature: f.signature,
+    };
+    return people;
+  }
+
+  // Bring person `i` back into the working set. Deliberately does NOT touch
+  // phone / whatsapp / countryCode / existingCustomerId: those hold the lead's
+  // contact details, which the booking is made on and which have to still be
+  // there when we come back to submit it.
+  function loadPerson(people, i) {
+    const p = people[i] || blankPerson();
+    return {
+      memberIndex: i,
+      fullName: p.name || '', dob: p.dob || '', dobISO: p.dobISO || '',
+      age: p.age || '', gender: p.gender || '', email: p.email || '',
+      answers: p.answers || [], terms: !!p.terms, signature: p.signature || '',
+      memberPhone: i === 0 ? '' : (p.phone || ''),
+    };
+  }
+
+  // Leaving the package screen starts the cycle: size the list to the family,
+  // keeping anyone already entered, then always repaint from person 1.
+  //
+  // The repaint matters. Without it the form keeps whoever was entered last:
+  // fill in person 3 of a Family 4, go Back and switch to Family 2, and their
+  // name and date of birth reappear labelled "Person 1 of 2" - booking one
+  // person under another's details.
+  function startPeople() {
+    setForm((f) => {
+      const want = ({ family_2: 2, family_3: 3, family_4: 4 }[f.memberType] || 1);
+      const kept = (f.members || []).slice(0, want);
+      while (kept.length < want) kept.push(blankPerson());
+      return { ...f, members: kept, ...loadPerson(kept, 0) };
+    });
+    setStep('personal');
+  }
+
+  // End of one person's turn - the disclaimer, or the questions when the therapy
+  // has no waiver. Either start the next person or move on to Review.
+  function endOfPerson() {
+    setForm((f) => {
+      const people = savePerson(f);
+      const last = f.memberIndex >= (({ family_2: 2, family_3: 3, family_4: 4 }[f.memberType] || 1) - 1);
+      if (last) { setStep('review'); return { ...f, members: people }; }
+      setStep('personal');
+      return { ...f, members: people, ...loadPerson(people, f.memberIndex + 1) };
+    });
+  }
+
+  // A therapy with no waiver has no disclaimer screen at all. Both directions
+  // consult this, so Back can never land on the blank page Next stepped over.
+  const afterHealth = () => (form.disclaimer ? setStep('disclaimer') : endOfPerson());
+  const lastScreenOfPerson = () => (form.disclaimer ? 'disclaimer' : 'health');
+
+  // Back off person N's details returns to person N-1's LAST screen, with their
+  // data reloaded - otherwise the previous person's form would be shown filled
+  // with the current one's answers.
+  function backFromPersonal() {
+    if (form.memberIndex <= 0) { setStep('packageDetails'); return; }
+    setForm((f) => {
+      const people = savePerson(f);
+      setStep(f.disclaimer ? 'disclaimer' : 'health');
+      return { ...f, members: people, ...loadPerson(people, f.memberIndex - 1) };
+    });
+  }
+
+  // Back off Review returns to the LAST person, since they are who was on screen
+  // when Review was reached.
+  function backFromReview() {
+    setForm((f) => {
+      const want = ({ family_2: 2, family_3: 3, family_4: 4 }[f.memberType] || 1);
+      const people = [...(f.members || [])];
+      setStep(f.disclaimer ? 'disclaimer' : 'health');
+      return { ...f, ...loadPerson(people, Math.max(0, want - 1)) };
+    });
+  }
 
   // Home = hand the tablet back to reception (return to login).
   const onHome = () => Alert.alert('End session?', 'Return to the reception login screen?', [
@@ -87,9 +209,10 @@ function CustomerFlow() {
         case 'membership': setStep('account'); return true;
         case 'packages': setStep('service'); return true;
         case 'packageDetails': setStep('packages'); return true;
-        case 'personal': setStep('packageDetails'); return true;
+        case 'personal': backFromPersonal(); return true;
         case 'health': setStep('personal'); return true;
-        case 'review': setStep('health'); return true;
+        case 'disclaimer': setStep('health'); return true;
+        case 'review': backFromReview(); return true;
         case 'success': return true;                        // finished — don't re-open
         default: return true;
       }
@@ -160,7 +283,7 @@ function CustomerFlow() {
   if (step === 'packageDetails') {
     return (
       <PackageDetailsScreen form={form} set={set}
-        next={() => setStep('personal')} onBack={() => setStep('packages')} onHome={onHome} />
+        next={startPeople} onBack={() => setStep('packages')} onHome={onHome} />
     );
   }
   if (step === 'personal') {
@@ -168,7 +291,7 @@ function CustomerFlow() {
       <PersonalInfoScreen
         form={form} set={set}
         next={() => setStep('health')}
-        onBack={() => setStep('packageDetails')}
+        onBack={backFromPersonal}
         onHome={onHome}
       />
     );
@@ -176,13 +299,19 @@ function CustomerFlow() {
   if (step === 'health') {
     return (
       <HealthScreen form={form} set={set}
-        next={() => setStep('review')} onBack={() => setStep('personal')} onHome={onHome} />
+        next={afterHealth} onBack={() => setStep('personal')} onHome={onHome} />
+    );
+  }
+  if (step === 'disclaimer') {
+    return (
+      <DisclaimerScreen form={form} set={set}
+        next={endOfPerson} onBack={() => setStep('health')} onHome={onHome} />
     );
   }
   if (step === 'review') {
     return (
       <ReviewScreen form={form} set={set}
-        next={() => setStep('success')} onBack={() => setStep('health')} onHome={onHome} />
+        next={() => setStep('success')} onBack={backFromReview} onHome={onHome} />
     );
   }
   if (step === 'success') {

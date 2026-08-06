@@ -54,6 +54,14 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
   const genderAge = [form.gender, form.age !== '' ? `${form.age} yrs` : ''].filter(Boolean).join(' / ');
   const answered = (form.answers || []).filter((a) => a.value).length;
 
+  // Itemise the extras and show what will actually be charged. Read off the
+  // package payload rather than any stored figure, so the total here cannot
+  // disagree with the one on the package screen.
+  const offered = form.package?.addons || [];
+  const chosen = offered.filter((a) => (form.addonIds || []).includes(a.id));
+  const total = (Number(form.package?.price) || 0)
+    + chosen.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
@@ -69,7 +77,21 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
           <Row label={t('dob')} value={form.dob} />
           <Row label={t('specialReq')} value={form.specialRequests} />
           <Row label={t('qAnswered')} value={answered ? `${answered}` : ''} />
+          {chosen.length ? (
+            <Row label={t('addonsLabel')} value={chosen.map((a) => a.name).join(', ')} />
+          ) : null}
         </View>
+
+        {/* Only worth a card of its own once there is more than the package
+            price to add up. */}
+        {chosen.length ? (
+          <View style={s.card}>
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>{t('reviewTotal')}</Text>
+              <Text style={s.totalValue}>OMR {total}</Text>
+            </View>
+          </View>
+        ) : null}
 
         <Button title={busy ? t('submitting') : t('submit')} onPress={submit} loading={busy} style={{ marginTop: 4 }} />
       </ScrollView>
@@ -86,4 +108,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 11, borderTopWidth: 1, borderTopColor: COLORS.line },
   rowLabel: { fontSize: 13.5, fontWeight: '700', color: COLORS.muted, flex: 1 },
   rowValue: { fontSize: 14, color: COLORS.ink, flex: 1.4, textAlign: 'right', fontWeight: '600' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { fontSize: 14.5, fontWeight: '800', color: COLORS.ink },
+  totalValue: { fontSize: 18, fontWeight: '900', color: COLORS.purple },
 });

@@ -160,14 +160,33 @@ export async function loadTherapies(lang = 'en') {
   return data;
 }
 
-// Questions for a chosen PACKAGE (its therapy's questions). Mapped to the shape
-// the screens already use: { id, name, type, required, options }.
+// Questions for a chosen PACKAGE (its therapy's questions), plus the therapy's
+// disclaimer. Returns { questions, disclaimer }.
+//
+// The disclaimer rides along on this call rather than having its own: whether
+// there IS a disclaimer screen has to be known before Next is pressed on the
+// questions, and the server already sends it here.
+//
+//   disclaimer = { title, body, allow_upload }  or  {} when the therapy has none
+//
+// `{}` is the documented "no disclaimer page" signal - every surface tests it
+// for truthiness and skips the step. `body` is rich text from Odoo's editor and
+// is deliberately NOT run through stripHtml: it is rendered by RichText.
 export async function loadQuestions(packageId, lang = 'en') {
   const data = await restGet(`/api/spa/questions?service_ids=${encodeURIComponent(packageId)}&lang=${encodeURIComponent(lang)}`);
-  return (data.questions || []).map((q) => ({
+  const questions = (data.questions || []).map((q) => ({
     id: q.id, name: q.text, type: q.type, required: q.required, options: q.options || [],
     heading: q.heading || '', headingId: q.heading_id ?? 0,   // section grouping
   }));
+  const d = data.disclaimer || {};
+  // Treat "active but nobody has written anything" as no disclaimer, the same
+  // way the server does - a blank page is not something to ask a customer to
+  // sign. Guard the type too: an older backend sends no key at all.
+  const body = typeof d.body === 'string' ? d.body : '';
+  const disclaimer = body.replace(/<[^>]*>/g, '').trim()
+    ? { title: d.title || '', body, allowUpload: !!d.allow_upload }
+    : null;
+  return { questions, disclaimer };
 }
 
 // ---------- New booking (tablet → POS Spa Tab) ----------
@@ -193,7 +212,19 @@ export async function submitBooking(form) {
     age: form.age !== '' && form.age != null ? String(form.age) : '',
     email: form.email || '',                         // contact email
     signature: form.signature || '',                 // digital signature (base64 PNG, no prefix)
+    // The endpoint documents this as REQUIRED and records it on the booking, but
+    // it was never sent - so every tablet booking so far reads "terms not
+    // accepted" even though the customer ticked and signed. Set on the
+    // disclaimer screen; stays false for a therapy with no waiver, where no
+    // consent is asked for and claiming otherwise would be worse than false.
+    terms_accepted: !!form.terms,
     answers,
+    // Optional extras, ids only. Filtered against the chosen package so an id
+    // left over from an earlier selection is never sent - and the server
+    // whitelists them again anyway, dropping anything not actually offered
+    // rather than charging for it.
+    addon_ids: (form.addonIds || []).filter(
+      (id) => (form.package?.addons || []).some((a) => a.id === id)),
     api_key: TAB_API_KEY,
   };
   return restPost('/api/spa/tab/submit', body);     // { success, booking_ref, id }

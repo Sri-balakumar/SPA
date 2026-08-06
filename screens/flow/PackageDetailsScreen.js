@@ -34,6 +34,28 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
   const pkg = form.package || {};
   const dur = pkg.duration || form.serviceObj?.duration_min || 60;
 
+  // ---- optional extras ----
+  const addons = pkg.addons || [];
+  // Only ids still offered by THIS package. Guards a stale id surviving a
+  // package switch, and means a removed extra silently drops out rather than
+  // being charged for.
+  const chosenIds = (form.addonIds || []).filter((id) => addons.some((a) => a.id === id));
+
+  function toggleAddon(id) {
+    const next = chosenIds.includes(id)
+      ? chosenIds.filter((x) => x !== id)
+      : [...chosenIds, id];
+    set({ addonIds: next });
+  }
+
+  // Prices are always read back off the package payload, never carried in state,
+  // so a stale number can never reach the total or the order. Extras are not
+  // multiplied per person: a family pays for one heat pack, not one each.
+  const addonTotal = addons
+    .filter((a) => chosenIds.includes(a.id))
+    .reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+  const total = (Number(pkg.price) || 0) + addonTotal;
+
   // `form.package` is a snapshot taken on the Packages screen, so its Odoo text
   // is frozen in the language chosen back then. Re-fetch on a language switch
   // so the package name and description follow it.
@@ -92,6 +114,36 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
           <Row rtl={rtl} label={t('sessionDuration')} value={`${toDigits(dur, lang)} ${t('minutesWord')}`} />
           {pkg.save > 0 && <Row rtl={rtl} label={t('youSave')} value={`OMR ${toDigits(pkg.save, lang)}`} />}
         </View>
+
+        {/* Optional extras. Same place and behaviour as the POS and the booking
+            website, so staff reading a customer's order see the same screen.
+            Only shown when this package actually offers any. */}
+        {addons.length ? (
+          <View style={[s.card, { width: contentW, marginTop: 14 }]}>
+            <Text style={[s.descLabel, rtl && s.rtlTxt]}>{t('addonsTitle')}</Text>
+            <Text style={[s.addonHint, rtl && s.rtlTxt]}>{t('addonsHint')}</Text>
+            {addons.map((a) => {
+              const on = chosenIds.includes(a.id);
+              return (
+                <TouchableOpacity
+                  key={a.id}
+                  style={[s.aRow, rtl && s.aRowRtl]}
+                  onPress={() => toggleAddon(a.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[s.aBox, on && s.aBoxOn]}>{on ? <Text style={s.aTick}>✓</Text> : null}</View>
+                  <Text style={[s.aName, rtl && s.rtlTxt]}>{a.name}</Text>
+                  <Text style={s.aPrice}>OMR {toDigits(a.price, lang)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <View style={s.rule} />
+            <View style={s.totalRow}>
+              <Text style={[s.totalLabel, rtl && s.rtlTxt]}>{t('reviewTotal')}</Text>
+              <Text style={s.totalValue}>OMR {toDigits(total, lang)}</Text>
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 12 }]}>
@@ -132,5 +184,23 @@ const s = StyleSheet.create({
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingTop: 10, backgroundColor: 'rgba(245,239,251,0.96)' },
   cta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.purple, borderRadius: 999, paddingVertical: 16 },
   ctaTxt: { color: '#fff', fontSize: 16.5, fontWeight: '800' },
+
+  // add-ons. A square box rather than a radio: several can be ticked, and the
+  // control should say so at a glance.
+  addonHint: { fontSize: 12.5, color: COLORS.muted, marginBottom: 12, lineHeight: 18 },
+  aRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  aRowRtl: { flexDirection: 'row-reverse' },
+  aBox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 1.8, borderColor: COLORS.line,
+    alignItems: 'center', justifyContent: 'center', marginRight: 12, backgroundColor: '#fff',
+  },
+  aBoxOn: { backgroundColor: COLORS.purple, borderColor: COLORS.purple },
+  aTick: { color: '#fff', fontSize: 13, fontWeight: '900', lineHeight: 16 },
+  aName: { flex: 1, fontSize: 14.5, color: COLORS.ink, fontWeight: '600' },
+  aPrice: { fontSize: 14.5, fontWeight: '800', color: COLORS.purpleDeep, marginLeft: 10 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { fontSize: 14.5, fontWeight: '800', color: COLORS.ink },
+  totalValue: { fontSize: 18, fontWeight: '900', color: COLORS.purple },
+
   rtlTxt: { textAlign: 'right', writingDirection: 'rtl' },
 });
