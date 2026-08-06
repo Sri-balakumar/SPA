@@ -6,10 +6,17 @@
     # 'spa_kiosk' is the technical folder name of the team's existing module.
     # 'pos_spa_header' owns the POS top bar we add the "Bookings" button to.
     # 'product' for product.product_template_form_view (product_template_details_views.xml)
-    # 'whatsapp_gateway' for whatsapp.session.send_message() - booking links go
+    # 'whatsapp_neonize' for whatsapp.session.send_message() - booking links go
     # out directly on our own WhatsApp session.
+    #
+    # LOCAL DEVIATION: upstream declares 'whatsapp_gateway'. That module is not
+    # on this server (it is not a rename of whatsapp_neonize - it has a
+    # different whatsapp.session API), so declaring it makes the module
+    # uninstallable. Pointed back at the neonize build that IS installed; the
+    # two calls the gateway added are guarded in booking_session.py. Restore
+    # 'whatsapp_gateway' here and drop those guards once it is available.
     'depends': ['base', 'web', 'product', 'account', 'spa_kiosk',
-                'point_of_sale', 'pos_spa_header', 'whatsapp_gateway'],
+                'point_of_sale', 'pos_spa_header', 'whatsapp_neonize'],
     'external_dependencies': {'python': ['phonenumbers']},
     'data': [
         'security/ir.model.access.csv',

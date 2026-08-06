@@ -89,20 +89,22 @@ class SpaBookingSession(models.Model):
                 rec.booking_url = False
                 rec.whatsapp_share_url = False
                 continue
-            # The short form the spa asked for: <base>/spa/book?token=...
+            # LOCAL DEVIATION, and it is the rollback this code's own comment
+            # prescribes. Upstream sends the short <base>/spa/book?token=...
+            # form, which requires `dbfilter` to pin one database. THIS server
+            # has an empty dbfilter and six databases, so the short form gives
+            # the customer a database picker instead of a booking page.
             #
-            # No ?db= and no /odoo/ hop. Both existed to survive a server that
-            # cannot decide which database a session-less request belongs to;
-            # this one now pins `dbfilter` to the live database in odoo.conf, so
-            # every request resolves on its own and the extra hop only made the
-            # link longer.
+            # So: back to the BOOKING_ENTRY_PATH form, which is what 19.0.4.0.0
+            # generated here and what every link already sent uses. It resolves
+            # ?db= through ensure_db() in controllers/booking_entry.py and hands
+            # the customer on, with no login and nothing to configure.
             #
-            # If dbfilter is ever cleared - back to hosting several databases -
-            # this short form 404s for anyone without an Odoo session, and the
-            # BOOKING_ENTRY_PATH form below is what to go back to:
-            #   '%s%s?db=%s&token=%s' % (base, BOOKING_ENTRY_PATH, dbname, token)
-            url = '%s%s?token=%s' % (
-                rec.get_base_url(), BOOKING_PAGE_PATH, rec.token)
+            # Switch back to the short form only together with pinning
+            # `dbfilter = ^SPA$` in odoo.conf - one without the other breaks it.
+            url = '%s%s?db=%s&token=%s' % (
+                rec.get_base_url(), BOOKING_ENTRY_PATH,
+                rec.env.cr.dbname, rec.token)
             rec.booking_url = url
             # wa.me needs the number as digits only (no '+', spaces or dashes).
             digits = ''.join(c for c in (rec.whatsapp_number or '') if c.isdigit())
@@ -175,7 +177,23 @@ class SpaBookingSession(models.Model):
                 return chosen
         configured = self.env['ir.config_parameter'].sudo().get_param(
             'spa_online_booking.whatsapp_session_id')
-        return Session.get_connected_session(configured)
+        # LOCAL DEVIATION: get_connected_session() is a whatsapp_gateway method.
+        # The whatsapp_neonize build installed here does not have it, and an
+        # AttributeError would land on staff pressing Send Link. Falls back to
+        # the same order of preference by hand: the configured session, else
+        # whichever is connected, else the first active one.
+        if hasattr(Session, 'get_connected_session'):
+            return Session.get_connected_session(configured)
+        sessions = Session.search([('active', '=', True)])
+        if configured:
+            try:
+                chosen = sessions.filtered(lambda s: s.id == int(configured))
+            except (TypeError, ValueError):
+                chosen = Session.browse()
+            if chosen:
+                return chosen
+        return sessions.filtered(
+            lambda s: s.status == 'connected')[:1] or sessions[:1]
 
     @api.model
     def pos_wa_sessions(self, wake=False):
@@ -190,7 +208,16 @@ class SpaBookingSession(models.Model):
         sessions = Session.search([('active', '=', True)])
         # Asks the gateway and writes the answer back, so the flags below are
         # live rather than however stale the column happened to be.
-        sessions._refresh_state()
+        #
+        # LOCAL DEVIATION: _refresh_state() is a whatsapp_gateway method and the
+        # neonize build installed here does not have it. Skipped rather than
+        # reimplemented: the rows below read session.status either way, so the
+        # dialog still lists every sender and still says which is connected -
+        # just from the stored column rather than a fresh check. Exactly what
+        # this method was added to improve on, so the panel is the place to look
+        # if a status looks wrong.
+        if hasattr(sessions, '_refresh_state'):
+            sessions._refresh_state()
 
         rows = [{
             'id': session.id,
