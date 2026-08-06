@@ -18,6 +18,12 @@ expo-env.d.ts
 # metro
 .metro-health-check*
 
+# python bytecode from the Odoo addons under odoo_modules/
+# Odoo regenerates these on load, and they are per-interpreter - the tree
+# already carried both cpython-312 and cpython-314 builds of the same files.
+__pycache__/
+*.py[cod]
+
 # debug / logs
 npm-debug.*
 yarn-debug.*
