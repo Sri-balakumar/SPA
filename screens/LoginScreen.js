@@ -14,7 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Device from 'expo-device';
 import { useSession } from '../SessionContext';
-import { listDatabases, odooAuthenticate, deviceGate, odooLogout, odooCallKw } from '../odoo';
+import {
+  listDatabases, odooAuthenticate, deviceGate, odooLogout, deviceRegisterFromScan,
+} from '../odoo';
 import {
   setBaseUrl, setDb, saveConnection, getBaseUrl, getDb,
   getDeviceId, isDeviceRegistered, setDeviceRegistered, clearDeviceRegistered, saveCredentials,
@@ -49,7 +51,8 @@ export default function LoginScreen() {
   const [scanBusy, setScanBusy] = useState(false);
   const [pendingLogin, setPendingLogin] = useState(false); // true → after scan, continue login
   const [permission, requestPermission] = useCameraPermissions();
-  const scanRecordRef = useRef(null); // record_id from the scanned QR (written to Odoo after login)
+  // No scanRecordRef any more: onScan registers immediately, so the QR's record
+  // id is used where it is read and never has to survive until after login.
   const authInfoRef = useRef(null);   // session_info held between auth and the QR scan
 
   // In-app alert styled like the rest of the app, in place of the OS popup.
@@ -85,7 +88,23 @@ export default function LoginScreen() {
     showAlert('Device reset', 'This device is no longer registered. Tap Scan & Login to scan the QR again.', 'info');
   }
 
-  // A QR was scanned → register this device on Odoo.
+  // A QR was scanned → register this device on Odoo, NOW.
+  //
+  // The QR carries the id of the record it was generated from ('rid'), and that
+  // is the whole point of scanning: the admin taps New in the Device Registry
+  // and the device claims THAT record. So the registration call happens here,
+  // while we still know which record was scanned.
+  //
+  // It goes through /device/register-from-scan rather than the ORM. That route
+  // runs as SUPERUSER, so it does not depend on the tablet being logged in as an
+  // administrator - device.registry only grants base.group_user READ. It also
+  // owns the rules the app should not be reimplementing: a blocked device cannot
+  // re-register, a QR can only be claimed once, and last_login is stamped.
+  //
+  // The route is auth='none' and device_login_config is not in
+  // server_wide_modules, so it 404s until a database is bound to the session.
+  // That is fine here: the scanner only opens after login() has authenticated,
+  // so a session always exists by this point.
   async function onScan({ data }) {
     if (scanBusy) return;
     setScanBusy(true);
@@ -96,14 +115,65 @@ export default function LoginScreen() {
       showAlert('Invalid QR', 'This is not a NexGen device registration QR code.');
       return;
     }
-    // Remember which pre-registered record this QR belongs to. The device is
-    // written to Odoo AFTER login (authenticated call_kw in registerDeviceNow),
-    // which works even on multi-database servers where the pre-login route can't.
-    scanRecordRef.current = payload.rid || null;
-    await setDeviceRegistered(payload.d, true); setRegistered(true);
+    // A QR is minted per database. Registering against the wrong one would
+    // write the device into a database nobody is logging into, and the failure
+    // would surface later as "device not authorized" with no hint why.
+    const chosenDb = dbManual ? db.trim() : db;
+    if (chosenDb && payload.d !== chosenDb) {
+      setScanning(false); setScanBusy(false);
+      showAlert('Wrong database',
+        `This QR belongs to "${payload.d}", but you are connecting to "${chosenDb}". `
+        + 'Scan the QR from the Device Registry of the database you are logging into.');
+      return;
+    }
+
+    let res;
+    try {
+      res = await deviceRegisterFromScan({
+        deviceId: await getDeviceId(),
+        deviceName: Device.deviceName || Device.modelName || 'Spa Tablet',
+        databaseName: payload.d,
+        baseUrl: getBaseUrl(),
+        recordId: payload.rid || null,
+      });
+    } catch (e) {
+      // Never swallow this: a silent failure here is exactly what made the old
+      // code impossible to diagnose - the record simply stayed Pending.
+      console.log('[DEVICE] register-from-scan failed', e);
+      setScanning(false); setScanBusy(false);
+      showAlert('Could not register', e.message || 'The server did not accept the registration.');
+      return;
+    }
+
     setScanning(false); setScanBusy(false);
+    const status = res && res.status;
+
+    if (status === 'blocked') {
+      showAlert('Device blocked',
+        'This device has been blocked by the administrator.'
+        + (res.serial_no ? `\n\nSerial: ${res.serial_no}` : '')
+        + '\n\nGive that Serial to your admin to unblock it.');
+      return;
+    }
+    if (status === 'used') {
+      showAlert('QR already used',
+        'This QR code has already been used. In Odoo, tap New on the Device '
+        + 'Registry to generate a fresh QR, then scan it.');
+      return;
+    }
+    if (status !== 'registered' && status !== 'already_registered') {
+      showAlert('Could not register',
+        (res && res.message) || 'The server did not accept this QR code.');
+      return;
+    }
+
+    // Only now is it true. Setting the flag before the server confirmed meant a
+    // failed registration still looked registered, so the scanner was never
+    // offered again and the record stayed Pending forever.
+    await setDeviceRegistered(payload.d, true);
+    setRegistered(true);
     if (pendingLogin) { setPendingLogin(false); doAuth(); }
-    else { showAlert('Ready', 'Tap Scan & Login to finish registering this device.', 'success'); }
+    else { showAlert('Registered', 'This device is now registered. Tap Scan & Login to continue.', 'success'); }
   }
 
   // Auto-fetch the database list as soon as the URL settles — no Connect button.
@@ -219,31 +289,24 @@ export default function LoginScreen() {
     if (!opened) setPendingLogin(false);
   }
 
-  // Register/activate this device in Odoo using the LOGGED-IN session (call_kw).
-  // This works on multi-database servers, where the pre-login scan route cannot.
-  // Fills the scanned pre-registered record if we have one, else finds/creates one.
-  async function registerDeviceNow(dId) {
-    try {
-      const dbName = getDb();
-      const name = Device.deviceName || Device.modelName || 'Spa Tablet';
-      const vals = {
-        device_id: dId, mac_address: dId, device_name: name,
-        database_name: dbName, status: 'active', base_url: getBaseUrl(),
-      };
-      const found = await odooCallKw('device.registry', 'search', [[['device_id', '=', dId]]], { limit: 1 });
-      if (found && found.length) {
-        await odooCallKw('device.registry', 'write', [found, vals]);
-      } else if (scanRecordRef.current) {
-        await odooCallKw('device.registry', 'write', [[scanRecordRef.current], vals]);
-      } else {
-        await odooCallKw('device.registry', 'create', [vals]);
-      }
-      await setDeviceRegistered(dbName, true);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
+  // NOTE: there is deliberately no self-registration here any more.
+  //
+  // This used to hold registerDeviceNow(), which created or updated a
+  // device.registry row over call_kw whenever the gate reported the device as
+  // unregistered. Three things were wrong with it:
+  //
+  //  - It searched on device_id ALONE and wrote to whatever it found, so the
+  //    record the operator had just scanned was ignored in favour of a stale one
+  //    - and on a multi-database server it could write to another database's row.
+  //  - It could CREATE a row, which let a tablet enrol itself with no admin
+  //    approval at all. The registry is meant to be an allow-list: the admin taps
+  //    New, and the device claims that record by scanning its QR.
+  //  - device.registry grants base.group_user only READ, so on any non-admin
+  //    login the write raised AccessError - and it was caught and discarded, so
+  //    the only symptom was a record that stayed Pending.
+  //
+  // Registration now happens once, in onScan(), through the module's own route.
+  // The gate below is purely a security check.
 
   // STEP 2 — runs after the QR scan, on the session login() already opened.
   // Credentials are known-good by this point; this is purely the device gate.
@@ -257,16 +320,11 @@ export default function LoginScreen() {
     try {
       // Security: only devices registered in Odoo's Device Registry may log in.
       const dId = await getDeviceId();
-      let gate = await deviceGate(dId, getDb());
+      const gate = await deviceGate(dId, getDb());
       if (gate === 'blocked') {
         await odooLogout();
         showAlert('Device blocked', 'This device has been blocked by the administrator. Please contact them.');
         return;
-      }
-      if (gate === 'unregistered') {
-        // Auto-register now using the authenticated session (works on multi-DB servers).
-        const ok = await registerDeviceNow(dId);
-        if (ok) gate = await deviceGate(dId, getDb());
       }
       if (gate === 'unregistered') {
         await odooLogout();
@@ -276,10 +334,10 @@ export default function LoginScreen() {
         return;
       }
       // The gate allowed this device, so mark it registered for THIS database.
-      // Must be keyed on getDb(): registerDeviceNow() only runs when the gate
-      // said 'unregistered', and onScan() keys off the QR's own db name — so
-      // without this, an already-approved tablet never sets the flag and would
-      // be asked to scan on every single login.
+      // Keyed on getDb() rather than the QR's db, because this path is reached by
+      // tablets that never scanned at all - one approved in Odoo directly, or one
+      // whose local flag was cleared. Without it they would be sent to the
+      // scanner on every single login.
       await setDeviceRegistered(getDb(), true);
       setRegistered(true);
 
