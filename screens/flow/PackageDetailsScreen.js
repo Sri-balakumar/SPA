@@ -12,7 +12,7 @@ import { COLORS } from '../../theme';
 import LangButton from '../../components/LangButton';
 import { loadTherapies } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
-import { toDigits } from '../../dateFmt';
+import { toDigits, money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 
@@ -103,7 +103,7 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
         <View style={[s.card, { width: contentW }]}>
           <View style={s.titleRow}>
             <Text style={[s.pkgName, rtl && s.rtlTxt]}>{pkg.name}</Text>
-            <Text style={s.pkgPrice}>OMR {toDigits(pkg.price, lang)}</Text>
+            <Text style={s.pkgPrice}>{money(pkg.price, lang)}</Text>
           </View>
           <Text style={[s.sessions, rtl && s.rtlTxt]}>{pkg.sessionsLabel}</Text>
           <View style={s.rule} />
@@ -112,7 +112,7 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
           <View style={s.rule} />
           <Row rtl={rtl} label={t('numberOfSessions')} value={`${toDigits(pkg.sessions, lang)} ${pkg.sessions > 1 ? t('sessionsWord') : t('sessionWord')}`} />
           <Row rtl={rtl} label={t('sessionDuration')} value={`${toDigits(dur, lang)} ${t('minutesWord')}`} />
-          {pkg.save > 0 && <Row rtl={rtl} label={t('youSave')} value={`OMR ${toDigits(pkg.save, lang)}`} />}
+          {pkg.save > 0 && <Row rtl={rtl} label={t('youSave')} value={money(pkg.save, lang)} />}
         </View>
 
         {/* Optional extras. Same place and behaviour as the POS and the booking
@@ -133,14 +133,14 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
                 >
                   <View style={[s.aBox, on && s.aBoxOn]}>{on ? <Text style={s.aTick}>✓</Text> : null}</View>
                   <Text style={[s.aName, rtl && s.rtlTxt]}>{a.name}</Text>
-                  <Text style={s.aPrice}>OMR {toDigits(a.price, lang)}</Text>
+                  <Text style={s.aPrice}>{money(a.price, lang)}</Text>
                 </TouchableOpacity>
               );
             })}
             <View style={s.rule} />
             <View style={s.totalRow}>
               <Text style={[s.totalLabel, rtl && s.rtlTxt]}>{t('reviewTotal')}</Text>
-              <Text style={s.totalValue}>OMR {toDigits(total, lang)}</Text>
+              <Text style={s.totalValue}>{money(total, lang)}</Text>
             </View>
           </View>
         ) : null}

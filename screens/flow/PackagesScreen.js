@@ -13,7 +13,7 @@ import { COLORS } from '../../theme';
 import LangButton from '../../components/LangButton';
 import { loadTherapies } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
-import { toDigits } from '../../dateFmt';
+import { toDigits, money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 
@@ -172,18 +172,18 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
                   <Text style={[s.pkgSessions, rtl && s.rtlTxt]}>{p.sessionsLabel}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={s.pkgPrice}>OMR {toDigits(priceFor(p), lang)}</Text>
+                  <Text style={s.pkgPrice}>{money(priceFor(p), lang)}</Text>
                   {/* The "Save X" figure is computed against the individual
                       price, so it only means anything on that tab. */}
                   {p.save > 0 && memberType === 'individual'
-                    ? <Text style={s.pkgSave}>{t('saveWord')} OMR {toDigits(p.save, lang)}</Text>
+                    ? <Text style={s.pkgSave}>{t('saveWord')} {money(p.save, lang)}</Text>
                     : null}
                 </View>
               </TouchableOpacity>
             );
           })}
 
-          {/* Commercial small print, e.g. "Prices in OMR • Valid 3 months".
+          {/* Commercial small print, e.g. "Valid 3 months • Non-transferable".
               Written in Odoo Settings rather than hard-coded here, because it
               states terms that change without a release. */}
           {form.packageNote ? (

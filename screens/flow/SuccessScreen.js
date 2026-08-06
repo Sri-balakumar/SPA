@@ -9,10 +9,11 @@ import { COLORS, SHADOW } from '../../theme';
 import Button from '../../components/Button';
 import LangButton from '../../components/LangButton';
 import { useLang } from '../../LanguageContext';
+import { money } from '../../dateFmt';
 
 export default function SuccessScreen({ form, onHome }) {
   const insets = useSafeAreaInsets();
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const pkg = form.package;
 
   return (
@@ -38,7 +39,7 @@ export default function SuccessScreen({ form, onHome }) {
                 <Text style={s.summaryName}>{form.service} – {pkg.name}</Text>
                 <Text style={s.summarySessions}>{pkg.sessionsLabel}</Text>
               </View>
-              <Text style={s.summaryPrice}>OMR {pkg.price}</Text>
+              <Text style={s.summaryPrice}>{money(pkg.price, lang)}</Text>
             </View>
           </View>
         )}

@@ -11,7 +11,7 @@ import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import { checkInSession } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
-import { formatDateTime, toDigits } from '../../dateFmt';
+import { formatDateTime, toDigits, money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 const CHECKIN_ERR = {
@@ -130,7 +130,7 @@ export default function MembershipScreen({ form, onBack, onHome, onDone }) {
             <DetailRow icon="checkmark-done-outline" label={t('completedSessions')} value={`${toDigits(used, lang)} ${t('sessionsWord')}`} />
             <DetailRow icon="ticket-outline" label={t('remainingSessions')} value={`${toDigits(remaining, lang)} ${t('sessionsWord')}`} valColor={COLORS.green} />
             <DetailRow icon="time-outline" label={t('sessionDuration')} value={`${toDigits(pkg.duration || 0, lang)} ${t('minutesWord')}`} />
-            <DetailRow icon="pricetag-outline" label={t('pricePerSession')} value={`OMR ${toDigits(pkg.price_per_session || 0, lang)}`} />
+            <DetailRow icon="pricetag-outline" label={t('pricePerSession')} value={money(pkg.price_per_session || 0, lang)} />
             <DetailRow icon="calendar-outline" label={t('validTill')} value={pkg.valid_till || '—'} last />
           </View>
 

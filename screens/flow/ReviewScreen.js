@@ -10,6 +10,7 @@ import StepHeader from '../../components/StepHeader';
 import Button from '../../components/Button';
 import { submitBooking } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
+import { money } from '../../dateFmt';
 
 function Row({ label, value }) {
   if (!value) return null;
@@ -22,7 +23,7 @@ function Row({ label, value }) {
 }
 
 export default function ReviewScreen({ form, set, next, onBack, onHome }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const [busy, setBusy] = useState(false);
   const [alertBox, setAlertBox] = useState(null);
 
@@ -88,7 +89,7 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
           <View style={s.card}>
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>{t('reviewTotal')}</Text>
-              <Text style={s.totalValue}>OMR {total}</Text>
+              <Text style={s.totalValue}>{money(total, lang)}</Text>
             </View>
           </View>
         ) : null}

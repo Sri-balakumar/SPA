@@ -11,16 +11,21 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import LangButton from '../../components/LangButton';
 import { odooImage } from '../../spaApi';
+import { useLang } from '../../LanguageContext';
+import { money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 
 export default function ServiceDetailScreen({ form, next, onBack, onHome }) {
   const insets = useSafeAreaInsets();
+  const { lang } = useLang();
   const { width } = useWindowDimensions();
   const contentW = Math.min(width - 32, 620);
   const svc = form.serviceObj || {};
   const imgSrc = odooImage(svc.image_256);
-  const price = Math.round(svc.list_price || 0);
+  // Not rounded any more: money() applies the currency's own precision, and
+  // rounding here would throw away the decimals a 3-decimal currency needs.
+  const price = svc.list_price || 0;
   const dur = svc.spa_duration || 60;
 
   return (
@@ -49,7 +54,7 @@ export default function ServiceDetailScreen({ form, next, onBack, onHome }) {
           </View>
 
           <View style={s.chips}>
-            <View style={s.chip}><Text style={s.chipTxt}>From OMR {price}</Text></View>
+            <View style={s.chip}><Text style={s.chipTxt}>From {money(price, lang)}</Text></View>
             <View style={s.chip}>
               <Ionicons name="time-outline" size={14} color={COLORS.purple} style={{ marginRight: 4 }} />
               <Text style={s.chipTxt}>{dur} min</Text>

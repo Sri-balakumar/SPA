@@ -14,6 +14,7 @@ import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import { SERVICES, SERVICE_I18N } from '../../data/options';
 import { loadTherapies, mediaUrl } from '../../spaApi';
+import { money } from '../../dateFmt';
 import { useLang } from '../../LanguageContext';
 import LangButton from '../../components/LangButton';
 
@@ -108,7 +109,8 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
               const displayName = svc.name;
               // Description comes straight from Odoo (translated via ?lang).
               const displayDesc = svc.description || svc.tagline || meta.desc || '';
-              const priceTxt = `OMR ${Math.round(svc.from_price || 0)}`;
+              // Not rounded: money() applies the currency's own precision.
+              const priceTxt = money(svc.from_price || 0, lang);
               const minTxt = `${svc.duration_min || 60} min`;
               return (
                 <TouchableOpacity key={svc.id} style={[s.card, { width: cardW }]} activeOpacity={0.9} onPress={() => choose(svc)}>
@@ -148,7 +150,7 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
             </TouchableOpacity>
             <Text style={s.detailName}>{selected?.name}</Text>
             <View style={s.detailMetaRow}>
-              <Text style={s.detailPrice}>OMR {Math.round(selected?.list_price || 0)}</Text>
+              <Text style={s.detailPrice}>{money(selected?.list_price || 0, lang)}</Text>
               <Text style={s.detailDot}>·</Text>
               <Ionicons name="time-outline" size={15} color={COLORS.muted} style={{ marginRight: 4 }} />
               <Text style={s.detailMin}>{selected?.spa_duration || 60} min</Text>

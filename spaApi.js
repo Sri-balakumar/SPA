@@ -10,6 +10,7 @@
 //   POST /api/spa/tab/passes  {phone}  → existing customer's remaining packages
 //   POST /api/spa/tab/redeem  {phone,pass_id} → check in for today
 import { getBaseUrl, getDb } from './connection';
+import { setCurrency } from './dateFmt';
 
 // Set to true ONLY to demo the "Select Your Profile" flow without a live server.
 // When false, the lookup shows REAL customers (or "not found" → Register as New) —
@@ -135,6 +136,12 @@ function stripHtml(s) {
 // Returns { therapies:[...], currency:{symbol,position} }.
 export async function loadTherapies(lang = 'en') {
   const data = await restGet(`/api/spa/therapies?lang=${encodeURIComponent(lang)}`);
+  // The shop's currency, from the company that owns the POS selling these
+  // therapies. Handed to dateFmt so money() formats every price with the right
+  // symbol, on the right side, to the right number of decimals - all of it
+  // driven from Odoo rather than hard-coded per screen. Set before anything
+  // returns, so the first render already has it.
+  setCurrency(data.currency);
   (data.therapies || []).forEach((t) => {
     t.description = stripHtml(t.description);
     t.tagline = stripHtml(t.tagline);
