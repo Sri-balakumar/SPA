@@ -2,7 +2,7 @@
   "expo": {
     "name": "NEXGENN SPA",
     "slug": "spa",
-    "owner": "setihel",
+    "owner": "donav",
     "scheme": "spa",
     "version": "1.0.0",
     "orientation": "default",
@@ -53,7 +53,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "c2716ab3-35c3-4538-8d85-d2d11a2ee65b"
+        "projectId": "433516d3-7eaf-4191-9282-c22a5d6f9f48"
       }
     }
   }
