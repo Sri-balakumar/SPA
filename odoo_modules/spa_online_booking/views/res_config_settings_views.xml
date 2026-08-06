@@ -28,6 +28,15 @@
                                 </div>
                             </div>
                         </setting>
+                        <setting string="Package footer note"
+                                 help="Small print under the package list on the POS Book Therapy screen and the booking page, e.g. &quot;Prices in OMR • Valid 3 months&quot;. Leave empty to show nothing.">
+                            <div class="content-group">
+                                <div class="mt16">
+                                    <field name="spa_package_note" class="o_light_label"
+                                           placeholder="Prices in OMR • Valid 3 months"/>
+                                </div>
+                            </div>
+                        </setting>
                     </block>
                     <block title="WhatsApp Delivery" name="spa_whatsapp_block">
                         <setting string="WhatsApp Session"

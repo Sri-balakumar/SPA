@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Spa detail on the customer invoice: who the treatment was for, and
+         what each line actually was. Everything is gated on
+         _spa_is_spa_invoice(), so a supplier bill or an ordinary customer
+         invoice keeps Odoo's standard layout instead of growing empty rows. -->
+    <template id="report_invoice_document_spa"
+              inherit_id="account.report_invoice_document">
+
+        <!-- PERSONAL DETAILS, after the reference block and before the line
+             table. Rows with nothing in them are dropped by _spa_personal_rows,
+             so a customer with no email never prints a dangling "Email :". -->
+        <xpath expr="//div[@name='reference']/.." position="after">
+            <t t-if="o._spa_is_spa_invoice()">
+                <t t-set="spa_personal" t-value="o._spa_personal_rows()"/>
+                <div t-if="spa_personal[0] or spa_personal[1]" class="mt-3">
+                    <div style="border-bottom: 1px solid #333; padding-bottom: 3px; margin-bottom: 6px;">
+                        <strong>PERSONAL DETAILS</strong>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <table class="table table-sm table-borderless mb-0"
+                                   style="font-size: inherit;">
+                                <tbody>
+                                    <tr t-foreach="spa_personal[0]" t-as="row" t-key="row_index">
+                                        <td style="width: 40%; padding: 1px 0;"
+                                            class="text-muted"><t t-esc="row[0]"/></td>
+                                        <td style="width: 6%; padding: 1px 0;">:</td>
+                                        <td style="padding: 1px 0;"><t t-esc="row[1]"/></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="col-6">
+                            <table class="table table-sm table-borderless mb-0"
+                                   style="font-size: inherit;">
+                                <tbody>
+                                    <tr t-foreach="spa_personal[1]" t-as="row" t-key="row_index">
+                                        <td style="width: 40%; padding: 1px 0;"
+                                            class="text-muted"><t t-esc="row[0]"/></td>
+                                        <td style="width: 6%; padding: 1px 0;">:</td>
+                                        <td style="padding: 1px 0;"><t t-esc="row[1]"/></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- A family sale brings more than one person. The block above
+                     describes partner_id, and an invoice has exactly one, so
+                     everyone else is listed here from the booking's members. -->
+                <t t-set="spa_others" t-value="o._spa_other_people()"/>
+                <div t-if="spa_others" class="mt-3">
+                    <div style="border-bottom: 1px solid #333; padding-bottom: 3px; margin-bottom: 6px;">
+                        <strong>OTHER PEOPLE ON THIS BOOKING</strong>
+                    </div>
+                    <div t-foreach="spa_others" t-as="person" t-key="person_index"
+                         t-attf-class="{{ person_index and 'mt-2' or '' }}">
+                        <div class="row">
+                            <div class="col-6">
+                                <table class="table table-sm table-borderless mb-0"
+                                       style="font-size: inherit;">
+                                    <tbody>
+                                        <tr t-foreach="person[1]" t-as="row" t-key="row_index">
+                                            <td style="width: 40%; padding: 1px 0;"
+                                                class="text-muted"><t t-esc="row[0]"/></td>
+                                            <td style="width: 6%; padding: 1px 0;">:</td>
+                                            <td style="padding: 1px 0;"><t t-esc="row[1]"/></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="col-6">
+                                <table class="table table-sm table-borderless mb-0"
+                                       style="font-size: inherit;">
+                                    <tbody>
+                                        <tr t-foreach="person[2]" t-as="row" t-key="row_index">
+                                            <td style="width: 40%; padding: 1px 0;"
+                                                class="text-muted"><t t-esc="row[0]"/></td>
+                                            <td style="width: 6%; padding: 1px 0;">:</td>
+                                            <td style="padding: 1px 0;"><t t-esc="row[1]"/></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </t>
+        </xpath>
+
+        <!-- Therapy / Duration / Package / Members Included, indented under the
+             description. Muted and smaller so they read as detail about the
+             line rather than as separate charges. -->
+        <xpath expr="//td[@name='account_invoice_line_name']" position="inside">
+            <t t-set="spa_rows" t-value="line._spa_detail_rows()"/>
+            <table t-if="spa_rows" class="table table-sm table-borderless mb-0 mt-1"
+                   style="font-size: 90%;">
+                <tbody>
+                    <tr t-foreach="spa_rows" t-as="row" t-key="row_index">
+                        <td style="width: 34%; padding: 0 0 0 14px; border: 0;"
+                            class="text-muted"><t t-esc="row[0]"/></td>
+                        <td style="width: 5%; padding: 0; border: 0;">:</td>
+                        <td style="padding: 0; border: 0;"><t t-esc="row[1]"/></td>
+                    </tr>
+                </tbody>
+            </table>
+        </xpath>
+
+    </template>
+
+</odoo>

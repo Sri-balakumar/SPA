@@ -117,3 +117,65 @@ class PosCategory(models.Model):
         'spa.question.heading', 'pos_category_id', string='Headings')
     spa_question_ids = fields.One2many(
         'spa.question', 'pos_category_id', string='Questions')
+
+    # RETIRED. Extras used to be picked per therapy here. They are now decided
+    # by the product's CATEGORY - tick 'Offer as POS Add-on' on a product
+    # category and everything filed under it is offered on every service (see
+    # product_template.ProductCategory). Nothing reads this field and it is on
+    # no view; kept only so the empty spa_category_addon_rel table can be
+    # dropped in its own migration rather than as a side effect of this change.
+    spa_addon_ids = fields.Many2many(
+        'product.template', 'spa_category_addon_rel', 'category_id', 'product_id',
+        string='Add-ons (retired)',
+        domain=[('available_in_pos', '=', True), ('sale_ok', '=', True)])
+
+    # The customer signs the waiver on the disclaimer page. Drawing it there and
+    # then is the right default for consent, so this stays off unless a therapy
+    # deliberately turns it on - see the comment in spa_signature.js.
+    spa_signature_upload = fields.Boolean(
+        string='Allow Signature Upload', default=False,
+        help="Let staff attach a picture of the signature on the disclaimer "
+             "page instead of the customer drawing it. Off by default: consent "
+             "is normally signed on the spot.")
+
+    def _spa_disclaimer_payload(self):
+        """Carry the upload switch on the payload the disclaimer page already
+        gets, so the signature box is configured by the same record that
+        supplies the wording it sits under - no second trip to the server.
+
+        Only when there IS a payload: `{}` is the documented "no disclaimer
+        page" signal and every consumer tests it for truthiness, so putting a
+        key in it would switch the page back on everywhere.
+        """
+        payload = super()._spa_disclaimer_payload()
+        if payload:
+            payload['allow_upload'] = self.spa_signature_upload
+        return payload
+
+    # NOTE: deliberately NOT added to pos.category's _load_pos_data_fields. The
+    # Book Therapy wizard reads its whole catalogue from /api/spa/therapies -
+    # the same payload the website uses - so the add-ons arrive with the
+    # packages. What the POS *does* need is the add-on product records
+    # themselves, so a line can be created; that is force-loaded in
+    # product_template.py.
+
+    def _spa_addons_for(self, product):
+        """Every extra offered on `product`, as a product.template recordset.
+
+        The single answer to "what add-ons does this package have?" - used by
+        the POS wizard, the website payload AND the submit-time security check.
+        They must agree: if the check consulted a different source, a perfectly
+        legitimate add-on would be silently dropped when the customer booked it.
+
+        Two sources, merged. The add-on CATEGORY list is the same for every
+        service, so it does not depend on `self` at all - a therapy no longer
+        picks its own extras. Layered on top is whatever the package itself
+        carries in POS's built-in Upsell & Cross-Sell field, which keeps working
+        exactly as before. Recordset union dedupes, so a product in both appears
+        once.
+        """
+        addons = (self.env['product.template']._spa_addon_products()
+                  | product.mapped('pos_optional_product_ids'))
+        # Untick 'Available in POS' or 'Sales' on a product and it withdraws
+        # from every screen at once, without editing any category.
+        return addons.filtered(lambda a: a.available_in_pos and a.sale_ok)

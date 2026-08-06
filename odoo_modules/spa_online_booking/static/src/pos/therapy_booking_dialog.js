@@ -59,7 +59,7 @@ export class TherapyBookingDialog extends Component {
         }
         const th = this.therapy;
         let title = th ? this.therapyTitle(th) : "Book a Therapy";
-        if (this.pkg && ["questions", "details"].includes(this.state.screen)) {
+        if (this.pkg && ["questions", "disclaimer", "details"].includes(this.state.screen)) {
             title += ` • ${this.pkg.name}`;
         }
         return title;
@@ -134,6 +134,14 @@ export class TherapyBookingDialog extends Component {
         }
         this.state.screen = "questions";
     }
+    // The therapy's disclaimer, or null when it has none - which is what makes
+    // the step disappear rather than show an empty page. It rides along on
+    // /api/spa/therapies, so it is already loaded by the time we get here.
+    get disclaimer() {
+        const th = this.therapy;
+        const d = th && th.disclaimer;
+        return d && d.body ? d : null;
+    }
     toDetails() {
         if (!this.requiredOk()) {
             this.state.error = "Please answer the required questions.";
@@ -142,10 +150,19 @@ export class TherapyBookingDialog extends Component {
         this.state.error = "";
         this.state.screen = "details";
     }
+    // The disclaimer comes AFTER the details in this dialog, unlike the Book
+    // Therapy screen where the details are collected first. The waiver's Client
+    // Information block is filled from the name / number / email, so it has to
+    // run once they exist - on the questions step they are still blank.
+    toDisclaimer() {
+        this.state.error = "";
+        this.state.screen = "disclaimer";
+    }
     back() {
         const map = {
             questions: "select",
             details: "questions",
+            disclaimer: "details",
         };
         const prev = map[this.state.screen];
         if (prev) {
@@ -236,6 +253,9 @@ export class TherapyBookingDialog extends Component {
             });
             this.props.close();
         } catch (e) {
+            // See therapy_screen.js: keep the plain message for staff, but do
+            // not throw away what actually failed.
+            console.error("Therapy booking: could not add the package", e);
             this.state.error = "Could not add this package to the order.";
             this.state.busy = false;
         }

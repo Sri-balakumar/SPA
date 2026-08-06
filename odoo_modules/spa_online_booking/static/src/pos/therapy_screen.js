@@ -31,6 +31,31 @@ export class TherapyScreen extends Component {
             currency: { symbol: "", position: "before" },
             therapyId: null,
             packageId: null,
+            // Optional extras ticked on the package screen. Ids only - prices
+            // are always read back off the package payload, so a stale number
+            // can never reach the order.
+            addonIds: [],
+            // Everyone the package covers. A Family 2 books two people, each
+            // with their own details, their own answers and their own
+            // signature. The fields below (custName, answers, sig, custTerms)
+            // are the WORKING SET for whoever is on screen; _savePerson stores
+            // them here and _loadPerson brings the next person's back.
+            //
+            // One form, filled N times - not N forms. The details form and the
+            // signature pad both reach for fixed DOM ids, so a second copy on
+            // screen at once would collide with the first.
+            members: [],
+            memberIndex: 0,
+            // Persons 2+ type a plain optional number here. Kept OFF custMobile
+            // on purpose: that field, its country code and the matched partner
+            // belong to the lead and must survive being on person 2's screen -
+            // they are what the order is billed to.
+            memberPhone: "",
+            // Which Individual / Family tab is showing. Reset when a therapy is
+            // opened, so a new one never inherits a family size from the last.
+            memberType: "individual",
+            memberTypes: [],
+            packageNote: "",
             questions: [],
             questionsFor: null,
             answers: {},
@@ -71,6 +96,10 @@ export class TherapyScreen extends Component {
             try {
                 const res = await fetch("/api/spa/therapies").then((r) => r.json());
                 this.state.therapies = res.therapies || [];
+                // Tab labels and the small print both come from the backend, so
+                // neither is hard-coded here.
+                this.state.memberTypes = res.member_types || [];
+                this.state.packageNote = res.package_note || "";
                 if (res.currency) {
                     this.state.currency = res.currency;
                 }
@@ -88,6 +117,86 @@ export class TherapyScreen extends Component {
     get pkg() {
         const th = this.therapy;
         return th ? th.packages.find((p) => p.id === this.state.packageId) || null : null;
+    }
+
+    // Only the member types this therapy actually prices. A spa selling
+    // individual packages only then sees no tab bar at all, rather than three
+    // tabs that are empty.
+    get memberTypes() {
+        const th = this.therapy;
+        if (!th) {
+            return [];
+        }
+        const priced = new Set();
+        for (const p of th.packages || []) {
+            for (const key of Object.keys(p.prices || { individual: 0 })) {
+                priced.add(key);
+            }
+        }
+        return (this.state.memberTypes || []).filter((m) => priced.has(m.key));
+    }
+
+    // What one package costs on the selected tab, or null when it is not sold
+    // to that member type. Availability and price are the same question.
+    priceFor(pkg) {
+        const prices = pkg.prices || {};
+        const value = prices[this.state.memberType];
+        return value === undefined || value === null ? null : value;
+    }
+
+    // Packages sold to the selected member type. A package with no price for
+    // this tab is left out entirely - an empty cell means "not offered", not
+    // "same price as individual".
+    get visiblePackages() {
+        const th = this.therapy;
+        if (!th) {
+            return [];
+        }
+        return (th.packages || []).filter((p) => this.priceFor(p) !== null);
+    }
+
+    // ---- add-ons ----
+    // The extras offered on the selected package. Configured on the therapy
+    // (POS -> Product Categories -> Add-ons) and merged server-side with the
+    // package's own Upsell & Cross-Sell field, so this just reads the payload.
+    get addons() {
+        return this.pkg?.addons || [];
+    }
+    // Only the ticked extras still offered on the CURRENT package - guards a
+    // stale id surviving a package switch.
+    get chosenAddons() {
+        return this.addons.filter((a) => this.state.addonIds.includes(a.id));
+    }
+    isAddonOn(id) {
+        return this.state.addonIds.includes(id);
+    }
+    toggleAddon(id) {
+        const ids = this.state.addonIds;
+        const at = ids.indexOf(id);
+        if (at === -1) {
+            ids.push(id);
+        } else {
+            ids.splice(at, 1);
+        }
+    }
+    // Package price on the current tab plus the ticked extras. Add-ons have no
+    // family pricing: a family pays for one heat pack, not one per person.
+    get bookingTotal() {
+        const base = this.pkg ? this.priceFor(this.pkg) : null;
+        return (base ?? 0) + this.chosenAddons.reduce((sum, a) => sum + (a.price || 0), 0);
+    }
+
+    pickMemberType(key) {
+        this.state.memberType = key;
+        // A package chosen under the old tab is not on offer under this one,
+        // so clear it rather than carrying a hidden selection into Continue.
+        this.state.packageId = null;
+        this.state.addonIds = [];
+        // The people are NOT cleared here: the same customer is still booking,
+        // and retyping person 1 because they switched from Family 2 to Family 3
+        // would be needless. toDetails() resizes the list around whoever is
+        // already entered.
+        this.state.memberIndex = 0;
     }
     therapyTitle(th) {
         return th.duration_min ? `${th.name} (${th.duration_min} min)` : th.name;
@@ -149,14 +258,125 @@ export class TherapyScreen extends Component {
     openTherapy(id) {
         this.state.therapyId = id;
         this.state.packageId = null;
+        this.state.addonIds = [];
+        // Start on the first tab this therapy actually has - defaulting blindly
+        // to "individual" would show an empty list for a family-only therapy.
+        this.state.memberType = "individual";
+        const available = this.memberTypes;
+        if (available.length && !available.some((m) => m.key === "individual")) {
+            this.state.memberType = available[0].key;
+        }
     }
     // Radio-select a package (website style); a Continue button then advances.
     pick(id) {
+        if (this.state.packageId !== id) {
+            // Extras belong to the package they were offered on, so switching
+            // package drops them rather than carrying them to another one.
+            this.state.addonIds = [];
+        }
         this.state.packageId = id;
     }
+    // ---- the people on this booking ----
+    // How many people the chosen package covers. Mirrors spa_headcount() on
+    // the server; the server re-checks, so a wrong number here cannot book a
+    // family for the wrong count - it is refused.
+    get headcount() {
+        return { family_2: 2, family_3: 3, family_4: 4 }[this.state.memberType] || 1;
+    }
+    get isFamily() {
+        return this.headcount > 1;
+    }
+    get isLeadPerson() {
+        return this.state.memberIndex === 0;
+    }
+    get isLastPerson() {
+        return this.state.memberIndex >= this.headcount - 1;
+    }
+    get personLabel() {
+        return `Person ${this.state.memberIndex + 1} of ${this.headcount}`;
+    }
+
+    // A blank person. Phone and email stay optional for everyone but the lead:
+    // a parent books for their children, and a child has no number.
+    _blankPerson() {
+        return {
+            name: "", dob: "", gender: "", phone: "", email: "",
+            answers: {}, terms: false, signature: "",
+        };
+    }
+
+    // Store whatever is on screen against the person being filled in.
+    _savePerson() {
+        const i = this.state.memberIndex;
+        while (this.state.members.length <= i) {
+            this.state.members.push(this._blankPerson());
+        }
+        this.state.members[i] = {
+            name: (this.state.custName || "").trim(),
+            dob: this.state.custDob || "",
+            gender: this.state.custGender || "",
+            // The lead's number is the booking's contact number and is built
+            // from the country picker; everyone else types a plain optional one.
+            phone: this.isLeadPerson ? this.fullMobile : (this.state.memberPhone || "").trim(),
+            email: (this.state.custEmail || "").trim(),
+            answers: { ...this.state.answers },
+            terms: !!this.state.custTerms,
+            signature: this.state.sig.value || "",
+        };
+    }
+
+    // Bring a person back onto the screen. Used both when moving to the next
+    // person and when stepping Back into someone already filled in, so nothing
+    // typed is ever lost.
+    _loadPerson(index) {
+        const person = this.state.members[index] || this._blankPerson();
+        this.state.memberIndex = index;
+        this.state.custName = person.name || "";
+        this.state.custDob = person.dob || "";
+        this.state.custGender = person.gender || "";
+        this.state.custEmail = person.email || "";
+        this.state.answers = { ...(person.answers || {}) };
+        this.state.custTerms = !!person.terms;
+        this.state.sig = newSigState(person.signature || "");
+        // Persons 2+ get the short form. custMobile / custDialCode /
+        // custWhatsapp / custPartnerId are NOT touched here - they hold the
+        // lead's contact details, which the order is billed to and which have
+        // to still be there when we come back to place it.
+        this.state.memberPhone = this.isLeadPerson ? "" : person.phone || "";
+    }
+
+    // Copy the lead's answers onto the person being filled in. Ten questions
+    // times four people is forty answers at a busy counter; without this the
+    // family flow is unusable. Everything stays editable afterwards.
+    copyLeadAnswers() {
+        const lead = this.state.members[0];
+        if (!lead) {
+            return;
+        }
+        this.state.answers = { ...(lead.answers || {}) };
+        this.state.error = "";
+    }
+
     // Straight off the package list - nothing to check yet.
     toDetails() {
         this.state.error = "";
+        // Entering the details for the first time: size the list to the family
+        // and start on person 1.
+        // Size the list to the family, keeping anyone already entered: changing
+        // Family 4 to Family 2 does not change who the first two people are.
+        if (this.state.members.length !== this.headcount) {
+            const kept = this.state.members.slice(0, this.headcount);
+            while (kept.length < this.headcount) {
+                kept.push(this._blankPerson());
+            }
+            this.state.members = kept;
+        }
+        // Always start the cycle at person 1 AND repaint from them. Without the
+        // repaint the form keeps whoever was entered last: fill in person 3 of
+        // a Family 4, go Back and switch to Family 2, and their name and date
+        // of birth reappear labelled "Person 1 of 2" - booking one person under
+        // another's details.
+        this._loadPerson(0);
         this.state.screen = "details";
     }
     // Leaving the details, so the customer is checked HERE: the complaint has
@@ -166,6 +386,7 @@ export class TherapyScreen extends Component {
             return;
         }
         this.state.error = "";
+        this._savePerson();
         if (this.state.questionsFor !== this.state.packageId) {
             try {
                 const r = await fetch(
@@ -182,21 +403,102 @@ export class TherapyScreen extends Component {
     // True when we know who this booking is for. Sets the error itself so both
     // callers say the same thing.
     customerOk() {
-        if (!this.fullMobile) {
+        // Only the lead needs a number: they are the booking's contact and the
+        // one the order is billed to. Requiring one from every person would
+        // make it impossible to book for a child.
+        if (this.isLeadPerson && !this.fullMobile) {
             this.state.error = "Please enter the customer's phone number.";
             return false;
         }
         if (!(this.state.custName || "").trim()) {
-            this.state.error = "Please enter the customer's name.";
+            this.state.error = this.isFamily
+                ? `Please enter the name of ${this.personLabel.toLowerCase()}.`
+                : "Please enter the customer's name.";
             return false;
         }
         return true;
     }
+    // The therapy's disclaimer, or null when it has none - which is what makes
+    // the step disappear rather than show an empty page. It rides along on
+    // /api/spa/therapies, so it is already loaded by the time we get here.
+    get disclaimer() {
+        const th = this.therapy;
+        const d = th && th.disclaimer;
+        return d && d.body ? d : null;
+    }
+
+    // Set per therapy on its POS category, and it rides along on the same
+    // disclaimer payload. Missing on a therapy last saved before the field
+    // existed, hence the coercion - drawing stays the default.
+    get allowSignatureUpload() {
+        return !!(this.disclaimer && this.disclaimer.allow_upload);
+    }
+
+    // The hint has to be computed here: passing one at all overrides the
+    // upload-aware wording SpaSignatureField would otherwise pick itself.
+    get signHint() {
+        return this.allowSignatureUpload
+            ? "The customer signs here, or upload a picture of the signature."
+            : "The customer signs here for this service.";
+    }
+
+    // Leaving the questions. The consent tick and the signature moved onto the
+    // disclaimer step, so they are given on the page carrying the wording being
+    // agreed to - not one page before it.
+    toDisclaimer() {
+        if (!this.requiredOk()) {
+            this.state.error = this.isFamily
+                ? `Please answer the required questions for ${this.personLabel.toLowerCase()}.`
+                : "Please answer the required questions.";
+            return;
+        }
+        this.state.error = "";
+        this._savePerson();
+        if (!this.disclaimer) {
+            // No waiver to agree to, so this person is finished.
+            this.nextPersonOrConfirm();
+            return;
+        }
+        this.state.screen = "disclaimer";
+    }
+
+    // End of one person's turn: either start the next person, or place the
+    // order. Consent sits here, right after their own answers - nobody signs
+    // for a health history they did not give.
+    nextPersonOrConfirm() {
+        if (this.disclaimer) {
+            if (!this.state.custTerms) {
+                this.state.error = "Please tick that the terms are accepted.";
+                return;
+            }
+            if (!this.signed) {
+                this.state.error = "Please capture the signature.";
+                return;
+            }
+        }
+        this.state.error = "";
+        this._savePerson();
+        if (!this.isLastPerson) {
+            this._loadPerson(this.state.memberIndex + 1);
+            this.state.screen = "details";
+            return;
+        }
+        this.confirm();
+    }
+
     back() {
-        const map = { details: "select", questions: "details" };
+        const map = { details: "select", questions: "details", disclaimer: "questions" };
+        this.state.error = "";
+        if (this.state.screen === "details" && !this.isLeadPerson) {
+            // Stepping back off person N's details returns to person N-1's
+            // last step, with everything they entered still there.
+            this._savePerson();
+            this._loadPerson(this.state.memberIndex - 1);
+            this.state.screen = this.disclaimer ? "disclaimer" : "questions";
+            return;
+        }
         const prev = map[this.state.screen];
         if (prev) {
-            this.state.error = "";
             this.state.screen = prev;
         }
     }
@@ -456,26 +758,42 @@ export class TherapyScreen extends Component {
     // pos.order.spa_service_summary reads (spa_kiosk/models/pos_order.py) for
     // the "Service / Questions & Answers" column of the contact's Spa Visits
     // tab. The modal used to fill it; now that we skip the modal, this does.
-    buildAnswerNote() {
+    // One person's answers as "Q: A | Q: A".
+    _answerPairs(answers, keepBlank) {
         return this.state.questions
             .map((q) => {
-                const a = this.state.answers[q.id];
+                const a = (answers || {})[q.id];
                 const val = Array.isArray(a) ? a.join(", ") : a || "";
-                return `${q.text}: ${val || "-"}`;
+                return keepBlank || val ? `${q.text}: ${val || "-"}` : null;
             })
-            .join(" | ");
+            .filter(Boolean);
+    }
+
+    buildAnswerNote() {
+        // A family's answers are prefixed with who gave them, or two people's
+        // health histories would read as one contradictory list.
+        if (this.isFamily) {
+            return this.state.members
+                .map((person, index) => {
+                    const pairs = this._answerPairs(person.answers, true).join(" | ");
+                    return `${person.name || `Person ${index + 1}`} — ${pairs}`;
+                })
+                .join(" || ");
+        }
+        return this._answerPairs(this.state.members[0]?.answers, true).join(" | ");
     }
 
     buildNote() {
         const th = this.therapy;
         const p = this.pkg;
         const lines = [`${this.therapyTitle(th)} — ${p.name}`];
-        this.state.questions.forEach((q) => {
-            const a = this.state.answers[q.id];
-            const val = Array.isArray(a) ? a.join(", ") : a || "";
-            if (val) {
-                lines.push(`${q.text}: ${val}`);
+        this.state.members.forEach((person, index) => {
+            const pairs = this._answerPairs(person.answers, false);
+            if (this.isFamily) {
+                lines.push("");
+                lines.push(`${index + 1}. ${person.name || `Person ${index + 1}`}`);
             }
+            lines.push(...pairs);
         });
         return lines.join("\n");
     }
@@ -485,6 +803,11 @@ export class TherapyScreen extends Component {
             screen: "select",
             therapyId: null,
             packageId: null,
+            addonIds: [],
+            members: [],
+            memberIndex: 0,
+            memberPhone: "",
+            memberType: "individual",
             questions: [],
             questionsFor: null,
             answers: {},
@@ -511,19 +834,46 @@ export class TherapyScreen extends Component {
         this.resetSignature();
     }
 
+    // Put a line on the order for each extra ticked on the package screen.
+    // Called after the package line so the extras sit under it on the receipt.
+    //
+    // No popup: the customer already chose these alongside the package, and
+    // asking again after "Add to Order" would offer the same extras twice.
+    async _addChosenAddons() {
+        for (const addon of this.chosenAddons) {
+            try {
+                // skipSpaQuestions because an add-on is an ordinary product -
+                // it has no therapy, so it has no questionnaire of its own.
+                await this.pos.addLineToCurrentOrder(
+                    { product_tmpl_id: addon.id, qty: 1 },
+                    { skipSpaQuestions: true }
+                );
+            } catch (e) {
+                // Never let one extra cost the sale: the package is already on
+                // the order by this point, so log it and keep going.
+                console.error("Therapy booking: could not add add-on", addon, e);
+            }
+        }
+    }
+
     // Close the booking page (back to the logo / cart).
     closeBooking() {
         this.reset();
         this.pos.showTherapyBooking = false;
     }
 
-    // Create or reuse the contact for whatever is on the form and return its
-    // id, or null when it could not be saved (the booking still goes through).
+    // Create or reuse the contact for the LEAD BOOKER and return its id, or
+    // null when it could not be saved (the booking still goes through).
+    //
+    // Reads members[0], not the form. By the time this runs the form holds the
+    // LAST person entered, so on a family booking the on-screen fields belong
+    // to somebody else entirely - billing the order to them would be wrong.
     async _resolveCustomer() {
-        const name = (this.state.custName || "").trim();
+        const lead = this.state.members[0] || {};
+        const name = (lead.name || "").trim();
         const mobile = this.fullMobile;
         const wa = this.state.custWaSame ? mobile : this.fullWhatsapp;
-        const email = (this.state.custEmail || "").trim();
+        const email = (lead.email || "").trim();
         try {
             const partnerId = this.state.custPartnerId;
             if (partnerId) {
@@ -532,11 +882,11 @@ export class TherapyScreen extends Component {
                 // the till must never overwrite good data.
                 const existing = this.selectedCustomer || {};
                 const patch = {};
-                if (this.state.custDob && !existing.date_of_birth) {
-                    patch.date_of_birth = this.state.custDob;
+                if (lead.dob && !existing.date_of_birth) {
+                    patch.date_of_birth = lead.dob;
                 }
-                if (this.state.custGender && !existing.gender) {
-                    patch.gender = this.state.custGender;
+                if (lead.gender && !existing.gender) {
+                    patch.gender = lead.gender;
                 }
                 if (wa && !existing.whatsapp) {
                     patch.whatsapp = wa;
@@ -555,11 +905,11 @@ export class TherapyScreen extends Component {
             if (wa) {
                 vals.whatsapp = wa;
             }
-            if (this.state.custDob) {
-                vals.date_of_birth = this.state.custDob;
+            if (lead.dob) {
+                vals.date_of_birth = lead.dob;
             }
-            if (this.state.custGender) {
-                vals.gender = this.state.custGender;
+            if (lead.gender) {
+                vals.gender = lead.gender;
             }
             if (email) {
                 vals.email = email;
@@ -579,21 +929,85 @@ export class TherapyScreen extends Component {
     // The signature belongs to the SERVICE, so it is stored as its own record
     // and the line only carries its id - a base64 payload on the line would
     // ride along in the POS session and in every order sync from then on.
+    //
+    // ONE RECORD PER PERSON. A family booking collects a signature from each
+    // person for their own answers, and client_name / client_phone /
+    // client_email are already per-signature snapshots, so each record says who
+    // signed it. They all point at the same order line through
+    // pos_order_line_id; line.spa_signature_ref is a plain Integer and can only
+    // hold one, so it keeps pointing at the lead's - which is what every
+    // existing reader expects.
+    // Everyone on a family sale, parked on the order so they travel with it to
+    // the server.
+    //
+    // Deliberately NOT an orm.create() here. At this point the order has not
+    // synced, so `order.id` is a negative placeholder and `line.id` is a client
+    // id - which is exactly why every spa.service.signature row in the database
+    // has a null pos_order_line_id. Writing to a field on the order instead
+    // means the people ride along with the order payload and are turned into
+    // booking members in _process_order, once real ids exist.
+    //
+    // Families only. An individual sale needs no booking, and creating one for
+    // every counter sale would change what the Orders screen lists.
+    _saveMembers(order) {
+        if (!this.isFamily || !order || !("spa_members_json" in order)) {
+            return;
+        }
+        const people = this.state.members
+            .filter((person) => (person.name || "").trim())
+            .map((person, index) => ({
+                sequence: index + 1,
+                name: (person.name || "").trim(),
+                // dob and gender are collected in _savePerson and used to be
+                // dropped for everyone but the lead - they identify the person
+                // on the waiver and match them on a return visit.
+                date_of_birth: person.dob || false,
+                gender: person.gender || false,
+                phone: person.phone || "",
+                email: person.email || "",
+                terms_accepted: !!person.terms,
+            }));
+        if (people.length < 2) {
+            return;
+        }
+        order.spa_members_json = JSON.stringify(people);
+    }
+
     async _saveSignature(line, templateId, partnerId) {
-        const signature = this.state.sig.value || "";
-        if (!signature) {
+        const signed = this.state.members.filter((p) => p.signature);
+        if (!signed.length) {
             return;
         }
         try {
-            const ids = await this.orm.create("spa.service.signature", [
-                {
-                    partner_id: partnerId || false,
-                    product_tmpl_id: templateId,
-                    signature: signature,
-                    terms_accepted: !!this.state.custTerms,
-                },
-            ]);
-            line.spa_signature_ref = Array.isArray(ids) ? ids[0] : ids;
+            const ids = await this.orm.create(
+                "spa.service.signature",
+                this.state.members
+                    .map((person, index) => ({ person, index }))
+                    .filter(({ person }) => person.signature)
+                    .map(({ person, index }) => ({
+                        // Only the lead has a contact at this point; the rest
+                        // are attached to the booking, and the snapshot fields
+                        // below are what identify them on the waiver.
+                        partner_id: index === 0 ? partnerId || false : false,
+                        product_tmpl_id: templateId,
+                        pos_order_line_id: line.id,
+                        signature: person.signature,
+                        terms_accepted: !!person.terms,
+                        // The Client Information shown on the waiver, stored as
+                        // it stood when it was signed - see the model for why
+                        // it is not just read back off the contact.
+                        client_name: person.name || "",
+                        client_phone: person.phone || "",
+                        client_email: person.email || "",
+                        // The waiver wording as shown on the disclaimer step the
+                        // customer just read. Stored so a later edit to the
+                        // therapy cannot rewrite what they agreed to.
+                        disclaimer_title: (this.disclaimer && this.disclaimer.title) || "",
+                        disclaimer_body: (this.disclaimer && this.disclaimer.body) || "",
+                    }))
+            );
+            const list = Array.isArray(ids) ? ids : [ids];
+            line.spa_signature_ref = list[0];
         } catch (e) {
             // Same rule as the customer: don't swallow it. The package is on
             // the order but nothing was signed for it, and staff must know.
@@ -626,24 +1040,45 @@ export class TherapyScreen extends Component {
     }
 
     async confirm() {
-        if (!this.requiredOk()) {
-            this.state.error = "Please answer the required questions.";
+        // Everyone is validated on their own way through the wizard; this is
+        // the last gate before the order, checking the COLLECTED people rather
+        // than whoever happens to be on screen. A Family 3 that somehow reached
+        // here with two people must not become an order.
+        if (this.state.members.length !== this.headcount) {
+            this.state.error =
+                `This package is for ${this.headcount} people but ` +
+                `${this.state.members.length} have been entered.`;
             return;
         }
-        if (!this.state.custTerms) {
-            this.state.error =
-                "Please ask the customer to accept the terms first.";
+        const nameless = this.state.members.findIndex((p) => !(p.name || "").trim());
+        if (nameless !== -1) {
+            this._loadPerson(nameless);
+            this.state.screen = "details";
+            this.state.error = `Please enter the name of person ${nameless + 1}.`;
             return;
         }
-        if (!this.signed) {
-            this.state.error =
-                "Please ask the customer to sign for this service.";
-            return;
+        // Only demanded when there IS a disclaimer step: the tick and the
+        // signature live on it, so a therapy with the disclaimer switched off
+        // has no screen on which they could ever have been given. Without this
+        // guard, turning it off would block adding the package to the order.
+        if (this.disclaimer) {
+            const unsigned = this.state.members.findIndex(
+                (p) => !p.terms || !(p.signature || "").trim());
+            if (unsigned !== -1) {
+                this._loadPerson(unsigned);
+                this.state.screen = "disclaimer";
+                this.state.error = this.isFamily
+                    ? `${this.personLabel} still needs to accept and sign.`
+                    : "Please ask the customer to accept the terms and sign.";
+                return;
+            }
         }
         // Checked on the way out of the details step already; if something
         // cleared them since, send them back rather than failing on save.
-        if (!this.customerOk()) {
+        if (!this.fullMobile) {
+            this._loadPerson(0);
             this.state.screen = "details";
+            this.state.error = "Please enter the customer's phone number.";
             return;
         }
         this.state.busy = true;
@@ -662,10 +1097,52 @@ export class TherapyScreen extends Component {
             // of this wizard, so suppress the "Service Questions" modal that
             // pos_spa_header pops for every line added. Same escape hatch
             // ticket_tabs.js uses when loading an already-answered booking.
+            // Charge the price of the member type the customer was shown.
+            // Passing price_unit marks the line price_type "manual", which is
+            // what stops a pricelist resetting it back to the individual price
+            // (see point_of_sale pos_store.handlePriceUnit).
+            const chosenPrice = this.pkg ? this.priceFor(this.pkg) : null;
+            const lineVals = { product_tmpl_id: templateId };
+            if (chosenPrice !== null && this.state.memberType !== "individual") {
+                lineVals.price_unit = chosenPrice;
+            }
             const line = await this.pos.addLineToCurrentOrder(
-                { product_tmpl_id: templateId },
+                lineVals,
                 { skipSpaQuestions: true }
             );
+            // Record WHICH member type was sold: a family line priced 216 is
+            // otherwise indistinguishable from an individual one discounted to
+            // 216, which would make the receipts and reports lie.
+            if (line && this.state.memberType) {
+                line.spa_member_type = this.state.memberType;
+                // Name it on the line too. full_product_name is what the
+                // printed receipt shows (getFullProductName) and what becomes
+                // the invoice line description, so setting it here makes both
+                // documents state the family size. The server re-applies this
+                // on create, so the two can never disagree.
+                // Strip any suffix already there before adding one: a line
+                // merged into an existing one would otherwise read
+                // "... - Family 2 - Family 2". Mirrors the server's
+                // _spa_apply_member_name, so both arrive at the same string.
+                let base =
+                    line.full_product_name ||
+                    (line.product_id && line.product_id.display_name) ||
+                    "";
+                for (const m of this.state.memberTypes || []) {
+                    const suffix = ` - ${m.label}`;
+                    if (base.endsWith(suffix)) {
+                        base = base.slice(0, -suffix.length);
+                        break;
+                    }
+                }
+                const chosen = (this.state.memberTypes || []).find(
+                    (m) => m.key === this.state.memberType
+                );
+                line.full_product_name =
+                    chosen && this.state.memberType !== "individual"
+                        ? `${base} - ${chosen.label}`
+                        : base;
+            }
             const order = this.pos.getOrder();
 
             if (partnerId) {
@@ -689,9 +1166,18 @@ export class TherapyScreen extends Component {
             if (order && "spa_channel" in order) {
                 order.spa_channel = "web";
             }
+            this._saveMembers(order);
+            // The extras ticked on the package screen, added after the package
+            // so they sit under it on the receipt. Awaited before reset(),
+            // which clears the very list this reads from.
+            await this._addChosenAddons();
             this.reset();
             this.pos.showTherapyBooking = false;
         } catch (e) {
+            // Log it: the message shown to staff is deliberately plain, but
+            // discarding `e` left nothing to diagnose from. Same rule
+            // _saveSignature already follows a few lines up.
+            console.error("Therapy booking: could not add the package", e);
             this.state.error = "Could not add this package to the order.";
             this.state.busy = false;
         }

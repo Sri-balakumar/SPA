@@ -10,6 +10,12 @@
         <field name="model">spa.booking</field>
         <field name="inherit_id" ref="spa_kiosk.view_spa_booking_list"/>
         <field name="arch" type="xml">
+            <!-- The appointment, right after the booking reference. `create_date`
+                 next to it is when the booking was MADE - two different things,
+                 and only one of them tells you when the customer is coming. -->
+            <field name="create_date" position="before">
+                <field name="slot_datetime" string="Appointment" optional="show"/>
+            </field>
             <field name="state" position="before">
                 <field name="signature_missing" string="Not Signed"
                        widget="boolean_toggle" readonly="1" optional="show"/>
@@ -19,6 +25,66 @@
         </field>
     </record>
 
+    <!-- Waivers signed at the counter (a counter sale creates no booking, so
+         these do not show in Spa Bookings). The Client Information shown is the
+         copy taken at signing, not a live read of the contact - see
+         spa.service.signature for why that matters. -->
+    <record id="view_spa_service_signature_list" model="ir.ui.view">
+        <field name="name">spa.service.signature.list</field>
+        <field name="model">spa.service.signature</field>
+        <field name="arch" type="xml">
+            <list string="Signed Waivers" create="false">
+                <field name="create_date" string="Signed On"/>
+                <field name="client_name"/>
+                <field name="client_phone"/>
+                <field name="client_email" optional="show"/>
+                <field name="product_tmpl_id"/>
+                <field name="partner_id" optional="hide"/>
+                <field name="terms_accepted" widget="boolean_toggle" readonly="1"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_spa_service_signature_form" model="ir.ui.view">
+        <field name="name">spa.service.signature.form</field>
+        <field name="model">spa.service.signature</field>
+        <field name="arch" type="xml">
+            <form string="Signed Waiver" create="false">
+                <sheet>
+                    <group>
+                        <group string="Client Information">
+                            <field name="client_name" readonly="1"/>
+                            <field name="client_phone" readonly="1"/>
+                            <field name="client_email" readonly="1"/>
+                        </group>
+                        <group string="Service">
+                            <field name="product_tmpl_id" readonly="1"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="terms_accepted" readonly="1"/>
+                            <field name="create_date" string="Signed On" readonly="1"/>
+                        </group>
+                    </group>
+                    <separator string="Signature"/>
+                    <field name="signature" widget="image" readonly="1" nolabel="1"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_service_signature" model="ir.actions.act_window">
+        <field name="name">Signed Waivers</field>
+        <field name="res_model">spa.service.signature</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <!-- Under Point of Sale like the rest: this module deliberately has no
+         top-level Spa menu (see spa_kiosk/views/spa_menus.xml). -->
+    <menuitem id="menu_spa_service_signature" name="Signed Waivers"
+              parent="point_of_sale.menu_point_root"
+              action="action_spa_service_signature"
+              sequence="87"
+              groups="spa_kiosk.group_spa_receptionist"/>
+
     <record id="view_spa_booking_search_signature" model="ir.ui.view">
         <field name="name">spa.booking.search.signature</field>
         <field name="model">spa.booking</field>
@@ -27,8 +93,24 @@
                 <field name="name"/>
                 <field name="partner_name"/>
                 <field name="mobile"/>
+                <field name="slot_datetime" string="Appointment"/>
                 <filter name="spa_not_signed" string="Not Signed"
                         domain="[('signature_missing', '=', True)]"/>
+                <filter name="spa_has_slot" string="Has an Appointment"
+                        domain="[('slot_datetime', '!=', False)]"/>
+                <filter name="spa_waiting" string="Waiting List"
+                        domain="[('state', '=', 'waiting')]"/>
+                <separator/>
+                <!-- A BARE <group>: Odoo 19's search-view schema allows neither
+                     `expand` nor `string` on it, and the registry refuses to
+                     load if either is present. Matches how core writes group-by
+                     (see point_of_sale/views/pos_order_report_view.xml). -->
+                <group>
+                    <filter name="spa_group_slot" string="Appointment"
+                            context="{'group_by': 'slot_datetime:day'}"/>
+                    <filter name="spa_group_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                </group>
             </search>
         </field>
     </record>

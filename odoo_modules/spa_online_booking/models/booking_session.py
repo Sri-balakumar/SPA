@@ -27,7 +27,7 @@ BOOKING_ENTRY_PATH = '/odoo/spa-book'
 
 
 def _wa_me():
-    """The process key whatsapp_neonize stamps on a session it owns."""
+    """The process key whatsapp_gateway stamps on a session it owns."""
     return '%s:%s' % (socket.gethostname(), os.getpid())
 
 # How long the Send Link dialog may wait for a WhatsApp session it had to
@@ -89,15 +89,20 @@ class SpaBookingSession(models.Model):
                 rec.booking_url = False
                 rec.whatsapp_share_url = False
                 continue
-            # Carry the database in the link. Customers open it with no
-            # session, so on a server hosting several databases Odoo cannot
-            # tell which one to use and answers "No database is selected"
-            # (404). ensure_db() in the controller validates this against
-            # db_filter, so it cannot be used to reach a database the filter
-            # would not allow.
-            url = '%s%s?db=%s&token=%s' % (
-                rec.get_base_url(), BOOKING_ENTRY_PATH,
-                quote(rec.env.cr.dbname), rec.token)
+            # The short form the spa asked for: <base>/spa/book?token=...
+            #
+            # No ?db= and no /odoo/ hop. Both existed to survive a server that
+            # cannot decide which database a session-less request belongs to;
+            # this one now pins `dbfilter` to the live database in odoo.conf, so
+            # every request resolves on its own and the extra hop only made the
+            # link longer.
+            #
+            # If dbfilter is ever cleared - back to hosting several databases -
+            # this short form 404s for anyone without an Odoo session, and the
+            # BOOKING_ENTRY_PATH form below is what to go back to:
+            #   '%s%s?db=%s&token=%s' % (base, BOOKING_ENTRY_PATH, dbname, token)
+            url = '%s%s?token=%s' % (
+                rec.get_base_url(), BOOKING_PAGE_PATH, rec.token)
             rec.booking_url = url
             # wa.me needs the number as digits only (no '+', spaces or dashes).
             digits = ''.join(c for c in (rec.whatsapp_number or '') if c.isdigit())
@@ -123,7 +128,7 @@ class SpaBookingSession(models.Model):
                 self.whatsapp_number = number
 
     # ------------------------------------------------------------------
-    # WhatsApp delivery, through our own session (whatsapp_neonize)
+    # WhatsApp delivery, through our own session (whatsapp_gateway)
     # ------------------------------------------------------------------
     def _wa_share_url_for(self, number, name=None):
         """wa.me fallback for ONE recipient. The link itself is shared, so the
@@ -143,236 +148,56 @@ class SpaBookingSession(models.Model):
         return '%sbook your sessions at Stretch and Go here: %s' % (greeting, link)
 
     @api.model
-    def _wa_live_session(self):
-        """The WhatsApp session that can actually send right now.
-
-        The `status` column alone is not enough: it outlives the process that
-        held the client, so a session left over from before a restart still
-        reads 'connected' while nothing can send through it.
-        """
-        Session = self.env['whatsapp.session'].sudo()
-        for session in Session.search([('active', '=', True)]):
-            if session.status == 'connected' and self._wa_owner_alive(session):
-                return session
-        return Session.browse()
-
-    @api.model
-    def _wa_wakeable(self):
-        """Sessions neonize could reopen on its own - saved credentials, no QR."""
-        return self.env['whatsapp.session'].sudo().search([
-            ('active', '=', True),
-            ('auto_reconnect', '=', True),
-            ('db_path', '!=', False),
-        ]).filtered(lambda s: s.db_path and os.path.exists(s.db_path))
-
-    @api.model
-    def _wa_release_dead_owner(self, session):
-        """Free a session still marked as held by a process that is gone.
-
-        neonize refuses to let anyone take a session over until the recorded
-        owner has been silent for WA_OWNER_TIMEOUT (90s). That is the right
-        rule for a busy process, but wrong immediately after a restart: the
-        owner died with the server, so the whole POS waits 90 seconds for a
-        heartbeat that will never arrive again. When owner_key names a PID on
-        THIS machine that is no longer running, the heartbeat is provably
-        stale - clear it so the session can be reopened at once.
-
-        Deliberately limited to this host: a PID from another server says
-        nothing about what is running here. And if we cannot PROVE the process
-        is gone we leave the row alone, because stealing a session from a
-        healthy client is exactly the bug the ownership rule prevents.
-        """
-        owner = session.owner_key or ''
-        host, sep, pid = owner.rpartition(':')
-        if not sep or host != socket.gethostname():
-            return False
-        try:
-            pid = int(pid)
-        except (TypeError, ValueError):
-            return False
-        if pid == os.getpid():
-            return False                     # that is us
-        try:
-            import psutil
-            if psutil.pid_exists(pid):
-                return False                 # still running - hands off
-        except ImportError:
-            return False                     # cannot prove it is dead
-        self.env.cr.execute(
-            "UPDATE whatsapp_session SET owner_key = NULL, owner_heartbeat = NULL, "
-            "       status = 'disconnected' "
-            "WHERE id = %s AND owner_key = %s", (session.id, owner))
-        session.invalidate_recordset(['owner_key', 'owner_heartbeat', 'status'])
-        _logger.info(
-            "Spa: WhatsApp session %s was still marked as held by %s, which is "
-            "no longer running - released it.", session.name, owner)
-        return True
-
-    @api.model
-    def _wa_owner_alive(self, session):
-        """_owner_is_live(), corrected for an owner that no longer exists.
-
-        The heartbeat age alone cannot tell "busy process" from "process that
-        died 20 seconds ago", and for those 90 seconds the POS showed a dead
-        session as ready to send. Ask whether the owning PID is still running
-        too - and when it is not, release the row here so the very next step
-        can reopen the session instead of waiting the timeout out.
-        """
-        if not session._owner_is_live():
-            return False
-        if session.owner_key == _wa_me():
-            return True
-        return not self._wa_release_dead_owner(session)
-
-    @api.model
-    def _wake_wa_session(self, timeout=WA_WAKE_TIMEOUT):
-        """Reopen a WhatsApp session that no process is holding any more.
-
-        Restarting Odoo leaves the session row pointing at the process that
-        died with it. That owner's heartbeat only goes stale after
-        WA_OWNER_TIMEOUT (90s), so the reconnect neonize runs ~10s into startup
-        stands down ("session N is already held by ... - standing down") and
-        nothing tries again until the 5-minute auto-reconnect cron. For up to
-        those five minutes the POS shows "(not connected)" and Send fails,
-        which is what staff kept hitting after a restart - so bring the session
-        back on demand, from the till.
-
-        Only sessions neonize would reconnect by itself are touched
-        (auto_reconnect + credentials on disk), so this never pops a QR prompt
-        and never disturbs a client that is already healthy.
-        """
-        live = self._wa_live_session()
-        if live:
-            return live
-        Session = self.env['whatsapp.session'].sudo()
-        candidates = self._wa_wakeable()
-        if not candidates:
-            return Session.browse()
-
-        fresh = ['status', 'owner_key', 'owner_heartbeat']
-        deadline = time.time() + max(0, timeout)
-        last_try = None
-        while True:
-            # Retry the claim, don't only poll: the dead owner's heartbeat may
-            # age out partway through our wait, and until it does every attempt
-            # to take the session over is refused.
-            if last_try is None or time.time() - last_try >= WA_WAKE_RETRY_EVERY:
-                last_try = time.time()
-                for session in candidates:
-                    # Anyone holding it - including our own first attempt from a
-                    # previous round - means a connect is already under way, and
-                    # kicking it again would only reset it to 'connecting'.
-                    # _wa_owner_alive() also frees the dead PID a restart leaves
-                    # behind, which is what lets the first round through.
-                    if self._wa_owner_alive(session):
-                        continue
-                    try:
-                        session.action_connect()
-                    except Exception as exc:
-                        _logger.warning(
-                            "Spa: could not wake WhatsApp session %s: %s",
-                            session.name, exc)
-            if time.time() >= deadline:
-                break
-            time.sleep(WA_WAKE_POLL)
-            # action_connect() does its work in another thread on its own
-            # cursor, so re-read from the database, not from this request's
-            # cache - otherwise we would poll a value that can never change.
-            Session.invalidate_model(fresh)
-            # ...and push the owner's in-memory state into the column, rather
-            # than waiting up to two minutes for the health-check cron to do it.
-            candidates._wa_sync_status()
-            Session.invalidate_model(fresh)
-            live = self._wa_live_session()
-            if live:
-                _logger.info("Spa: WhatsApp session %s is back up.", live.name)
-                return live
-        Session.invalidate_model(fresh)
-        return self._wa_live_session()
-
-    @api.model
     def _get_wa_session(self, session_id=None):
         """The whatsapp.session used to send booking links.
 
-        Prefers the one configured in Settings (there is usually more than one
-        session on the database), otherwise falls back to the first connected
-        one, and reopens a session whose owner died rather than failing the
-        send. sudo() because a POS/receptionist user only has read access to
+        One question, asked of the gateway: which session can send right now.
+        An explicit choice from the Send Link dialog wins; otherwise the one
+        configured in Settings; otherwise whichever is connected.
+
+        This used to be several hundred lines that woke a sleeping session -
+        reading owner PIDs and heartbeats, checking credentials on disk,
+        calling action_connect() and waiting for it. That was necessary when a
+        neonize client died with the worker holding it. The gateway keeps the
+        connection open across Odoo restarts, so there is nothing to wake, and
+        the fields that machinery read no longer exist.
+
+        sudo() because a POS or receptionist user has only read access to
         whatsapp.session.
         """
         Session = self.env['whatsapp.session'].sudo()
-        # An explicit choice from the Send Link dialog wins over everything.
-        # Trust it even if the status column disagrees - send_message() checks
-        # the live state itself and we degrade gracefully if it really is down.
         if session_id:
             try:
                 chosen = Session.browse(int(session_id)).exists()
             except (TypeError, ValueError):
                 chosen = Session.browse()
             if chosen:
-                if not (chosen.status == 'connected'
-                        and self._wa_owner_alive(chosen)):
-                    # Picked, but nobody is holding it - reopen it before
-                    # handing it to send_message().
-                    self._wake_wa_session()
-                    Session.invalidate_model(
-                        ['status', 'owner_key', 'owner_heartbeat'])
                 return chosen
         configured = self.env['ir.config_parameter'].sudo().get_param(
             'spa_online_booking.whatsapp_session_id')
-        # Prefer the live-accurate picker: the `status` column is only refreshed
-        # by a 2-minute cron, so searching it can miss a session that is in fact
-        # connected. Falls back to the column for older whatsapp_neonize builds.
-        if hasattr(Session, 'get_connected_session'):
-            found = Session.get_connected_session(configured)
-        else:
-            found = Session.browse()
-            if configured:
-                try:
-                    session = Session.browse(int(configured)).exists()
-                except (TypeError, ValueError):
-                    session = Session
-                if session and session.status == 'connected':
-                    found = session
-            if not found:
-                found = Session.search([('status', '=', 'connected')], limit=1)
-        # Nothing usable: the process that held the session most likely went
-        # down with the last restart, so reopen it instead of failing the send.
-        return found or self._wake_wa_session()
+        return Session.get_connected_session(configured)
 
     @api.model
     def pos_wa_sessions(self, wake=False):
         """The WhatsApp senders the POS can choose from, best first.
 
-        Connected sessions are listed first and one is preselected, so staff
-        never have to configure anything; when there is more than one number
-        they can switch sender before sending.
-
-        The Send Link dialog calls this twice: once plain, to paint the dialog
-        immediately, and again with wake=True when nothing came back usable -
-        that second call reopens a session whose owner died (see
-        _wake_wa_session) so the till heals itself after a restart.
+        `wake` is accepted and ignored: the Send Link dialog still passes it,
+        and there is no longer anything to wake. Kept rather than removed so an
+        older POS bundle in a browser cache does not fail on an unexpected
+        argument.
         """
         Session = self.env['whatsapp.session'].sudo()
-        if wake:
-            self._wake_wa_session()
-            Session.invalidate_model(['status', 'owner_key', 'owner_heartbeat'])
-        # Refreshes the (cron-lagged) status column as a side effect, so the
-        # `connected` flags below are live rather than up to 2 minutes stale.
-        live = (Session.get_connected_session()
-                if hasattr(Session, 'get_connected_session') else Session.browse())
-        rows = []
-        for session in Session.search([('active', '=', True)]):
-            rows.append({
-                'id': session.id,
-                'name': session.name or 'WhatsApp',
-                'status': session.status,
-                # Not `status == 'connected'` alone: that column outlives the
-                # process that held the client, so a dead session was offered as
-                # ready and only failed once staff pressed Send.
-                'connected': (session.status == 'connected'
-                              and self._wa_owner_alive(session)),
-            })
+        sessions = Session.search([('active', '=', True)])
+        # Asks the gateway and writes the answer back, so the flags below are
+        # live rather than however stale the column happened to be.
+        sessions._refresh_state()
+
+        rows = [{
+            'id': session.id,
+            'name': session.name or 'WhatsApp',
+            'status': session.status,
+            'connected': session.status == 'connected',
+        } for session in sessions]
         rows.sort(key=lambda r: (not r['connected'], r['id']))
 
         configured = self.env['ir.config_parameter'].sudo().get_param(
@@ -385,18 +210,20 @@ class SpaBookingSession(models.Model):
                 cfg = 0
             if any(r['id'] == cfg for r in rows):
                 default_id = cfg
-        if not default_id and live:
-            default_id = live.id
-        if not default_id and rows:
-            default_id = rows[0]['id']
+        if not default_id:
+            connected = [r for r in rows if r['connected']]
+            if connected:
+                default_id = connected[0]['id']
+            elif rows:
+                default_id = rows[0]['id']
         return {
             'sessions': rows,
             'default_id': default_id,
             'any_connected': any(r['connected'] for r in rows),
-            # Whether waking one could help at all: a session that was never
-            # scanned on this machine needs a QR, not a reconnect, and the
-            # dialog must say so instead of offering a button that can't work.
-            'can_wake': bool(self._wa_wakeable()),
+            # Nothing to wake any more: when nothing is connected the number
+            # needs attention in the panel, and offering a button that cannot
+            # help would only send staff round in circles.
+            'can_wake': False,
         }
 
     def _wa_unreachable_base_url(self):

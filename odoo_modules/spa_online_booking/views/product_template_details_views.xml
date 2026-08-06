@@ -16,6 +16,22 @@
                             <field name="spa_session_count"/>
                         </group>
                     </group>
+
+                    <separator string="Family prices (this package)"/>
+                    <field name="spa_family_price_ids">
+                        <list editable="bottom">
+                            <field name="member_type"/>
+                            <field name="price"/>
+                        </list>
+                    </field>
+                    <div class="text-muted mb-2">
+                        The product's own <b>Sales Price</b> is the <b>Individual</b> price — do not
+                        repeat it here. Add a row for each family size this package is sold to.
+                        <b>Leave a family size out and the package is simply not offered to it</b>
+                        on the booking screens; an empty row is not the same as "same price".
+                        Session count is shared across member types: a Family 3 "4 + 1" is still
+                        the same number of sessions as the individual one.
+                    </div>
                     <separator string="Session description (this package)"/>
                     <field name="spa_session_desc"
                            placeholder="Short description of this session package…"/>

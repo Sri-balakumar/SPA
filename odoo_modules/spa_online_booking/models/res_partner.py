@@ -10,6 +10,48 @@ class ResPartner(models.Model):
     still be used in the Customers filter."""
     _inherit = 'res.partner'
 
+    # A stable customer number for the invoice. Its own field rather than the
+    # standard `ref`, which is free text people already use for other things -
+    # this one must never change once printed on a document.
+    spa_customer_id = fields.Char(
+        string='Customer ID', readonly=True, copy=False, index='btree_not_null')
+
+    def _spa_needs_customer_id(self):
+        """Contacts that should carry a customer number.
+
+        Excludes companies (a supplier needs no customer number) AND anything
+        backing a user account - OdooBot, Administrator, the public and portal
+        template users are all res.partner rows with is_company False, and
+        numbering them burns customer numbers on records nobody will ever
+        invoice.
+        """
+        # active_test=False on the user check: OdooBot and the portal template
+        # are ARCHIVED user accounts, and plain `p.user_ids` hides an archived
+        # user - so without this they read as ordinary contacts and take the
+        # first customer numbers.
+        return self.filtered(
+            lambda p: not p.spa_customer_id and not p.is_company
+            and not p.with_context(active_test=False).user_ids)
+
+    def _spa_ensure_customer_id(self):
+        """Give these contacts a customer number if they have none.
+
+        Called when an invoice renders as well as on create, so contacts that
+        existed before this field did get a number the first time they are
+        invoiced instead of printing a blank.
+        """
+        Sequence = self.env['ir.sequence'].sudo()
+        for partner in self._spa_needs_customer_id():
+            number = Sequence.next_by_code('spa.customer.id')
+            if number:
+                partner.sudo().spa_customer_id = number
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        partners = super().create(vals_list)
+        partners._spa_ensure_customer_id()
+        return partners
+
     spa_session_pass_ids = fields.One2many(
         'spa.session.pass', 'partner_id', string='Session Passes')
     spa_sessions_left = fields.Integer(

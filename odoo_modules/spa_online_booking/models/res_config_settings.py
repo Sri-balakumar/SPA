@@ -27,6 +27,16 @@ class ResConfigSettings(models.TransientModel):
         help="Customers cannot book a slot more than this many hours in "
              "advance (e.g. 720 = 30 days). 0 = no maximum.")
 
+    # The small print under the package list, on both the POS Book Therapy
+    # screen and the booking page. Editable rather than hard-coded because it
+    # states commercial terms ("Valid 3 months") that change without a
+    # developer being involved.
+    spa_package_note = fields.Char(
+        string='Package footer note',
+        config_parameter='spa_online_booking.package_note',
+        help="Shown under the package list, e.g. "
+             "\"Prices in OMR • Valid 3 months\". Leave empty to show nothing.")
+
     # Per-POS toggles for which channel tabs show in the POS Orders screen.
     pos_spa_show_online = fields.Boolean(
         related='pos_config_id.spa_show_online', readonly=False)

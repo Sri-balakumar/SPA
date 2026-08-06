@@ -321,16 +321,29 @@ two choice types. `required: true` means the booking will be rejected without an
 
 ## `GET /api/spa/availability`
 
-Free slots for a day. Hourly, within opening hours, minus slots already taken, minus anything
-outside the configured booking-notice window.
+Bookable slots for a day. Hourly, within opening hours, minus anything outside the configured
+booking-notice window.
 
 **Query:** `service_ids` (required), `date` (required, `YYYY-MM-DD`)
 
 ```json
-{ "date": "2026-08-03", "service_ids": [2], "slots": ["09:00", "10:00", "14:00"] }
+{
+  "date": "2026-08-03",
+  "service_ids": [2],
+  "slots": ["09:00", "10:00", "14:00"],
+  "waitlist": ["10:00"]
+}
 ```
 
-An empty `slots` array is a valid answer — the day is full or outside the window.
+`slots` means "times you may choose". A time somebody has already booked is **still listed** —
+choosing it puts the customer on a **waiting list** for that time rather than refusing the booking,
+and they are promoted automatically if the holder cancels.
+
+`waitlist` names which of the `slots` are in that position. It is additive: a client that ignores it
+still works, it simply offers the busy time without saying so. Show these differently and tell the
+customer before they pick one.
+
+An empty `slots` array is a valid answer — the day is entirely outside the booking window.
 
 **Errors:** `400 missing_params` · `400 invalid_params`
 

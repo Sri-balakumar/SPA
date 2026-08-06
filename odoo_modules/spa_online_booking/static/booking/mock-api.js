@@ -48,18 +48,33 @@ window.MOCK_API = (() => {
       const ids = Array.isArray(serviceIds) ? serviceIds : [serviceIds];
       // union across the selected services, deduped by question id
       const filtered = questions.filter(q => q.service_ids.some(sid => ids.includes(sid)));
-      return { questions: filtered.map(({ id, text, type }) => ({ id, text, type, required: true, options: [] })) };
+      return {
+        questions: filtered.map(({ id, text, type }) => ({ id, text, type, required: true, options: [] })),
+        // Stands in for the therapy's disclaimer so the page after the
+        // questions can be exercised without a server. Blank the body to
+        // check the skip path.
+        disclaimer: {
+          title: 'Disclaimer',
+          body: 'Please read this before your session. Tell your therapist about any injury, '
+              + 'illness or medication. Stop and say so if anything hurts.',
+          style: 'font-weight: 400; font-style: italic',
+        },
+      };
     },
 
     async getAvailability(serviceIds, date) {
       await delay();
       const ids = Array.isArray(serviceIds) ? serviceIds : [serviceIds];
+      // Taken times are still offered - they become waiting-list entries -
+      // so the mock lists them all and flags the busy ones, like the server.
       const slots = [];
+      const waitlist = [];
       for (let h = 9; h < 18; h++) {
         const label = `${String(h).padStart(2, '0')}:00`;
-        if (!bookedSlots.includes(label)) slots.push(label);
+        slots.push(label);
+        if (bookedSlots.includes(label)) waitlist.push(label);
       }
-      return { date, service_ids: ids, slots };
+      return { date, service_ids: ids, slots, waitlist };
     },
 
     async submitBooking(payload) {

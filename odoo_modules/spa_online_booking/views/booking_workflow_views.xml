@@ -16,6 +16,15 @@
                         invisible="state != 'approved'"/>
             </xpath>
 
+            <!-- The POS already lets a booking be rejected while 'approved';
+                 the form hid it past 'pending', so a confirmed appointment -
+                 which is what rescheduling creates - could not be cancelled
+                 from the back office at all. action_reject already frees the
+                 slot and promotes the waiting list. -->
+            <xpath expr="//button[@name='action_reject']" position="attributes">
+                <attribute name="invisible">state not in ('pending', 'approved')</attribute>
+            </xpath>
+
             <xpath expr="//field[@name='state'][@widget='statusbar']"
                    position="attributes">
                 <attribute name="statusbar_visible">pending,approved,in_service,completed,paid</attribute>
@@ -24,12 +33,70 @@
             <!-- Show the customer's preferred-time note (from the booking page)
                  so the receptionist can allocate a time. -->
             <xpath expr="//field[@name='price']" position="after">
+                <!-- The appointment itself. It drives the booking page's slot
+                     availability, the waiting list and rescheduling, yet it
+                     appeared on no screen at all - so a rescheduled booking
+                     could not be checked anywhere. Editable here on purpose:
+                     the back office is the fallback when the POS is not to
+                     hand. -->
+                <field name="slot_datetime"/>
                 <field name="time_note" readonly="1"
                        invisible="not time_note"/>
                 <field name="email" readonly="1" invisible="not email"/>
                 <field name="signature" widget="image" readonly="1"
                        options="{'size': [260, 110]}"
                        invisible="not signature"/>
+            </xpath>
+
+            <!-- Everyone the package covers. A Family 2 books two people, each
+                 with their own health answers and their own signature; without
+                 this page only the person who paid was ever visible. Shown
+                 before Answers, which stays as the flat list it always was. -->
+            <xpath expr="//page[@name='answers']" position="before">
+                <page string="People" name="spa_members">
+                    <field name="member_count" invisible="1"/>
+                    <field name="member_ids">
+                        <list>
+                            <field name="sequence" widget="handle"/>
+                            <field name="name"/>
+                            <field name="date_of_birth"/>
+                            <field name="age"/>
+                            <field name="gender"/>
+                            <field name="phone" optional="show"/>
+                            <field name="email" optional="hide"/>
+                            <field name="partner_id" optional="show"/>
+                            <field name="terms_accepted"/>
+                        </list>
+                        <form>
+                            <group>
+                                <group>
+                                    <field name="sequence"/>
+                                    <field name="name"/>
+                                    <field name="date_of_birth"/>
+                                    <field name="age"/>
+                                    <field name="gender"/>
+                                </group>
+                                <group>
+                                    <field name="phone"/>
+                                    <field name="email"/>
+                                    <field name="partner_id" readonly="1"/>
+                                    <field name="terms_accepted"/>
+                                </group>
+                            </group>
+                            <separator string="Signature"/>
+                            <field name="signature" widget="image" readonly="1"
+                                   options="{'size': [260, 110]}"
+                                   invisible="not signature"/>
+                            <separator string="Answers"/>
+                            <field name="answer_ids">
+                                <list>
+                                    <field name="question_id"/>
+                                    <field name="value_text"/>
+                                </list>
+                            </field>
+                        </form>
+                    </field>
+                </page>
             </xpath>
 
         </field>

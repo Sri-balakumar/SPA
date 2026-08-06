@@ -21,7 +21,7 @@
                     <button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.startDrawing()">
                         <i class="fa fa-pencil me-1"/>Sign again
                     </button>
-                    <label class="btn btn-outline-secondary btn-sm mb-0">
+                    <label t-if="props.allowUpload" class="btn btn-outline-secondary btn-sm mb-0">
                         <i class="fa fa-upload me-1"/>Upload image
                         <input type="file" accept="image/*" class="d-none" t-on-change="(ev) => this.onFile(ev)"/>
                     </label>
@@ -36,13 +36,14 @@
                         t-on-pointerleave="onUp"/>
                 <p class="tp-sign__hint">
                     <t t-if="props.hint" t-esc="props.hint"/>
-                    <t t-else="">Sign inside the box, or upload a picture of the signature.</t>
+                    <t t-elif="props.allowUpload">Sign inside the box, or upload a picture of the signature.</t>
+                    <t t-else="">Sign inside the box.</t>
                 </p>
                 <div class="tp-sign__tools">
                     <button class="btn btn-outline-secondary btn-sm" t-on-click="() => this.clear()">
                         <i class="fa fa-eraser me-1"/>Clear
                     </button>
-                    <label class="btn btn-outline-secondary btn-sm mb-0">
+                    <label t-if="props.allowUpload" class="btn btn-outline-secondary btn-sm mb-0">
                         <i class="fa fa-upload me-1"/>Upload image
                         <input type="file" accept="image/*" class="d-none" t-on-change="(ev) => this.onFile(ev)"/>
                     </label>

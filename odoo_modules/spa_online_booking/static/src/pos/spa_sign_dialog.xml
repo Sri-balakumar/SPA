@@ -32,6 +32,12 @@
                     <div class="sg-qa-group__head">
                         <i class="fa fa-file-text-o me-1 text-muted"/>
                         <b t-esc="g.service or sheet.title"/>
+                        <!-- Whose answers these are. Blank on an individual
+                             booking, so that sheet reads exactly as before. -->
+                        <span t-if="g.person" class="sg-qa-group__person">
+                            <i class="fa fa-user me-1"/><t t-esc="g.person"/>
+                            <span class="text-muted ms-1" t-esc="g.person_label"/>
+                        </span>
                         <span class="text-muted ms-2" t-esc="groupHead(g)"/>
                     </div>
                     <div class="sg-ans-row" t-foreach="g.rows or []" t-as="qa" t-key="qa_index">
@@ -39,6 +45,32 @@
                         <div class="sg-ans-a"><t t-esc="qa.answer"/></div>
                     </div>
                 </div>
+
+                <!-- The waiver the customer accepted, collapsed by default so
+                     it does not bury the answers and the signature. Click the
+                     header to read the whole thing. -->
+                <t t-if="sheet.disclaimers and sheet.disclaimers.length">
+                    <h5 class="tp-section">Disclaimer</h5>
+                    <div t-foreach="sheet.disclaimers" t-as="d" t-key="d_index"
+                         class="sg-disc">
+                        <button class="sg-disc__head" t-on-click="() => this.toggleDisclaimer(d_index)">
+                            <i t-attf-class="fa {{ isDisclaimerOpen(d_index) ? 'fa-caret-down' : 'fa-caret-right' }} me-2"/>
+                            <span class="sg-disc__title"><t t-esc="d.title"/></span>
+                            <span class="sg-disc__accepted">
+                                <i class="fa fa-check-circle me-1"/>Accepted
+                            </span>
+                        </button>
+                        <div t-if="isDisclaimerOpen(d_index)" class="sg-disc__body">
+                            <!-- Rich text from the editor, sanitize=True server
+                                 side, so rendered as markup like everywhere else. -->
+                            <div t-out="html(d.body)"/>
+                            <p t-if="!d.as_signed" class="sg-disc__note">
+                                This is the therapy's current wording — this signature
+                                was taken before the text was being stored with it.
+                            </p>
+                        </div>
+                    </div>
+                </t>
 
                 <h5 class="tp-section">Signature</h5>
                 <SpaSignatureField sig="state.sig" label="''"

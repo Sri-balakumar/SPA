@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_spa_question_copy_wizard_form" model="ir.ui.view">
+        <field name="name">spa.question.copy.wizard.form</field>
+        <field name="model">spa.question.copy.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Copy Questions">
+                <group>
+                    <field name="source_category_id"/>
+                    <field name="target_category_ids" widget="many2many_tags"
+                           options="{'no_create': True}"
+                           placeholder="Pick the therapies to copy into…"/>
+                </group>
+                <separator string="Questions to copy"/>
+                <!-- Checkboxes rather than a tag field: every question is
+                     ticked to begin with, and unticking a few is quicker than
+                     searching them back in one at a time. -->
+                <field name="question_ids" widget="many2many_checkboxes" nolabel="1"/>
+                <div class="text-muted mt-2">
+                    The questions are <b>copied</b>, not shared: changing the wording here
+                    afterwards will not change the copies. Headings are matched by name — a
+                    therapy that already has a heading called the same thing reuses it instead
+                    of gaining a second one. Nothing already in the target therapies is removed.
+                </div>
+                <footer>
+                    <button string="Copy" name="action_copy" type="object" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_spa_copy_questions" model="ir.actions.act_window">
+        <field name="name">Copy Questions To…</field>
+        <field name="res_model">spa.question.copy.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>

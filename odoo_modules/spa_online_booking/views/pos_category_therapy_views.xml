@@ -48,6 +48,16 @@
                 </field>
                 <separator string="Questions (asked for every package in this therapy)"
                            invisible="not spa_is_therapy"/>
+                <!-- Reuse this therapy's questionnaire on another therapy
+                     instead of retyping it. Needs a saved record: the wizard is
+                     handed this therapy's id, and an unsaved one has none. -->
+                <div class="mb-2" invisible="not spa_is_therapy">
+                    <button name="%(action_spa_copy_questions)d" type="action"
+                            class="btn btn-secondary btn-sm" icon="fa-copy"
+                            string="Copy Questions To…"
+                            context="{'default_source_category_id': id}"
+                            invisible="not id"/>
+                </div>
                 <field name="spa_question_ids" invisible="not spa_is_therapy">
                     <!-- Widths keep the row from pushing the delete icon off the
                          right edge on a narrow window. -->
@@ -78,6 +88,26 @@
                         </field>
                     </form>
                 </field>
+                <separator string="Disclaimer (its own page, shown after the questions)"
+                           invisible="not spa_is_therapy"/>
+                <!-- The title and editor stay visible when this is off: the
+                     point of the switch is to keep the wording, and a waiver
+                     may well be drafted before it is shown to anyone. -->
+                <group invisible="not spa_is_therapy">
+                    <field name="spa_disclaimer_active" widget="boolean_toggle"/>
+                    <!-- Hidden with the page itself off: nobody signs then, so
+                         a switch about the signature box would read as a bug. -->
+                    <field name="spa_signature_upload" widget="boolean_toggle"
+                           invisible="not spa_disclaimer_active"/>
+                </group>
+                <field name="spa_disclaimer_title" invisible="not spa_is_therapy"
+                       placeholder="e.g. Before we begin"/>
+                <!-- spa_disclaimer_html is our Html widget with the formatting
+                     toolbar pinned under the box instead of Odoo's default,
+                     which only shows it once text is selected. -->
+                <field name="spa_disclaimer" invisible="not spa_is_therapy"
+                       widget="spa_disclaimer_html"
+                       placeholder="Write the waiver here and format it with the toolbar below. Leave it empty and no disclaimer page is shown for this therapy…"/>
                 <p class="text-muted" invisible="not spa_is_therapy">
                     On the booking page the customer picks this therapy, reads the
                     description, then chooses one of its session packages (the
@@ -103,6 +133,28 @@
                     does not delete them; a question that customers have already
                     answered is archived rather than deleted, so their answers stay
                     on their record.
+                    <br/>
+                    The <b>Disclaimer</b> is shown on a page of its own, straight
+                    after the questions, in the POS, on the tablet and on the
+                    booking page - the customer reads it there, ticks that they
+                    agree and signs. Format it with the editor toolbar - bold a
+                    clause heading, colour a warning, add a list - and it is
+                    shown that way on every screen. The customer's name, number
+                    and email are filled in underneath it automatically from
+                    what was already entered, so a "Client Information" block
+                    does not need typing into the text.
+                    <br/>
+                    Turn <b>Show Disclaimer Page</b> off to hide that page
+                    without losing a word of it - the wording stays here ready
+                    to switch back on. Note that with it off the customer is
+                    <b>not asked to accept terms and does not sign</b> for this
+                    therapy, so no signed consent is recorded. The page is also
+                    skipped if you leave the wording empty.
+                    <br/>
+                    Turn <b>Allow Signature Upload</b> on to let staff attach a
+                    picture of the signature on that page instead of the
+                    customer drawing it. Off by default - a consent signature
+                    is normally signed on the spot.
                 </p>
             </xpath>
         </field>

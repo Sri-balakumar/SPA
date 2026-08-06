@@ -69,6 +69,33 @@ html[dir="rtl"] .appbar__back { transform: scaleX(-1); }
 .hint { color: var(--ink-soft); font-size: .92rem; margin: 0 0 16px; }
 .empty { color: var(--ink-soft); font-size: .92rem; padding: 10px 0; }
 .section-h { font-weight: 800; font-size: 1.05rem; margin: 18px 0 10px; }
+.section-h--green { color: var(--primary); }
+
+/* --- Member type tabs (Individual / Family 2 / 3 / 4) -------------------- */
+.mtabs {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  margin-bottom: 14px;
+}
+.mtab {
+  padding: 13px 6px; border: 0; background: #fff; font: inherit;
+  font-weight: 600; color: var(--ink-soft); cursor: pointer; white-space: nowrap;
+  border-inline-end: 1px solid var(--line);
+}
+.mtab:last-child { border-inline-end: 0; }
+.mtab:hover { background: #F7FAF8; }
+/* Selected reads as selected on its own, not only against its neighbours. */
+.mtab.is-active {
+  background: #F1F8F3; color: var(--primary); border-radius: 10px;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+/* Small print under the package list (Settings → Package footer note) */
+.package-note { text-align: center; font-size: .82rem; color: var(--ink-soft); margin: 12px 0 4px; }
+/* Narrow phones: four tabs across is unreadable, so wrap to two rows. */
+@media (max-width: 420px) {
+  .mtabs { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }
+  .mtab { border-inline-end: 0; border-bottom: 1px solid var(--line); }
+}
 
 .banner { margin: 14px 18px 0; padding: 11px 14px; border-radius: 12px; background: #FEF2F2; color: var(--danger); font-size: .88rem; font-weight: 500; }
 
@@ -143,6 +170,53 @@ html[dir="rtl"] .tcard__chev { transform: scaleX(-1); }
 .prow__amt { font-weight: 800; font-size: 1.05rem; }
 .prow__save { font-size: .72rem; font-weight: 700; color: var(--primary); }
 
+/* ---------- "Person 2 of 3" banner ---------- */
+/* Hidden unless the package covers more than one person, so an ordinary
+   individual booking looks exactly as it always did. */
+.person-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px; padding: 9px 12px;
+  background: var(--primary-soft); border: 1.5px solid var(--primary);
+  border-radius: var(--radius);
+}
+.person-bar__badge { font-weight: 800; color: var(--primary); }
+.person-bar__who { font-size: .85rem; color: var(--ink-soft); min-width: 0; }
+.person-bar__copy {
+  margin-inline-start: auto; border: 1.5px solid var(--primary); background: #fff;
+  color: var(--primary); font-weight: 700; font-size: .8rem;
+  padding: 6px 10px; border-radius: 999px; cursor: pointer;
+}
+.person-bar__copy:hover { background: var(--primary); color: #fff; }
+.review-person {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin: 14px 0 6px; padding-top: 12px; border-top: 1.5px solid var(--line);
+}
+.review-person__badge { font-size: .75rem; font-weight: 800; color: var(--primary); }
+
+/* ---------- add-ons ---------- */
+/* Same shape as .prow, but a square box instead of a radio: the customer can
+   tick several extras, and the control should say so at a glance. */
+.addons { display: flex; flex-direction: column; gap: 8px; }
+.addons__hint { font-size: .82rem; color: var(--ink-soft); margin: 0 0 8px; }
+.arow {
+  display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1.5px solid var(--line); border-radius: var(--radius);
+  cursor: pointer; transition: border-color .15s, box-shadow .15s;
+}
+.arow:hover { border-color: #9AE6B4; }
+.arow.is-selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; background: var(--primary-soft); }
+.arow input { position: absolute; opacity: 0; width: 0; height: 0; }
+.arow__box { width: 20px; height: 20px; border-radius: 5px; border: 2px solid #C7CDD4; position: relative; }
+.arow.is-selected .arow__box { border-color: var(--primary); background: var(--primary); }
+.arow.is-selected .arow__box::after {
+  content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.arow__name { font-weight: 600; font-size: .92rem; }
+.arow__price { font-weight: 800; font-size: .98rem; }
+/* Keyboard users must still see where they are - the real input is hidden. */
+.arow input:focus-visible + .arow__box { outline: 2px solid var(--primary); outline-offset: 2px; }
+
 /* ---------- package details ---------- */
 .pdetail__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .pdetail__name { font-weight: 800; font-size: 1.3rem; margin: 0; }
@@ -160,6 +234,19 @@ html[dir="rtl"] .tcard__chev { transform: scaleX(-1); }
 .pkg-detail__gallery figcaption { font-size: .74rem; color: var(--ink-soft); text-align: center; margin-top: 3px; }
 
 .terms-field { align-items: flex-start; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* ---------- disclaimer page ---------- */
+/* Layout only. The wording carries its own formatting from the Odoo editor, so
+   anything set here that the operator can also choose would fight with it -
+   no colour, weight or style. max-height keeps a long waiver from pushing the
+   Continue button off the screen. */
+.disclaimer__body { line-height: 1.6; margin: 0 0 4px; max-height: 50vh; overflow-y: auto; }
+.disclaimer__body p { margin: 0 0 10px; }
+.disclaimer__body ul, .disclaimer__body ol { margin: 0 0 10px; padding-inline-start: 20px; }
+.clientinfo { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; }
+.clientinfo__h { font-size: .9rem; font-weight: 700; margin: 0 0 8px; }
+.clientinfo__row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; font-size: .9rem; }
+.clientinfo__row span { color: var(--ink-soft); }
 
 /* ---------- phone country picker ---------- */
 .pc { display: flex; align-items: stretch; position: relative; border: 1.5px solid var(--line); border-radius: 12px; background: #FBFCFD; }
@@ -211,6 +298,12 @@ html[dir="rtl"] .tcard__chev { transform: scaleX(-1); }
 .slot-grid button { padding: 11px 0; border-radius: 10px; border: 1.5px solid var(--line); background: #FBFCFD; font: inherit; cursor: pointer; }
 .slot-grid button.is-selected { border-color: var(--primary); background: var(--primary); color: #fff; }
 .slot-grid .empty { grid-column: 1 / -1; }
+/* Waiting-list times: offered, but visibly not the same thing as a free slot.
+   Dashed and muted so the difference reads before the label is even noticed. */
+.slot-grid button.is-waitlist { border-style: dashed; color: var(--ink-soft); }
+.slot-grid button.is-waitlist.is-selected { color: #fff; border-style: solid; }
+.slot__tag { display: block; font-size: .64rem; line-height: 1.2; opacity: .85; margin-top: 2px; }
+.slot-wait-note { font-size: .82rem; color: var(--ink-soft); margin: -8px 0 16px; }
 
 /* ---------- review ---------- */
 .review-list { margin: 0 0 8px; }
@@ -229,6 +322,10 @@ html[dir="rtl"] .tcard__chev { transform: scaleX(-1); }
 .confirm { text-align: center; padding: 26px 6px; }
 .confirm__mark { display: inline-block; width: 68px; height: 68px; border-radius: 50%; background: var(--primary); margin-bottom: 18px; position: relative; }
 .confirm__mark::after { content: ""; position: absolute; inset-inline-start: 24px; top: 20px; width: 12px; height: 22px; border-right: 4px solid #fff; border-bottom: 4px solid #fff; transform: rotate(45deg); }
+/* Waiting list: an hourglass, not a tick. A confirmed-looking tick on a
+   booking that is only queued would be a lie the customer acts on. */
+.confirm__mark--wait { background: var(--ink-soft); }
+.confirm__mark--wait::after { inset-inline-start: 27px; top: 18px; width: 14px; height: 30px; border: 3px solid #fff; border-radius: 3px; transform: none; }
 .confirm h2 { font-weight: 800; font-size: 1.6rem; margin: 0 0 8px; }
 .confirm-summary { margin-top: 20px; }
 .confirm-summary__card { display: flex; flex-direction: column; gap: 4px; text-align: start; border: 1.5px solid var(--line); border-radius: var(--radius); padding: 16px; }

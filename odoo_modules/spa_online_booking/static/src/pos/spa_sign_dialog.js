@@ -1,4 +1,4 @@
-import { Component, useState } from "@odoo/owl";
+import { Component, markup, useState } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
 import { SpaSignatureField, newSigState, sigDataUrl } from "@spa_online_booking/pos/spa_signature";
 
@@ -22,7 +22,23 @@ export class SpaSignDialog extends Component {
             sig: newSigState(this.props.sheet.signature || ""),
             busy: false,
             error: "",
+            // Which disclaimers are expanded. Collapsed to start: the sheet is
+            // read for the answers and the signature, and a 2,800-character
+            // waiter would bury both.
+            openDisclaimers: {},
         });
+    }
+
+    toggleDisclaimer(index) {
+        this.state.openDisclaimers[index] = !this.state.openDisclaimers[index];
+    }
+    isDisclaimerOpen(index) {
+        return !!this.state.openDisclaimers[index];
+    }
+    // Rich text from the editor, sanitized server-side, so render as markup
+    // rather than showing raw <p> tags.
+    html(value) {
+        return value ? markup(value) : "";
     }
 
     get sheet() {
@@ -108,13 +124,31 @@ export class SpaSignDialog extends Component {
 
         const qa = (s.groups || [])
             .map(
-                (g) => `<div class="grp">${e(g.service || "")}<span class="muted"> ${e(this.groupHead(g))}</span></div>
+                // The person's name is printed with their block: on a family
+                // booking the sheet carries several health histories, and one
+                // unattributed to the wrong person is worse than none.
+                (g) => `<div class="grp">${e(g.service || "")}${
+                    g.person ? ` — ${e(g.person)} <span class="muted">${e(g.person_label || "")}</span>` : ""
+                }<span class="muted"> ${e(this.groupHead(g))}</span></div>
 <table><tbody>${(g.rows || [])
                     .map(
                         (r) =>
                             `<tr><td class="q">${e(r.question)}</td><td class="a">${e(r.answer)}</td></tr>`
                     )
                     .join("")}</tbody></table>`
+            )
+            .join("");
+
+        // The waiver, printed as an ACCEPTANCE: the sheet is the record kept on
+        // file, and one that only says "signed" without saying what was agreed
+        // to is not much of a record. The body is sanitized HTML from the
+        // editor, so it goes in as markup - everything else here is escaped.
+        const disclaimers = (s.disclaimers || [])
+            .map(
+                (d) => `<div class="disc">
+ <div class="disc__accept">✓ The customer has read and accepted <b>${e(d.title || "the disclaimer")}</b>.</div>
+ <div class="disc__body">${d.body || ""}</div>
+</div>`
             )
             .join("");
 
@@ -137,6 +171,10 @@ export class SpaSignDialog extends Component {
  .sign img { max-height: 110px; max-width: 320px; display: block; }
  .sign .line { border-top: 1px solid #333; width: 320px; margin-top: 4px; padding-top: 4px; color: #666; }
  .note { margin-top: 18px; font-size: 11px; color: #444; }
+ .disc { margin-bottom: 10px; page-break-inside: avoid; }
+ .disc__accept { font-size: 11px; margin-bottom: 4px; }
+ .disc__body { font-size: 10.5px; color: #333; line-height: 1.45; border-left: 2px solid #ddd; padding-left: 8px; }
+ .disc__body p { margin: 0 0 5px; }
 </style></head><body>
 ${this.logoUrl ? `<img class="logo" src="${this.logoUrl}"/>` : ""}
 <h1>${e(s.title || s.order_ref)}</h1>
@@ -145,6 +183,7 @@ ${this.logoUrl ? `<img class="logo" src="${this.logoUrl}"/>` : ""}
 ${meta.map(([k, v]) => `<tr><td class="k">${e(k)}</td><td>${e(v)}</td></tr>`).join("")}
 </tbody></table>
 ${qa ? `<h2>Questions &amp; Answers</h2>${qa}` : ""}
+${disclaimers ? `<h2>Disclaimer</h2>${disclaimers}` : ""}
 <div class="note">I confirm the information above is correct and I consent to the treatment described.</div>
 <div class="sign">
 ${sig ? `<img src="${sigDataUrl(sig)}"/>` : '<div style="height:70px"></div>'}

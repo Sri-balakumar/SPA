@@ -6,7 +6,12 @@
 <title data-i18n="page_title">Book Your Visit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/spa_online_booking/static/booking/style.css?v=24">
+<!-- ?v= is stamped by the /spa/book handler from the module's own version, so
+     a browser holding a week-old copy (Odoo serves these with max-age=604800)
+     picks up changes the moment the module is upgraded. Do NOT hard-code a
+     number here: it has to be remembered on every edit, and a stale cache
+     looks exactly like a broken feature. -->
+<link rel="stylesheet" href="/spa_online_booking/static/booking/style.css?v=__SPA_ASSET_V__">
 </head>
 <body>
 
@@ -52,8 +57,14 @@
     <!-- therapy: banner + info + packages (radio) -->
     <section class="screen" data-screen="therapy">
       <div id="therapyBanner" class="therapy-banner"></div>
+      <!-- Individual / Family 2 / 3 / 4. Filled by renderMemberTabs and hidden
+           when the therapy only sells one member type. -->
+      <h3 class="section-h section-h--green" id="memberTypeHead" data-i18n="member_type" hidden>Select member type</h3>
+      <div id="memberTabs" class="mtabs" role="tablist" hidden></div>
       <h3 class="section-h" data-i18n="packages_avail">Available Packages</h3>
       <div id="packageList" class="package-list" role="radiogroup" aria-label="Packages"></div>
+      <!-- Small print from Settings, so terms can change without a redeploy. -->
+      <p class="package-note" id="packageNote" hidden></p>
       <button type="button" id="btnViewDetails" class="btn btn--primary btn--block" disabled data-i18n="btn_view_details">View Details</button>
     </section>
 
@@ -66,18 +77,61 @@
     <!-- questions -->
     <section class="screen" data-screen="questions">
       <h2 class="screen__title" data-i18n="questions_title">A few questions</h2>
+      <div class="person-bar" hidden>
+        <span class="person-bar__badge js-person-badge"></span>
+        <span class="person-bar__who" id="personWho"></span>
+        <!-- Ten questions for a family of four is forty answers. Copy, then
+             change what differs. -->
+        <button type="button" class="person-bar__copy" id="btnCopyAnswers" hidden
+                data-i18n="copy_answers">Same answers as Person 1</button>
+      </div>
       <p class="hint" data-i18n="questions_hint">This helps us personalize your session.</p>
       <div id="questionsList" class="q-list"></div>
 
-      <!-- Accepted on the same screen as the signature, immediately above
-           it: the tick says the details are right, the signature signs for it. -->
+      <button type="button" class="btn btn--primary btn--block js-next" data-i18n="btn_continue">Continue</button>
+    </section>
+
+    <!-- Disclaimer: its own page, straight after the questions. The title and
+         body are written per therapy in Odoo and filled in by renderDisclaimer,
+         so the wording a customer agrees to is changed there, not here. The
+         page is skipped entirely when the therapy has no disclaimer text. -->
+    <section class="screen" data-screen="disclaimer">
+      <h2 class="screen__title" id="disclaimerTitle" data-i18n="disclaimer_title">Disclaimer</h2>
+      <!-- Each person signs for their own answers, so the waiver says whose
+           consent is being given. -->
+      <div class="person-bar" hidden>
+        <span class="person-bar__badge js-person-badge"></span>
+      </div>
+      <!-- div, not p: the body is rich text and may contain its own <p> and
+           list elements, which are invalid nested inside a <p>. -->
+      <div class="disclaimer__body rich" id="disclaimerBody"></div>
+
+      <!-- The waiver's "Client Information" blanks. Filled from the details
+           screen rather than typed again: retyping is slow and lets the waiver
+           disagree with the booking. Read-only - Back returns to the details to
+           change any of it. -->
+      <div class="clientinfo" id="clientInfo">
+        <h3 class="clientinfo__h" data-i18n="client_info">Client Information</h3>
+        <div class="clientinfo__row">
+          <span data-i18n="field_name">Full name</span><b id="ciName">—</b>
+        </div>
+        <div class="clientinfo__row">
+          <span data-i18n="field_phone">Contact number</span><b id="ciPhone">—</b>
+        </div>
+        <div class="clientinfo__row">
+          <span data-i18n="field_email">Email</span><b id="ciEmail">—</b>
+        </div>
+      </div>
+
+      <!-- The tick sits directly above the signature that stands for it, on the
+           page carrying the wording being agreed to. -->
       <label class="checkbox-field terms-field">
         <input type="checkbox" id="fieldTerms">
         <span data-i18n="terms_agree">I agree to the terms and conditions and confirm the details above are correct.</span>
       </label>
 
-      <!-- Consent for the service just chosen, signed under its own questions.
-           Asked for every booking, including a customer who has booked before. -->
+      <!-- Consent for the service just chosen. Asked for every booking,
+           including a customer who has booked before. -->
       <div class="field sig" id="sigField">
         <span data-i18n="field_signature">Signature</span>
         <div class="sig__onfile" id="sigOnFile" hidden>
@@ -86,13 +140,12 @@
         </div>
         <div id="sigCapture">
           <canvas id="sigPad" class="sig__pad"></canvas>
-          <p class="sig__hint" data-i18n="sig_hint">Sign inside the box, or upload a picture of your signature.</p>
+          <p class="sig__hint" data-i18n="sig_hint">Sign inside the box.</p>
+          <!-- No "Upload image": consent is signed here and now, not supplied
+               as a picture from the customer's phone. Same rule as the POS,
+               where SpaSignatureField is given allowUpload="false". -->
           <div class="sig__tools">
             <button type="button" class="btn btn--ghost btn--sm" id="btnSigClear" data-i18n="sig_clear">Clear</button>
-            <label class="btn btn--ghost btn--sm">
-              <span data-i18n="sig_upload">Upload image</span>
-              <input type="file" id="sigFile" accept="image/*" hidden>
-            </label>
           </div>
           <p class="sig__err" id="sigError" hidden></p>
         </div>
@@ -104,9 +157,17 @@
     <!-- your details -->
     <section class="screen" data-screen="details">
       <h2 class="screen__title" data-i18n="details_title">Your details</h2>
+      <!-- Whose details are being entered. Hidden unless the package covers
+           more than one person, so an ordinary booking looks unchanged. -->
+      <div class="person-bar" hidden>
+        <span class="person-bar__badge js-person-badge"></span>
+      </div>
       <p class="screen__hint" data-i18n="details_hint">Enter your WhatsApp number first — if we already know you, the rest fills in automatically.</p>
 
-      <div class="field">
+      <!-- WhatsApp, the contact lookup and the mobile picker belong to the
+           person who books and pays. Everyone else gives a name, a date of
+           birth and a gender - a child has no number of their own. -->
+      <div class="field js-lead-only">
         <span data-i18n="field_whatsapp">WhatsApp number</span>
         <div class="pc" data-for="fieldWhatsapp">
           <button type="button" class="pc__cc" aria-haspopup="listbox" aria-expanded="false">
@@ -120,7 +181,7 @@
 
       <!-- who this number belongs to. A number is often shared by a whole
            family, so we never assume a match. -->
-      <div id="matchPanel" class="match" hidden>
+      <div id="matchPanel" class="match js-lead-only" hidden>
         <p class="match__msg" id="matchBusy" hidden data-i18n="match_checking">Checking…</p>
         <div class="match__chip" id="matchChip" hidden>
           <span id="matchChipName"></span>
@@ -154,11 +215,11 @@
           </select>
         </label>
       </div>
-      <label class="checkbox-field">
+      <label class="checkbox-field js-lead-only">
         <input type="checkbox" id="fieldSameNumber">
         <span data-i18n="same_number">My mobile number is the same as my WhatsApp number</span>
       </label>
-      <div class="field">
+      <div class="field js-lead-only">
         <span data-i18n="field_phone">Mobile number</span>
         <div class="pc" data-for="fieldPhone">
           <button type="button" class="pc__cc" aria-haspopup="listbox" aria-expanded="false">
@@ -169,6 +230,13 @@
           <div class="pc__menu" role="listbox" hidden></div>
         </div>
       </div>
+      <!-- One plain optional number for persons 2+. Deliberately its own
+           field: #fieldPhone belongs to the lead and the booking is contacted
+           on it. -->
+      <label class="field js-member-only" hidden>
+        <span data-i18n="field_member_phone">Phone number (optional)</span>
+        <input type="tel" id="fieldMemberPhone" autocomplete="off">
+      </label>
       <label class="field">
         <span data-i18n="field_email">Email</span>
         <input type="email" id="fieldEmail" autocomplete="email"
@@ -186,6 +254,11 @@
         <input type="date" id="fieldDate" required>
       </label>
       <div id="slotsList" class="slot-grid" aria-label="Available times"></div>
+      <!-- Shown only once a waiting-list time is picked, so the customer knows
+           what they are choosing before they carry on. -->
+      <p class="slot-wait-note" id="slotWaitNote" data-i18n="slot_wait_note" hidden>
+        This time is already booked. You can join the waiting list — we will contact you if it becomes free.
+      </p>
       <label class="field">
         <span data-i18n="time_note_label">Preferred time not listed? Tell us (optional)</span>
         <textarea id="fieldTimeNote" rows="2" data-i18n-ph="time_note_ph" placeholder="e.g. I'd prefer around 8 PM"></textarea>
@@ -214,7 +287,7 @@
 
 </div>
 
-<script src="/spa_online_booking/static/booking/i18n.js?v=24"></script>
-<script src="/spa_online_booking/static/booking/script.js?v=24"></script>
+<script src="/spa_online_booking/static/booking/i18n.js?v=__SPA_ASSET_V__"></script>
+<script src="/spa_online_booking/static/booking/script.js?v=__SPA_ASSET_V__"></script>
 </body>
 </html>

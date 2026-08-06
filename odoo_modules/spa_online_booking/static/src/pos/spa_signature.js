@@ -49,7 +49,13 @@ export class SpaSignatureField extends Component {
         sig: true,
         label: { type: String, optional: true },
         hint: { type: String, optional: true },
+        // Off where a customer signs for themselves at the counter: a consent
+        // signature should be drawn there and then, not supplied as a picture
+        // from a file. Left on by default so the staff reprint sheet, where an
+        // uploaded scan is a legitimate way to attach one, keeps working.
+        allowUpload: { type: Boolean, optional: true },
     };
+    static defaultProps = { allowUpload: true };
 
     setup() {
         // The pad only exists while mode === "draw", so (re)size it whenever the

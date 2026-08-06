@@ -65,8 +65,22 @@ window.i18n = (() => {
       sig_sign_again: 'Sign again',
       terms_agree: 'I agree to the terms and conditions and confirm the details above are correct.',
       terms_required: 'Please accept the terms to continue.',
+      // Fallback only. The real title and body are written per therapy in Odoo
+      // and translated there, so they are not repeated in this file.
+      disclaimer_title: 'Disclaimer',
+      client_info: 'Client Information',
+      member_type: 'Select member type',
+      // Waiting list. A busy time is still offered, but the customer has to
+      // know before picking it - and afterwards - that it is a queue and not
+      // a confirmed appointment.
+      slot_waitlist: 'Waiting list',
+      slot_wait_note: 'This time is already booked. You can join the waiting list — we will contact you if it becomes free.',
+      wait_title: "You're on the waiting list",
+      wait_message: 'This time is already taken. We have added you to the waiting list and will contact you on WhatsApp if it becomes free.',
       sig_required: 'Please sign to continue.',
-      sig_hint: 'Sign inside the box, or upload a picture of your signature.',
+      // No mention of uploading: that control was removed, consent is signed
+      // on the spot. sig_upload below is kept only for the archived handler.
+      sig_hint: 'Sign inside the box.',
       sig_clear: 'Clear',
       sig_upload: 'Upload image',
       sig_err_type: 'The signature has to be an image file.',
@@ -87,6 +101,14 @@ window.i18n = (() => {
       time_note_label: 'Preferred time not listed? Tell us (optional)',
       time_note_ph: 'e.g. I\u2019d prefer around 8 PM',
 
+      addons_title: 'Add-ons',
+      addons_hint: 'Optional extras you can add to this package.',
+      review_total: 'Total:',
+      // %1 = which person, %2 = how many in total.
+      person_of: 'Person %1 of %2',
+      copy_answers: 'Same answers as Person 1',
+      field_member_phone: 'Phone number (optional)',
+      review_details: 'Details',
       review_title: 'Review your booking',
       review_services: 'Services',
       review_name: 'Name',
@@ -172,8 +194,15 @@ window.i18n = (() => {
       sig_sign_again: 'وقّع مرة أخرى',
       terms_agree: 'أوافق على الشروط والأحكام وأؤكد صحة البيانات أعلاه.',
       terms_required: 'يرجى الموافقة على الشروط للمتابعة.',
+      disclaimer_title: 'إخلاء المسؤولية',
+      client_info: 'بيانات العميل',
+      member_type: 'اختر نوع العضوية',
+      slot_waitlist: 'قائمة الانتظار',
+      slot_wait_note: 'هذا الوقت محجوز بالفعل. يمكنك الانضمام إلى قائمة الانتظار — وسنتواصل معك إذا أصبح متاحاً.',
+      wait_title: 'أنت على قائمة الانتظار',
+      wait_message: 'هذا الوقت محجوز بالفعل. لقد أضفناك إلى قائمة الانتظار وسنتواصل معك عبر واتساب إذا أصبح متاحاً.',
       sig_required: 'يرجى التوقيع للمتابعة.',
-      sig_hint: 'وقّع داخل المربع، أو ارفع صورة لتوقيعك.',
+      sig_hint: 'وقّع داخل المربع.',
       sig_clear: 'مسح',
       sig_upload: 'رفع صورة',
       sig_err_type: 'يجب أن يكون التوقيع ملف صورة.',
@@ -194,6 +223,13 @@ window.i18n = (() => {
       time_note_label: 'وقتك المفضّل غير مدرج؟ أخبرنا (اختياري)',
       time_note_ph: 'مثال: أفضّل حوالي الساعة 8 مساءً',
 
+      addons_title: 'الإضافات',
+      addons_hint: 'إضافات اختيارية يمكنك إضافتها إلى هذه الباقة.',
+      review_total: 'الإجمالي:',
+      person_of: 'الشخص %1 من %2',
+      copy_answers: 'نفس إجابات الشخص 1',
+      field_member_phone: 'رقم الهاتف (اختياري)',
+      review_details: 'التفاصيل',
       review_title: 'راجع حجزك',
       review_services: 'الخدمات',
       review_name: 'الاسم',

@@ -24,7 +24,13 @@ class SpaBookingPos(models.Model):
     # Insert an "Approved" stage between Pending and In Service. Approving only
     # CONFIRMS the booking (the customer comes on their booked day); it becomes
     # "In Service" only when they actually arrive and it's started/loaded.
+    #
+    # 'waiting' sits before everything: the customer asked for a time somebody
+    # else already holds. It is a real state rather than a flag so it flows
+    # through the POS sub-filters, the back-office list and every existing
+    # `state != 'rejected'` check without those having to learn a new concept.
     state = fields.Selection(selection=[
+        ('waiting', 'Waiting List'),
         ('pending', 'Pending Approval'),
         ('approved', 'Approved'),
         ('in_service', 'In Service'),
@@ -32,6 +38,94 @@ class SpaBookingPos(models.Model):
         ('paid', 'Paid'),
         ('rejected', 'Rejected'),
     ])
+
+    # ---- waiting list ---------------------------------------------------
+    # States that actually occupy a slot. 'waiting' does not (that is the whole
+    # point) and 'rejected' released it.
+    _SPA_HOLDING_STATES = ('pending', 'approved', 'in_service', 'completed', 'paid')
+
+    def _spa_slot_products(self):
+        """The services this booking is for, new field or legacy one."""
+        self.ensure_one()
+        return self.product_ids.ids or ([self.product_id.id] if self.product_id else [])
+
+    @api.model
+    def _spa_slot_holder(self, slot_dt, product_ids, exclude_ids=None):
+        """The booking that OWNS this slot, or an empty recordset.
+
+        The single answer to "is this time taken?" - availability, submit and
+        promotion all ask here, so they cannot drift apart the way three copies
+        of the domain would. Matches the legacy single-service field too,
+        exactly as the old inline checks did.
+        """
+        if not slot_dt or not product_ids:
+            return self.browse()
+        domain = [
+            ('state', 'in', self._SPA_HOLDING_STATES),
+            ('slot_datetime', '=', slot_dt),
+            '|',
+            ('product_ids', 'in', list(product_ids)),
+            ('product_id', 'in', list(product_ids)),
+        ]
+        if exclude_ids:
+            domain.append(('id', 'not in', list(exclude_ids)))
+        return self.sudo().search(domain, order='create_date, id', limit=1)
+
+    @api.model
+    def _spa_promote_slot(self, slot, products, exclude_ids=None, freed_by=None):
+        """Give a freed slot to whoever has waited longest for it.
+
+        Takes the slot explicitly rather than reading it off a record, because a
+        RESCHEDULE frees the slot the booking has just left - by then the record
+        holds the new time, and promoting against that would leave the old slot
+        stuck with a queue nobody ever reaches.
+        """
+        if not slot or not products:
+            return self.browse()
+        if self._spa_slot_holder(slot, products, exclude_ids=exclude_ids):
+            return self.browse()  # somebody still holds it
+        domain = [
+            ('state', '=', 'waiting'),
+            ('slot_datetime', '=', slot),
+            '|',
+            ('product_ids', 'in', list(products)),
+            ('product_id', 'in', list(products)),
+        ]
+        if exclude_ids:
+            domain.append(('id', 'not in', list(exclude_ids)))
+        nxt = self.sudo().search(domain, order='create_date, id', limit=1)
+        if nxt:
+            # Straight to 'pending', not 'approved': reception still decides,
+            # exactly as they would for any newly arrived online booking.
+            nxt.write({'state': 'pending'})
+            nxt.message_post(
+                body=_("Promoted from the waiting list: the %s slot was "
+                       "released by %s.")
+                % (slot.strftime('%Y-%m-%d %H:%M'), freed_by or _("another booking")))
+        return nxt
+
+    def _spa_promote_next(self):
+        """Hand each of these bookings' CURRENT slots on, if now free.
+
+        Used when a booking is cancelled - the slot it is sitting on is the one
+        being released.
+        """
+        for booking in self:
+            self._spa_promote_slot(
+                booking.slot_datetime,
+                booking._spa_slot_products(),
+                exclude_ids=booking.ids,
+                freed_by=booking.partner_name or booking.name,
+            )
+
+    def action_reject(self):
+        """Cancel, then hand the slot to whoever is next in the queue."""
+        was_holding = self.filtered(lambda b: b.state in self._SPA_HOLDING_STATES)
+        res = super().action_reject()
+        # Only a booking that actually held the slot frees one; cancelling a
+        # waiting entry must not promote anybody.
+        was_holding._spa_promote_next()
+        return res
 
     def action_approve(self):
         # Override the base kiosk behaviour: approving CONFIRMS the booking
@@ -187,6 +281,11 @@ class SpaBookingPos(models.Model):
             'mobile': self.mobile or '',
             'slot_datetime': slot,
             'date': date_str,
+            # Needed by the POS waiting list: the queue is first-come-first-
+            # served, so it is ordered by when the booking arrived, not by the
+            # appointment time (every entry shares that).
+            'create_date': (fields.Datetime.to_string(self.create_date)
+                            if self.create_date else ''),
             'time_note': self.time_note or '',
             'state': self.state,
             'state_label': state_labels.get(self.state, self.state),
@@ -194,6 +293,14 @@ class SpaBookingPos(models.Model):
             'channel_label': channel_labels.get(self.spa_channel, ''),
             'price': self.price,
             'service_names': self._pos_services().mapped('name'),
+            # Extras the customer chose online, shown on the card so reception
+            # knows what to prepare before the booking is even loaded.
+            'addon_names': self.spa_addon_ids.mapped('name'),
+            # Everyone the package covers. Empty for a single person: the card
+            # already shows their name, and repeating it would be noise.
+            'member_names': (
+                [m.name for m in self.member_ids.sorted('sequence')]
+                if len(self.member_ids) > 1 else []),
             'answers': self._pos_answers_summary(),
             'answer_rows': self._pos_answers_rows(),
             # prepaid = a next session drawn from a package pass: don't charge.
@@ -385,6 +492,12 @@ class SpaBookingPos(models.Model):
         if not partner or mismatched:
             partner = booking._pos_find_or_create_partner()
             booking.partner_id = partner.id
+        # Now that the lead has a contact, give the rest of the family theirs -
+        # filed underneath it. Deliberately NOT done at submit time: an online
+        # booking has no lead contact yet, so the members would be created
+        # parentless and the family match could never find them again, adding a
+        # duplicate on every visit.
+        booking._spa_resolve_member_partners()
         # Loading = the customer is here now, so start service.
         if booking.state in ('pending', 'approved'):
             booking.state = 'in_service'
@@ -392,6 +505,10 @@ class SpaBookingPos(models.Model):
             'booking_id': booking.id,
             'partner_id': partner.id,
             'service_tmpl_ids': booking._pos_services().ids,
+            # Kept apart from the services so the POS adds a plain line for each
+            # extra. Without this an add-on booked online is invisible at the
+            # counter and never charged.
+            'addon_tmpl_ids': booking.spa_addon_ids.ids,
             'answers': booking._pos_answers_summary(),
             'channel': booking.spa_channel,
         }

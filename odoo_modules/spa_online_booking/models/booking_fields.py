@@ -1,6 +1,8 @@
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
+from .package_price import SPA_MEMBER_TYPES
+
 
 class SpaBookingOnlineFields(models.Model):
     """Adds the fields the WhatsApp-link flow needs that don't exist on the
@@ -74,18 +76,48 @@ class SpaBookingOnlineFields(models.Model):
     product_id = fields.Many2one(required=False)
 
     # Total price = sum of the selected services' list prices, read-only.
+    # Which family size this booking was made for. Drives the price below, and
+    # tells reception how many people to expect.
+    spa_member_type = fields.Selection(
+        SPA_MEMBER_TYPES, string='Member Type', default='individual')
+
+    # Optional extras chosen with the package. DELIBERATELY NOT in product_ids:
+    # slot occupancy is matched with ('product_ids', 'in', ids) in
+    # _spa_slot_holder and get_availability, so two unrelated bookings that
+    # happened to share one add-on would match each other and falsely report the
+    # slot as taken - silently breaking availability and the waiting list.
+    spa_addon_ids = fields.Many2many(
+        'product.template', 'spa_booking_addon_rel', 'booking_id', 'product_id',
+        string='Add-ons',
+        help="Extras booked alongside the package. Configured on the package "
+             "under Point of Sale > Upsell & Cross-Sell.")
+
     price = fields.Float(compute='_compute_price', store=True, readonly=True)
 
     @api.depends('product_ids', 'product_ids.list_price',
-                 'product_id', 'product_id.list_price')
+                 'product_id', 'product_id.list_price',
+                 # The stored value goes stale without these: a family booking
+                 # would keep the individual price it was first computed with.
+                 'spa_member_type',
+                 'product_ids.spa_family_price_ids.price',
+                 'product_id.spa_family_price_ids.price',
+                 # Without these the stored total ignores the extras entirely.
+                 'spa_addon_ids', 'spa_addon_ids.list_price')
     def _compute_price(self):
         for rec in self:
-            if rec.product_ids:
-                rec.price = sum(rec.product_ids.mapped('list_price'))
-            else:
-                # Walk-in kiosk bookings carry only the legacy single
-                # service; without this they were all priced 0.00.
-                rec.price = rec.product_id.list_price or 0.0
+            member_type = rec.spa_member_type or 'individual'
+            products = rec.product_ids or rec.product_id
+            total = 0.0
+            for product in products:
+                # _spa_price_for is the one place that knows what a package
+                # costs for a member type. None = not sold to them; fall back
+                # to the individual price rather than booking it at zero.
+                value = product._spa_price_for(member_type)
+                total += product.list_price if value is None else value
+            # Add-ons are charged at list price: they carry no family pricing,
+            # so a family booking pays for the extra once, not once per person.
+            total += sum(rec.spa_addon_ids.mapped('list_price'))
+            rec.price = total
 
     @api.constrains('product_ids', 'product_id')
     def _check_services(self):

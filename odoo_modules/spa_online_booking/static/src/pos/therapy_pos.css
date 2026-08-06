@@ -116,8 +116,31 @@
 .sg-qa-sign__none { font-size: .85rem; font-style: italic; }
 .sg-qa-sign__terms { font-size: .78rem; color: #15803D; }
 
+/* --- Disclaimer on the sign sheet (collapsed by default) ----------------- */
+.sg-disc { border: 1px solid #eef0f2; border-radius: 10px; margin-bottom: 8px; overflow: hidden; }
+.sg-disc__head {
+    display: flex; align-items: center; width: 100%; gap: 4px;
+    padding: 10px 12px; border: 0; background: #FBFCFD; cursor: pointer;
+    font: inherit; text-align: start;
+}
+.sg-disc__head:hover { background: #F4F7FB; }
+.sg-disc__title { font-weight: 700; color: #33507a; }
+/* The point of the row when collapsed: that it WAS accepted. */
+.sg-disc__accepted { margin-inline-start: auto; font-size: .78rem; color: #15803D; white-space: nowrap; }
+.sg-disc__body { padding: 12px 14px; border-top: 1px solid #eef0f2; max-height: 40vh; overflow-y: auto; line-height: 1.55; }
+.sg-disc__body p { margin: 0 0 8px; }
+.sg-disc__note { margin-top: 8px; font-size: .76rem; color: #9aa4af; font-style: italic; }
+
 .spa-pos-flow .tp-signblock { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--tp-line); }
 .spa-pos-flow .tp-terms { margin-bottom: 16px; align-items: flex-start; }
+
+/* Disclaimer page. Only the frame is styled here - the wording's colour,
+   weight, italic and underline arrive as an inline style built from the
+   therapy's own settings, so anything set here that the operator can also
+   choose would fight with it. */
+.spa-pos-flow .tp-disclaimer { padding: 14px 16px; border: 1px solid var(--tp-line); border-radius: 10px; background: #FBFCFD; }
+.spa-pos-flow .tp-clientinfo { padding: 12px 16px; border: 1px solid var(--tp-line); border-radius: 10px; }
+.spa-pos-flow .tp-ci-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
 .spa-pos-flow .tp-qheading { font-weight: 800; font-size: 1rem; color: var(--tp-green-dark); text-transform: uppercase; letter-spacing: .02em; margin: 8px 0 -6px; padding-bottom: 6px; border-bottom: 1px solid var(--tp-line); }
 .spa-pos-flow .tp-qlist > .tp-qheading:first-child { margin-top: 0; }
 .spa-pos-flow .tp-question__label { font-weight: 600; margin: 0 0 8px; }
@@ -248,13 +271,19 @@
    Branded Orders screen (cards + footer)
    ============================================================ */
 .spa-booking-list { background: #f7f8fa !important; padding: 16px 18px !important; }
+/* A column, not a row: details stack on top and the buttons get a row of their
+   own, the same shape the booking card (.sg-bcard) below already uses. As one
+   nowrap row it held nine items, and sg-card__main was the only one that could
+   shrink - so it took all the overflow and the service name wrapped to four
+   lines behind the buttons. */
 .sg-card {
-    display: flex; align-items: center; gap: 16px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 12px;
     background: #fff; border: 1px solid #eef0f2; border-radius: 16px;
     padding: 16px 20px; margin-bottom: 14px; cursor: pointer;
     box-shadow: 0 1px 3px rgba(16,23,32,.03);
     transition: box-shadow .15s;
 }
+.sg-card__top { display: flex; align-items: flex-start; gap: 16px; }
 .sg-card:hover { box-shadow: 0 8px 22px rgba(16,23,32,.08); }
 .sg-av { width: 52px; height: 52px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
 .sg-av--green { background: #E7F6EC; color: #16A34A; }
@@ -264,19 +293,37 @@
 .sg-card__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .sg-card__ref { font-weight: 700; font-size: 1.05rem; color: #1f2a37; }
 .sg-card__svc { color: #8a94a0; margin-top: 5px; }
-.sg-card__price { color: #16A34A; font-weight: 700; margin-top: 4px; }
+/* Total and chevron ride together on the right, clear of the text column. */
+.sg-card__side { display: flex; align-items: center; gap: 14px; flex-shrink: 0; margin-left: auto; }
+.sg-card__price { color: #16A34A; font-weight: 700; font-size: 1.05rem; white-space: nowrap; }
 .sg-pill { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: .78rem; font-weight: 600; }
 .sg-pill--green { background: #E7F6EC; color: #16A34A; }
 .sg-pill--red { background: #FDECEC; color: #DC2626; }
 .sg-pill--blue { background: #E8EEFF; color: #3B5BDB; }
 .sg-pill--gray { background: #EEF0F3; color: #556; }
-.sg-card__meta { display: flex; gap: 34px; }
+/* Wraps now instead of forcing the card wider - the values keep white-space:
+   nowrap, so each Date/Time/Appointment block moves down as a unit. */
+.sg-card__meta { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-top: 10px; }
 .sg-meta { display: flex; align-items: center; gap: 9px; }
 .sg-meta > i { color: #b7bec7; font-size: 1.05rem; }
 .sg-meta__k { display: block; font-size: .74rem; color: #9aa4af; }
 .sg-meta__v { display: block; font-weight: 600; color: #3a4552; white-space: nowrap; }
+/* The appointment sits beside the payment date, so give it its own colour -
+   two identical-looking date blocks would be read as the same thing. */
+.sg-meta--appt > i { color: #6c4bb6; }
+.sg-meta--appt .sg-meta__v { color: #6c4bb6; }
 .sg-card__chev { color: #c3c9d0; font-size: 1.15rem; }
-@media (max-width: 900px) { .sg-card__meta { display: none; } }
+/* The action row, separated from the details by a hairline. Wraps rather than
+   overflowing on a narrow register, and Invoice sits opposite the appointment
+   buttons because it is about the paperwork, not the booking. */
+.sg-card__actions {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+    padding-top: 12px; border-top: 1px solid #eef0f2;
+}
+.sg-card__actions .sg-card__invbtn { margin-left: auto; }
+/* NOTE: the meta block used to be hidden below 900px, because it could not fit
+   on the old single row. It wraps now, and hiding the Appointment on a smaller
+   register would remove the one thing staff look for. */
 
 /* branded footer */
 .sg-orders-foot { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 16px; color: #9aa4af; letter-spacing: .18em; font-size: .82rem; font-weight: 600; text-transform: uppercase; }
@@ -293,6 +340,9 @@
 .sg-subtab.is-active { color: #6c4bb6; border-bottom-color: #6c4bb6; }
 
 .sg-pill--purple { background: #EEE9FA; color: #6c4bb6; }
+/* Waiting list: deliberately the quietest pill on the card - a queued request
+   must never read as a confirmed appointment at a glance. */
+.sg-pill--grey { background: #EEF0F2; color: #5B6670; }
 
 /* ---- branded booking card ---- */
 .sg-bcard { background: #fff; border: 1px solid #eef0f2; border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(16,23,32,.03); }
@@ -382,6 +432,67 @@
 .sg-card__invbtn { border: 1.5px solid #cfe0b4; background: #f6faf0; color: #4b6b1f; font-weight: 700;
     border-radius: 10px; padding: 8px 14px; white-space: nowrap; cursor: pointer; align-self: center; }
 .sg-card__invbtn:hover { background: #eef6e2; border-color: #7cb342; }
+
+/* --- Member type tabs (Individual / Family 2 / 3 / 4) -------------------- */
+.spa-pos-flow .tp-section--green { color: var(--tp-green-dark, #15803D); }
+.spa-pos-flow .tp-mtabs {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    border: 1px solid var(--tp-line, #eef0f2); border-radius: 12px;
+    overflow: hidden; margin-bottom: 16px;
+}
+.spa-pos-flow .tp-mtab {
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    padding: 14px 8px; border: 0; background: #fff; font: inherit;
+    font-weight: 600; color: #5B6670; cursor: pointer; white-space: nowrap;
+    border-inline-end: 1px solid var(--tp-line, #eef0f2);
+}
+.spa-pos-flow .tp-mtab:last-child { border-inline-end: 0; }
+.spa-pos-flow .tp-mtab:hover { background: #F7FAF8; }
+/* The selected tab reads as selected on its own, not only by contrast with
+   its neighbours - reception scans this at a glance. */
+.spa-pos-flow .tp-mtab.is-active {
+    background: #F1F8F3; color: var(--tp-green-dark, #15803D);
+    box-shadow: inset 0 0 0 2px var(--tp-green-dark, #15803D); border-radius: 10px;
+}
+/* Package small print (Settings → Package footer note) */
+.spa-pos-flow .tp-pnote {
+    text-align: center; font-size: .82rem; color: #9aa4af; margin: 14px 0 0;
+}
+
+/* "Person 2 of 3" banner. Shown only on a family booking, so an individual
+   booking looks exactly as it always did. */
+.spa-pos-flow .tp-person {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 0 0 14px; padding: 9px 12px;
+    background: #E7F6EC; border: 1.5px solid var(--tp-green); border-radius: 12px;
+}
+.spa-pos-flow .tp-person__badge { font-weight: 800; color: var(--tp-green-dark, #15803D); }
+.spa-pos-flow .tp-person__note { font-size: .85rem; color: var(--tp-soft); min-width: 0; }
+
+/* Add-ons on the package screen. Same shape as .tp-prow, but a square box
+   instead of a radio: several extras can be ticked, and the control should say
+   so at a glance. */
+.spa-pos-flow .tp-section__opt { font-weight: 500; font-size: .82rem; color: var(--tp-soft); }
+.spa-pos-flow .tp-alist { display: flex; flex-direction: column; gap: 8px; }
+.spa-pos-flow .tp-arow { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; padding: 11px 14px; border: 1.5px solid var(--tp-line); border-radius: 14px; cursor: pointer; margin: 0; }
+.spa-pos-flow .tp-arow.is-selected { border-color: var(--tp-green); box-shadow: 0 0 0 1px var(--tp-green) inset; background: #E7F6EC; }
+.spa-pos-flow .tp-arow input { position: absolute; opacity: 0; width: 0; height: 0; }
+.spa-pos-flow .tp-arow__box { width: 20px; height: 20px; border-radius: 5px; border: 2px solid #C7CDD4; position: relative; }
+.spa-pos-flow .tp-arow.is-selected .tp-arow__box { border-color: var(--tp-green); background: var(--tp-green); }
+.spa-pos-flow .tp-arow.is-selected .tp-arow__box::after {
+    content: ""; position: absolute; left: 5px; top: 1px; width: 5px; height: 10px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.spa-pos-flow .tp-arow__name { font-weight: 600; min-width: 0; }
+.spa-pos-flow .tp-arow__price { font-weight: 800; }
+/* Keyboard users must still see where they are - the real input is hidden. */
+.spa-pos-flow .tp-arow input:focus-visible + .tp-arow__box { outline: 2px solid var(--tp-green); outline-offset: 2px; }
+.spa-pos-flow .tp-total {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 12px; padding-top: 12px; border-top: 1.5px solid var(--tp-line);
+    font-weight: 700;
+}
+.spa-pos-flow .tp-total__amt { font-weight: 800; font-size: 1.15rem; }
 
 /* "Select a package" hint under the therapy detail (Book Therapy) */
 .spa-pos-flow .tp-select-hint { color: #16a34a; font-weight: 700; margin: 10px 0 0; }
@@ -574,6 +685,11 @@
     align-self: center;
 }
 .sg-card__signbtn:hover { background: #e9f0f9; border-color: #5b83bd; }
+/* Remove cancels a booking, so it must not look like the reversible buttons
+   sitting next to it. Muted red rather than loud - it is a normal action, just
+   not one to press by accident. */
+.sg-card__rmbtn { border-color: #e3cdcd; background: #fbf5f5; color: #8a3d3d; }
+.sg-card__rmbtn:hover { background: #f7e9e9; border-color: #bd5b5b; }
 
 /* --- Sign dialog --------------------------------------------------------- */
 .sg-sign .sg-qa-group { margin-bottom: 10px; }

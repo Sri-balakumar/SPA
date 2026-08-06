@@ -1,0 +1,31 @@
+// Writing box on top, toolbar bar underneath - an email compose window.
+.spa-disc-editor {
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px;
+    overflow: hidden;
+
+    .odoo-editor-editable,
+    .note-editable {
+        min-height: 320px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 12px 14px;
+    }
+
+    // The bar itself. The Toolbar component brings its own button styling; all
+    // that is needed here is to stop it floating and sit it on a strip.
+    .spa-disc-toolbar {
+        border-top: 1px solid var(--border-color, #dee2e6);
+        background: var(--o-gray-100, #f8f9fa);
+        padding: 4px 6px;
+
+        .o-we-toolbar {
+            position: static !important;
+            box-shadow: none !important;
+            border: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            flex-wrap: wrap;
+        }
+    }
+}

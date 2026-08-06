@@ -10,6 +10,8 @@ import pytz
 from odoo import fields, http
 from odoo.http import request
 from odoo.addons.web.controllers.utils import ensure_db
+from odoo.addons.spa_online_booking.models.package_price import (
+    SPA_MEMBER_TYPES, spa_headcount)
 
 try:
     import phonenumbers
@@ -174,18 +176,54 @@ def _slot_is_bookable(slot_dt, products):
     max_hours = _max_lead_hours()
     if max_hours and slot_dt > now + timedelta(hours=max_hours):
         return 'slot_too_far'
-    # Match the legacy single-service field too, exactly as get_availability
-    # does, so submit and the offered slots agree.
-    taken = request.env['spa.booking'].sudo().search_count([
-        ('state', '!=', 'rejected'),
-        ('slot_datetime', '=', slot_dt),
-        '|',
-        ('product_ids', 'in', products.ids),
-        ('product_id', 'in', products.ids),
-    ])
-    if taken:
-        return 'slot_taken'
+    # A taken slot is NOT an error any more: the customer joins the waiting list
+    # for it instead of being turned away. Only the lead-time rules above can
+    # refuse a slot now. Who ends up holding it is decided at creation by
+    # _spa_slot_taken() below.
     return None
+
+
+def _spa_offered_addons(products):
+    """The extras offered on `products`, via the one resolver every surface uses.
+
+    Goes through `pos.category._spa_addons_for` so the therapy's list and the
+    package's own built-in Upsell & Cross-Sell field are both honoured. Reading
+    either source directly here would put this out of step with what the
+    screens actually show.
+    """
+    if not products:
+        return products.browse()
+    therapies = products.mapped('pos_categ_ids').filtered('spa_is_therapy')
+    return therapies._spa_addons_for(products)
+
+
+def _spa_valid_addon_ids(raw_ids, products):
+    """The submitted add-on ids that are genuinely offered on these packages.
+
+    The booking endpoint is public, so an id arriving in the payload proves
+    nothing. Anything not actually offered on one of the booked packages is
+    dropped rather than charged for - otherwise a caller could attach any
+    product in the database to their booking.
+    """
+    if not raw_ids or not products:
+        return []
+    try:
+        wanted = {int(value) for value in raw_ids}
+    except (TypeError, ValueError):
+        return []
+    return [addon.id for addon in _spa_offered_addons(products) if addon.id in wanted]
+
+
+def _spa_slot_taken(slot_dt, products):
+    """True when somebody already holds this slot for one of these services.
+
+    Asks spa.booking._spa_slot_holder so availability, submit and promotion all
+    use one definition of "taken" rather than three copies of the domain.
+    """
+    if not slot_dt or not products:
+        return False
+    Booking = request.env['spa.booking'].sudo()
+    return bool(Booking._spa_slot_holder(slot_dt, products.ids))
 
 
 def _rate_limited(ip, phone):
@@ -357,6 +395,89 @@ def _parse_signature(payload):
     return base64.b64encode(blob).decode(), None
 
 
+def _spa_parse_members(payload, questions, member_type):
+    """Normalise the people on this booking to exactly one dict per person.
+
+    Returns (people, error_response). `people` always has as many entries as
+    the member type covers - Family 3 means three - so callers never have to
+    ask whether members were sent.
+
+    Person 1 is the lead booker and falls back to the payload's own top-level
+    name / phone / date_of_birth / signature / answers. That fallback is what
+    keeps every existing client working: a caller that knows nothing about
+    members still produces one correct person.
+    """
+    expected = spa_headcount(member_type)
+    raw = payload.get('members')
+    if raw and not isinstance(raw, list):
+        return None, json_response({'error': 'invalid_members'}, 400)
+    raw = list(raw or [])
+    if not raw:
+        # No members sent: the top-level fields ARE person 1.
+        raw = [payload]
+    elif not isinstance(raw[0], dict):
+        return None, json_response({'error': 'invalid_members'}, 400)
+    else:
+        # The lead's contact details are only ever collected at the top level,
+        # so fold them in rather than requiring the client to repeat them.
+        lead = dict(payload)
+        lead.update({k: v for k, v in raw[0].items() if v not in (None, '')})
+        raw[0] = lead
+
+    if len(raw) != expected:
+        return None, json_response({
+            'error': 'wrong_member_count',
+            'expected': expected,
+            'received': len(raw),
+        }, 400)
+
+    people = []
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            return None, json_response({'error': 'invalid_members'}, 400)
+        name = (entry.get('name') or '').strip()
+        if not name:
+            return None, json_response(
+                {'error': 'missing_member_name', 'person': index + 1}, 400)
+
+        signature, sig_error = _parse_signature(entry)
+        if sig_error:
+            return None, json_response(
+                {'error': sig_error, 'person': index + 1}, 400)
+        dob, gender = _parse_personal(entry)
+
+        # Each person answers for themselves, so required questions are
+        # checked per person - person 2's blank health history is exactly the
+        # gap this whole feature exists to close.
+        answers_in = entry.get('answers') or {}
+        if not isinstance(answers_in, dict):
+            return None, json_response({'error': 'invalid_answers'}, 400)
+        answers = {}
+        for q in questions:
+            value = (answers_in.get(str(q.id)) or '').strip()
+            if q.required and not value:
+                return None, json_response({
+                    'error': 'missing_answer',
+                    'question_id': q.id,
+                    'person': index + 1,
+                }, 400)
+            if value:
+                answers[q.id] = value[:MAX_TEXT_LEN]
+
+        people.append({
+            'sequence': index + 1,
+            'name': name[:MAX_NAME_LEN],
+            'date_of_birth': dob,
+            'gender': gender,
+            'phone': (entry.get('phone') or '').strip()[:MAX_NAME_LEN],
+            'email': (entry.get('email') or '').strip()[:MAX_NAME_LEN],
+            'signature': signature,
+            'terms_accepted': bool(entry.get('terms_accepted')),
+            'answers': answers,
+        })
+    return people, None
+
+
 def _parse_personal(payload):
     """Pull the optional Date of Birth + Gender from a booking payload.
     Returns (date_or_False, 'male'/'female'/'other'/False). Kept optional so
@@ -500,10 +621,17 @@ class SpaBookingApiController(http.Controller):
     @http.route('/spa/book', type='http', auth='none', methods=['GET'], csrf=False)
     def booking_page(self, **kw):
         """Serve the static booking page HTML with a no-cache header so the
-        browser always revalidates it. The page's CSS/JS are versioned
-        (?v=NN), so bumping a version makes every visitor pick up changes
-        immediately — instead of being stuck on Odoo's 7-day-cached static
-        copy of index.html. The ?token= query is preserved for the JS.
+        browser always revalidates it.
+
+        The page's CSS/JS carry ?v=, and Odoo serves those files with
+        max-age=604800 - a week. So the version is what decides whether a
+        returning visitor sees a change at all, and it is STAMPED HERE from the
+        module's own version rather than typed into index.html. A hard-coded
+        number has to be remembered on every edit, and forgetting it looks
+        exactly like a broken feature: the server has the new file, the browser
+        keeps serving the old one, and nothing in the logs says so.
+
+        The ?token= query is preserved for the JS.
 
         auth='none' + ensure_db(): the customer arrives with no session, so on a
         multi-database server Odoo cannot pick a database and returns
@@ -519,12 +647,40 @@ class SpaBookingApiController(http.Controller):
             os.path.dirname(__file__), '..', 'static', 'booking', 'index.html')
         with open(path, 'rb') as fh:
             html = fh.read()
+        html = html.replace(b'__SPA_ASSET_V__', self._spa_asset_version())
         return request.make_response(html, headers=[
             ('Content-Type', 'text/html; charset=utf-8'),
             ('Cache-Control', 'no-cache, no-store, must-revalidate'),
             ('Pragma', 'no-cache'),
             ('Expires', '0'),
         ])
+
+    @staticmethod
+    def _spa_asset_version():
+        """The cache-busting token for the booking page's CSS/JS, as bytes.
+
+        The newest modification time of the three asset files. That changes
+        exactly when one of them is edited - no upgrade needed, and nothing to
+        remember. Deliberately NOT read from the ORM: this route is auth='none'
+        precisely so a customer with no session can reach it, and request.env
+        is not dependable there.
+
+        Not cached on the class either. It is three stat() calls on a page that
+        is served once per customer, and caching would mean a file edited while
+        the server runs stays invisible until a restart - the exact failure
+        this replaces.
+        """
+        import os
+        here = os.path.join(os.path.dirname(__file__), '..', 'static', 'booking')
+        newest = 0
+        for name in ('style.css', 'i18n.js', 'script.js'):
+            try:
+                newest = max(newest, int(os.path.getmtime(os.path.join(here, name))))
+            except OSError:
+                # A missing asset is the page's problem, not this helper's; the
+                # tag still needs a value so the URL stays well-formed.
+                _logger.warning("spa booking page: cannot stat %s", name)
+        return str(newest or 'dev').encode()
 
     # ---------- booking page logo (public) ----------
 
@@ -707,6 +863,23 @@ class SpaBookingApiController(http.Controller):
                     'name': p.name,
                     'price': p.list_price,
                     'save': save,
+                    # Price per member type. A member type missing from this map
+                    # is not sold for this package, which is what tells the
+                    # screens not to offer it under that tab. `price` above
+                    # stays the individual price, so older clients are
+                    # unaffected.
+                    'prices': p._spa_member_prices(),
+                    # The package's optional extras: this therapy's list plus
+                    # anything on the package's own Upsell & Cross-Sell field.
+                    # Same resolver the POS wizard and the submit check use, so
+                    # all three always agree on what is on offer.
+                    'addons': [{
+                        'id': a.id,
+                        'name': a.name,
+                        'price': a.list_price,
+                        'image_url': ('/spa/service/%s/image' % a.id)
+                                     if a.image_128 else None,
+                    } for a in cat._spa_addons_for(p)],
                     'session_count': sessions,
                     'session_desc': p.spa_session_desc or '',
                     'duration_minutes': p.spa_duration,
@@ -737,6 +910,9 @@ class SpaBookingApiController(http.Controller):
                 'headings': [{'id': h.id, 'name': h.name,
                               'style': h._spa_heading_style()}
                              for h in cat.spa_heading_ids],
+                # `{}` when this therapy has no disclaimer - the page is then
+                # skipped rather than shown empty.
+                'disclaimer': cat._spa_disclaimer_payload(),
                 'packages': pkg_data,
             })
         # The public user's default company may use a different currency than
@@ -751,8 +927,19 @@ class SpaBookingApiController(http.Controller):
         company = (config.company_id if config and config.company_id
                    else request.env.company)
         currency = company.currency_id
+        # Member-type tabs and the small print, both driven from the backend so
+        # the screens do not hard-code commercial wording. Labels come from the
+        # field's own selection, so adding a member type there reaches both
+        # surfaces without touching either.
+        member_types = [{'key': key, 'label': label}
+                        for key, label in SPA_MEMBER_TYPES]
+        note = request.env['ir.config_parameter'].sudo().get_param(
+            'spa_online_booking.package_note', '')
+
         return json_response({
             'therapies': therapies,
+            'member_types': member_types,
+            'package_note': note or '',
             'currency': {
                 'symbol': currency.symbol or '',
                 'position': currency.position or 'before',  # 'before' | 'after'
@@ -813,7 +1000,14 @@ class SpaBookingApiController(http.Controller):
             'required': q.required,
             'options': [o.name for o in q.option_ids] if q.option_ids else [],
         } for q in questions]
-        return json_response({'questions': data})
+        # The disclaimer of the therapy these packages belong to, shown on its
+        # own page after the questions. `{}` when the therapy has none, which
+        # is how a client knows to skip that page rather than show a blank one.
+        therapy = products.pos_categ_ids.filtered('spa_is_therapy')[:1]
+        return json_response({
+            'questions': data,
+            'disclaimer': therapy._spa_disclaimer_payload(),
+        })
 
     # ---------- availability ----------
 
@@ -850,12 +1044,15 @@ class SpaBookingApiController(http.Controller):
         max_hours = _max_lead_hours()
         max_cutoff = now + timedelta(hours=max_hours) if max_hours else None
 
-        # A slot is considered taken if ANY of the selected services is already
-        # booked at that time (union of clashes across the chosen services).
-        # Rejected bookings don't hold a slot; match both the multi-service
-        # field and the legacy single-service field to be safe.
-        booked = request.env['spa.booking'].sudo().search([
-            ('state', '!=', 'rejected'),
+        # A slot is HELD when any of the selected services already has a booking
+        # at that time. Held times are still offered - the customer joins a
+        # waiting list for them - so this only decides which ones get flagged.
+        # 'waiting' bookings are excluded here on purpose: they do not hold the
+        # slot, they are queuing for it. Matches the legacy single-service field
+        # too, as the submit check does.
+        Booking = request.env['spa.booking'].sudo()
+        booked = Booking.search([
+            ('state', 'in', Booking._SPA_HOLDING_STATES),
             ('slot_datetime', '>=', cursor),
             ('slot_datetime', '<', end),
             '|',
@@ -864,15 +1061,22 @@ class SpaBookingApiController(http.Controller):
         ]).mapped('slot_datetime')
         booked_set = {b.strftime('%H:%M') for b in booked}
 
+        # `slots` keeps its old meaning - "times you may choose" - so a client
+        # that ignores `waitlist` still works; it simply offers the busy time
+        # too, which is the point. `waitlist` names which of them are queued.
+        waitlist = []
         while cursor < end:
             label = cursor.strftime('%H:%M')
             within_window = cursor >= min_cutoff and (
                 max_cutoff is None or cursor <= max_cutoff)
-            if within_window and label not in booked_set:
+            if within_window:
                 slots.append(label)
+                if label in booked_set:
+                    waitlist.append(label)
             cursor += timedelta(hours=1)
 
-        return json_response({'date': date, 'service_ids': ids, 'slots': slots})
+        return json_response({'date': date, 'service_ids': ids,
+                              'slots': slots, 'waitlist': waitlist})
 
     # ---------- submit ----------
 
@@ -935,25 +1139,25 @@ class SpaBookingApiController(http.Controller):
         if slot_problem:
             return json_response({'error': slot_problem}, 400)
 
-        # Build answer_ids in the same shape kiosk_submit uses: one
-        # spa.booking.answer per question, value_text as free text
-        # regardless of question_type (matches the booking page, which
-        # collects every answer as a typed string). Questions are the deduped
-        # union across all selected services.
-        answers_payload = payload.get('answers', {})
+        # Questions are the deduped union across all selected services.
         questions = therapy_questions(products)
-        answer_commands = []
-        for q in questions:
-            value = (answers_payload.get(str(q.id)) or '').strip()
-            if q.required and not value:
-                return json_response(
-                    {'error': 'missing_answer', 'question_id': q.id}, 400
-                )
-            if value:
-                answer_commands.append((0, 0, {
-                    'question_id': q.id,
-                    'value_text': value,
-                }))
+
+        # One entry per person the package covers. Validates the count and each
+        # person's required answers, and folds the top-level fields in as
+        # person 1 - so a client that sends no `members` still books correctly.
+        member_type = (
+            payload.get('member_type')
+            if payload.get('member_type') in dict(SPA_MEMBER_TYPES)
+            else 'individual')
+        people, member_error = _spa_parse_members(payload, questions, member_type)
+        if member_error is not None:
+            return member_error
+
+        # Answers are NOT written here. _spa_set_members creates one row per
+        # person after the booking exists, each carrying booking_id, so
+        # booking.answer_ids still returns everything - and writing the lead's
+        # here as well would store their answers twice, the duplicate having no
+        # member at all.
 
         # payment_mode intentionally not collected here — matches your
         # flow (cash at counter, or a payment link sent after the session);
@@ -978,6 +1182,10 @@ class SpaBookingApiController(http.Controller):
                 'booking_ref': clash.name,
             }, 409)
 
+        # Somebody already holding this time means the waiting list, not a
+        # refusal. Decided before create so the row is born in the right state.
+        waitlisted = _spa_slot_taken(slot_dt, products)
+
         booking = request.env['spa.booking'].sudo().create({
             'partner_name': (payload['name'] or '')[:MAX_NAME_LEN],
             'client_ip': client_ip,
@@ -987,6 +1195,17 @@ class SpaBookingApiController(http.Controller):
             'product_id': products[0].id,
             'source': 'online_link',
             'spa_channel': 'online',
+            # Which family size was booked. The stored price is computed from
+            # this, so an unknown value falls back to individual rather than
+            # reaching the field and being refused (normalised further up,
+            # because the member count is checked against it).
+            'spa_member_type': member_type,
+            # Only extras actually offered on one of the booked packages are
+            # accepted - this endpoint is public, so an id from the payload is
+            # never trusted to be a legitimate add-on.
+            'spa_addon_ids': [(6, 0, _spa_valid_addon_ids(
+                payload.get('addon_ids'), products))],
+            'state': 'waiting' if waitlisted else 'pending',
             'slot_datetime': slot_dt,
             'date_of_birth': _parse_personal(payload)[0],
             'gender': _parse_personal(payload)[1],
@@ -997,9 +1216,25 @@ class SpaBookingApiController(http.Controller):
             # Capped: these are fields.Char with no size, so an unbounded body
             # meant unbounded row growth.
             'time_note': (payload.get('time_note') or '').strip()[:MAX_TEXT_LEN],
-            'answer_ids': answer_commands,
             'company_id': products[0].company_id.id or request.env.company.id,
         })
+
+        # Everyone the package covers, with their own answers and signature.
+        # After the booking exists, because spa.booking.answer.booking_id is
+        # required - nested commands under member_ids would never set it.
+        booking._spa_set_members(people)
+
+        # Two people submitting the same time at once can BOTH see the slot
+        # free - each transaction is blind to the other's uncommitted row. So
+        # re-check now that ours exists: whoever is not the earliest holder
+        # steps back onto the waiting list. Self-correcting, and cheaper than
+        # locking the table on every booking.
+        if not waitlisted:
+            holder = request.env['spa.booking'].sudo()._spa_slot_holder(
+                slot_dt, products.ids)
+            if holder and holder.id != booking.id:
+                booking.write({'state': 'waiting'})
+                waitlisted = True
 
         # Deliberately NOT marking the link used: it is a single shared link
         # that many customers book through, so 'completed' would kill it after
@@ -1009,7 +1244,14 @@ class SpaBookingApiController(http.Controller):
         # Trigger WhatsApp confirmation here, e.g.:
         # request.env['spa.whatsapp'].sudo().send_confirmation(booking)
 
-        return json_response({'success': True, 'booking_ref': booking.name})
+        # `waiting` goes back so the page can say so. Putting somebody on a
+        # waiting list without telling them would be the wrong kind of quiet.
+        return json_response({
+            'success': True,
+            'booking_ref': booking.name,
+            'state': booking.state,
+            'waiting': booking.state == 'waiting',
+        })
 
     @http.route('/api/spa/lookup', type='http', auth='public', methods=['POST'], csrf=False)
     def lookup_customer(self, **kw):

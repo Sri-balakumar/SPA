@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Ticking this turns the whole category into the add-on list: every
+         product filed under it is offered as an optional extra after a service
+         is chosen, in the POS and on the booking page. A flag rather than a
+         category named "Add ons" matched in code, so renaming the category
+         cannot silently switch add-ons off. -->
+    <record id="product_category_form_view_spa_addon" model="ir.ui.view">
+        <field name="name">product.category.form.inherit.spa.addon</field>
+        <field name="model">product.category</field>
+        <field name="inherit_id" ref="product.product_category_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='first']" position="inside">
+                <field name="spa_is_addon" widget="boolean_toggle"/>
+            </xpath>
+            <xpath expr="//group[@name='first']" position="after">
+                <p class="text-muted" invisible="not spa_is_addon">
+                    Every product filed under this category is offered as an
+                    optional extra once a service is chosen — in the POS
+                    <b>Book Therapy</b> screen and on the online booking page.
+                    The same list is offered on every service.
+                    <br/>
+                    Each one is an ordinary product, so it still needs
+                    <b>Point of Sale</b> ticked and a price. Untick that and it
+                    withdraws from every screen at once, without editing this
+                    category.
+                </p>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Core puts product categories under Inventory and Invoicing only, so
+         from the POS app there was no way to reach the switch above - the
+         nearby "PoS Product Categories" entry is a different model
+         (pos.category). Named to make that distinction visible. -->
+    <menuitem id="menu_spa_product_category"
+              name="Product Categories"
+              action="product.product_category_action_form"
+              parent="point_of_sale.pos_menu_products_configuration"
+              sequence="4"/>
+
+</odoo>

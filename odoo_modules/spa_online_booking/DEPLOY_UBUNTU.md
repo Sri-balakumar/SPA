@@ -1,6 +1,6 @@
 # Spa modules — deployment on a fresh Ubuntu Odoo 19 server
 
-Covers `spa_kiosk`, `pos_spa_header`, `spa_online_booking` (+ the `whatsapp_neonize`
+Covers `spa_kiosk`, `pos_spa_header`, `spa_online_booking` (+ the `whatsapp_gateway`
 dependency). Written against Odoo **19.0.20260403**.
 
 ---
@@ -13,7 +13,7 @@ Copy these folders into the server's addons path:
 spa_kiosk/
 pos_spa_header/
 spa_online_booking/
-whatsapp_neonize/          # now a hard dependency (booking links are sent on it)
+whatsapp_gateway/          # now a hard dependency (booking links are sent on it)
 ```
 
 **Exclude every `__pycache__/` directory** — they contain Windows-built
@@ -21,7 +21,7 @@ whatsapp_neonize/          # now a hard dependency (booking links are sent on it
 
 ```bash
 rsync -a --exclude '__pycache__' --exclude '*.bak-spa' \
-      spa_kiosk pos_spa_header spa_online_booking whatsapp_neonize \
+      spa_kiosk pos_spa_header spa_online_booking whatsapp_gateway \
       odoo@server:/opt/odoo/addons/
 ```
 
@@ -38,7 +38,7 @@ sudo -u odoo /opt/odoo/venv/bin/pip install phonenumbers neonize qrcode Pillow
 - `phonenumbers` — now declared in `spa_online_booking`'s `external_dependencies`,
   so the module **will refuse to install without it**. It is *not* in Odoo's own
   `requirements.txt`.
-- `neonize`, `qrcode`, `Pillow` — required by `whatsapp_neonize`.
+- `neonize`, `qrcode`, `Pillow` — required by `whatsapp_gateway`.
 - `pytz` is already a core Odoo dependency.
 
 ## 3. Install order
@@ -50,7 +50,7 @@ sudo -u odoo /opt/odoo/venv/bin/python3 odoo-bin \
 ```
 
 Installing `spa_online_booking` alone is enough — it pulls
-`spa_kiosk` → `pos_spa_header` → `whatsapp_neonize` in the right order.
+`spa_kiosk` → `pos_spa_header` → `whatsapp_gateway` in the right order.
 The dependency graph is acyclic:
 
 ```
@@ -58,7 +58,7 @@ point_of_sale ──┬──► spa_kiosk ───────┐
                 └──► pos_spa_header ──┤
                                       ├──► spa_online_booking
    base, web, product, account,       │
-   whatsapp_neonize ──────────────────┘
+   whatsapp_gateway ──────────────────┘
 ```
 
 ## 4. odoo.conf — the one line everything depends on
@@ -86,7 +86,7 @@ server its own `dbfilter`, or add `spa_kiosk` to `server_wide_modules` and the s
 `ensure_db()` treatment.
 
 `workers` — on Ubuntu this is usually > 0. **The WhatsApp bridge lives in one process**:
-`whatsapp_neonize` keeps its client in module-level dicts, so only the worker that connected
+`whatsapp_gateway` keeps its client in module-level dicts, so only the worker that connected
 it can send. Any request served by another worker reports "not connected". Run `workers = 0`,
 or expect intermittent send failures.
 
@@ -174,7 +174,7 @@ rewiring (injected into that same div earlier). It now appends with
 - `pos_spa_header` now depends on `spa_kiosk` (its JS calls `spa.question` and
   `product.template.get_pos_spa_questions`).
 - `spa_kiosk` now depends on `account` (uses `account.tax` directly).
-- `spa_online_booking` now depends on `product` + `whatsapp_neonize`, declares
+- `spa_online_booking` now depends on `product` + `whatsapp_gateway`, declares
   `phonenumbers`, and has `license`/`author`.
 - `spa.booking.session._sql_constraints` → `models.Constraint`. Odoo 19 **removed**
   `_sql_constraints` (logged and silently dropped), so the `UNIQUE(token)` index

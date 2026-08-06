@@ -2,6 +2,7 @@ import { patch } from "@web/core/utils/patch";
 import { TicketScreen } from "@point_of_sale/app/screens/ticket_screen/ticket_screen";
 import { onMounted } from "@odoo/owl";
 import { makeAwaitable } from "@point_of_sale/app/utils/make_awaitable_dialog";
+import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { SetSlotDialog } from "@spa_online_booking/pos/set_slot_dialog";
 
 const { DateTime } = luxon;
@@ -51,12 +52,24 @@ patch(TicketScreen.prototype, {
         if (!d.isValid) {
             return;
         }
+        const day = d.toFormat("yyyy-MM-dd");
         try {
             await this.pos.data.loadServerOrders([
                 ["config_id", "=", this.pos.config.id],
                 ["state", "!=", "draft"],
+                // Either rung up around this day, OR due on it. Without the
+                // second branch an order paid weeks before its appointment is
+                // never fetched, so picking the appointment date would still
+                // show nothing however the list is filtered afterwards.
+                // Naive local bounds on the slot, because that is how it is
+                // stored - same split get_pos_today_bookings documents.
+                "|",
+                "&",
                 ["date_order", ">=", d.minus({ days: 7 }).toFormat("yyyy-MM-dd") + " 00:00:00"],
                 ["date_order", "<=", d.plus({ days: 1 }).toFormat("yyyy-MM-dd") + " 23:59:59"],
+                "&",
+                ["spa_slot_datetime", ">=", day + " 00:00:00"],
+                ["spa_slot_datetime", "<=", day + " 23:59:59"],
             ]);
         } catch (e) {
             console.warn("Spa: failed to load the day's orders", e);
@@ -65,6 +78,25 @@ patch(TicketScreen.prototype, {
 
     _spaDay() {
         return this.state.spaDate || DateTime.now().toFormat("yyyy-MM-dd");
+    },
+
+    // The day an order is filed under by the date filter: its APPOINTMENT when
+    // it has one, so a rescheduled order moves to the new date instead of
+    // staying on the day it was paid, and the day it was rung up otherwise.
+    // Exactly the rule spa.booking already applies server side, in
+    // _pos_booking_data (pos_booking.py) - orders simply never got it.
+    //
+    // `raw` is the unconverted "YYYY-MM-DD HH:MM:SS" string straight from the
+    // server. spa_slot_datetime holds naive LOCAL wall clock in a UTC column,
+    // so the ORM getter shifts it by the timezone offset and would file an
+    // evening appointment on the wrong day. date_order IS genuine UTC, so its
+    // converted value is the right thing to read.
+    spaOrderDay(o) {
+        const slot = o.raw?.spa_slot_datetime;
+        if (slot) {
+            return String(slot).slice(0, 10);
+        }
+        return o.date_order ? o.date_order.toFormat("yyyy-MM-dd") : "";
     },
 
     _orderBookingIds() {
@@ -113,6 +145,14 @@ patch(TicketScreen.prototype, {
         );
     },
 
+    // A rescheduled order is listed in the Rescheduled tab and NOWHERE else, so
+    // a moved appointment is never shown twice on the same day. Same idea as
+    // _orderBookingIds() below, which drops a booking from the booking lists
+    // once it has become an order.
+    spaInOrdinaryLists(o) {
+        return !o.spa_rescheduled;
+    },
+
     // Served/paid orders of the current channel for the selected day.
     spaChannelOrders() {
         if (!this.state.spaType || this.state.spaType === "today") {
@@ -122,12 +162,34 @@ patch(TicketScreen.prototype, {
         return this.pos.models["pos.order"]
             .filter(
                 (o) =>
+                    this.spaInOrdinaryLists(o) &&
                     (o.spa_channel || "web") === this.state.spaType &&
                     (o.getOrderlines().length > 0 || o.payment_ids.length > 0) &&
-                    o.date_order &&
-                    o.date_order.toFormat("yyyy-MM-dd") === day
+                    this.spaOrderDay(o) === day
             )
             .sort((a, b) => b.date_order.ts - a.date_order.ts);
+    },
+
+    // The "Rescheduled" tab: orders whose appointment has been moved, across
+    // all channels, filed under their NEW date by spaOrderDay().
+    //
+    // Day-scoped exactly like spaChannelOrders() - the picked date, else today
+    // - so every tab answers the same question about dates and a moved
+    // appointment is found where the customer is actually due in.
+    spaRescheduledOrders() {
+        const day = this._spaDay();
+        return this.pos.models["pos.order"]
+            .filter(
+                (o) =>
+                    o.spa_rescheduled &&
+                    (o.getOrderlines().length > 0 || o.payment_ids.length > 0) &&
+                    this.spaOrderDay(o) === day
+            )
+            .sort((a, b) =>
+                String(a.raw?.spa_slot_datetime || "").localeCompare(
+                    String(b.raw?.spa_slot_datetime || "")
+                )
+            );
     },
 
     spaOrderCustomer(o) {
@@ -146,11 +208,12 @@ patch(TicketScreen.prototype, {
         const picked = this.state.spaDate;
         return this.pos.models["pos.order"].filter(
             (o) =>
+                this.spaInOrdinaryLists(o) &&
                 (o.spa_channel || "web") === this.state.spaType &&
                 !o.finalized &&
                 o.state !== "cancel" &&
                 (o.getOrderlines().length > 0 || o.payment_ids.length > 0) &&
-                (!picked || (o.date_order && o.date_order.toFormat("yyyy-MM-dd") === picked))
+                (!picked || this.spaOrderDay(o) === picked)
         );
     },
 
@@ -160,6 +223,30 @@ patch(TicketScreen.prototype, {
     },
     spaOrderTime(o) {
         return o.date_order ? o.date_order.toFormat("h:mm a") : "";
+    },
+
+    // The appointment, shown ALONGSIDE the order date rather than replacing it:
+    // "Date/Time" on this card has always meant when the order was paid, and
+    // quietly changing that would misread every historical row. Empty for an
+    // order with no appointment, and the card then looks exactly as before.
+    spaOrderSlot(o) {
+        // Read the RAW value, not o.spa_slot_datetime: the slot is naive local
+        // wall clock stored in a UTC column, so the ORM getter adds the
+        // timezone offset and printed an 11:13 appointment as 4:43 PM. The
+        // booking card has always shown the raw value (spaBookingWhen), so
+        // going through the same string keeps the two cards agreeing - and
+        // agreeing with the day spaOrderDay() files the order under.
+        const raw = o.raw?.spa_slot_datetime || o.spa_slot_datetime;
+        if (!raw) {
+            return "";
+        }
+        if (typeof raw === "string") {
+            const dt = DateTime.fromSQL(raw.replace("T", " "));
+            return dt.isValid
+                ? dt.toFormat("dd LLL yyyy, h:mm a")
+                : raw.slice(0, 16).replace("T", " ");
+        }
+        return raw.toFormat ? raw.toFormat("dd LLL yyyy, h:mm a") : String(raw);
     },
     spaAvatarClass(o) {
         if (o.state === "cancel") {
@@ -200,6 +287,11 @@ patch(TicketScreen.prototype, {
         if (b.state === "pending") {
             return "sg-pill--purple";
         }
+        // Queuing, not confirmed - keep it visually quieter than a real
+        // appointment so the two are never mistaken for each other.
+        if (b.state === "waiting") {
+            return "sg-pill--grey";
+        }
         return "sg-pill--blue";
     },
     spaBookingAvatarClass(b) {
@@ -219,6 +311,28 @@ patch(TicketScreen.prototype, {
             .map((l) => l.getFullProductName?.() || l.product_id?.display_name || "")
             .filter(Boolean)
             .join(", ");
+    },
+
+    // "Family 2" when the order carries a family package, else "".
+    //
+    // Read off spa_member_type, NOT the line name. The name is stored with a
+    // " - Family 2" suffix server-side, but core rebuilds full_product_name
+    // from product.name + attributes every time a line is instantiated in the
+    // browser (constructFullProductName), so the suffix is gone by the time
+    // this card renders. The field survives.
+    spaOrderMemberType(o) {
+        const labels = {
+            family_2: "Family 2",
+            family_3: "Family 3",
+            family_4: "Family 4",
+        };
+        for (const line of o.getOrderlines()) {
+            const label = labels[line.spa_member_type];
+            if (label) {
+                return label;
+            }
+        }
+        return "";
     },
 
     spaOrderTotal(o) {
@@ -336,7 +450,7 @@ patch(TicketScreen.prototype, {
         // picked day. With no date picked, behave as before (relative to today).
         const picked = this.state.spaDate;
         const ref = picked || today;
-        const g = { pending: [], today: [], upcoming: [], completed: [] };
+        const g = { waiting: [], pending: [], today: [], upcoming: [], completed: [] };
         // Hide bookings that have already been loaded into a POS order — they
         // show as the order (in the Ongoing/Completed sections), so they must
         // NOT still appear here with a "Load" button. That gap let an
@@ -352,7 +466,9 @@ patch(TicketScreen.prototype, {
             if (picked && (b.date || "") !== picked) {
                 continue;
             }
-            if (b.state === "pending") {
+            if (b.state === "waiting") {
+                g.waiting.push(b);
+            } else if (b.state === "pending") {
                 g.pending.push(b);
             } else if (b.state === "paid" || b.state === "completed") {
                 g.completed.push(b);
@@ -364,7 +480,23 @@ patch(TicketScreen.prototype, {
                 }
             }
         }
+        // The queue is first-come-first-served, and that is the order the slot
+        // is handed on in, so show it that way rather than by appointment time.
+        g.waiting.sort((a, b) =>
+            String(a.create_date || "").localeCompare(String(b.create_date || "")) ||
+            a.id - b.id
+        );
         return g;
+    },
+
+    // Position in the queue for a waiting booking, so reception can see at a
+    // glance who gets the slot next if the holder cancels.
+    spaQueuePosition(booking) {
+        const sameSlot = this.spaGroups().waiting.filter(
+            (b) => (b.slot_datetime || "") === (booking.slot_datetime || "")
+        );
+        const i = sameSlot.findIndex((b) => b.id === booking.id);
+        return i < 0 ? "" : `#${i + 1}`;
     },
 
     // Paid bookings for the day, across ALL channels, that never became an
@@ -388,6 +520,14 @@ patch(TicketScreen.prototype, {
                     "get_pos_sessions",
                     [this.state.spaDate || false]
                 );
+                return;
+            }
+            // Rescheduled lists pos.order records that loadDayOrders() already
+            // brought in - there are no bookings to fetch. Without this the
+            // call below would ask get_pos_bookings('rescheduled'), which the
+            // server rejects as an unknown channel.
+            if (this.state.spaType === "rescheduled") {
+                this.state.spaBookings = [];
                 return;
             }
             if (!this.state.spaType) {
@@ -466,8 +606,9 @@ patch(TicketScreen.prototype, {
         }
         const hasContent = (o) =>
             o.getOrderlines().length > 0 || o.payment_ids.length > 0;
-        const onDate = (o, d) =>
-            o.date_order && o.date_order.toFormat("yyyy-MM-dd") === d;
+        // Appointment day when there is one, else the day it was rung up -
+        // see spaOrderDay().
+        const onDate = (o, d) => this.spaOrderDay(o) === d;
 
         // The selected day (default today); a search term spans all dates so
         // you can still find any order by name.
@@ -476,21 +617,27 @@ patch(TicketScreen.prototype, {
             this.state.spaDate ||
             (term ? null : DateTime.now().toFormat("yyyy-MM-dd"));
         const dayOK = (o) => {
-            // An in-progress (ongoing/paused) order may not have a date_order
-            // stamped yet — treat it as today's, so it isn't dropped. Only hide
-            // it when a specific past date is explicitly picked in the date box.
-            if (!o.date_order) {
+            // An in-progress (ongoing/paused) order may have neither an
+            // appointment nor a date_order stamped yet — treat it as today's,
+            // so it isn't dropped. Only hide it when a specific past date is
+            // explicitly picked in the date box.
+            if (!this.spaOrderDay(o)) {
                 return !this.state.spaDate;
             }
             return !day || onDate(o, day);
         };
         const ts = (o) => (o.date_order ? o.date_order.ts : Number.MAX_SAFE_INTEGER);
+        // Everything the All tab will list. Kept separate from dayOK, which
+        // answers only "is this on the selected day" - a rescheduled order is
+        // excluded whatever the day, because it belongs to its own tab.
+        const listable = (o) =>
+            this.spaInOrdinaryLists(o) && hasContent(o) && dayOK(o);
 
         // A specific dropdown filter (Paid / Ongoing / Payment / Receipt):
         // built-in list, narrowed to the same day as everything else.
         const f = this.state.filter;
         if (f && f !== "ACTIVE_ORDERS") {
-            return base.filter((o) => hasContent(o) && dayOK(o));
+            return base.filter(listable);
         }
 
         // Default "All" view: the selected day's orders (active + paid).
@@ -501,15 +648,10 @@ patch(TicketScreen.prototype, {
             (o.getName?.() || "").toLowerCase().includes(term);
 
         // `base` already applied the built-in search to the active orders.
-        const result = base.filter((o) => hasContent(o) && dayOK(o));
+        const result = base.filter(listable);
         const seen = new Set(result.map((o) => o.uuid));
         const paid = this.pos.models["pos.order"].filter(
-            (o) =>
-                o.finalized &&
-                hasContent(o) &&
-                dayOK(o) &&
-                matches(o) &&
-                !seen.has(o.uuid)
+            (o) => o.finalized && listable(o) && matches(o) && !seen.has(o.uuid)
         );
         return [...result, ...paid].sort((a, b) => ts(b) - ts(a));
     },
@@ -536,6 +678,90 @@ patch(TicketScreen.prototype, {
             return;
         }
         await this.refreshSpaBookings();
+    },
+
+    // Move a PAID order's appointment to another day: the customer paid, then
+    // could not come. Same dialog as setSpaSlot, but the work happens on the
+    // order because a counter sale has no booking yet - the backend creates one
+    // to hold the new date. The payment itself is never touched.
+    async spaRescheduleOrder(order) {
+        // Pre-fill with the appointment if this order already has one, else the
+        // day it was rung up - a sensible starting point either way.
+        const current =
+            (order.raw && order.raw.spa_slot_datetime) ||
+            (order.date_order ? order.date_order.toFormat("yyyy-LL-dd HH:mm:ss") : "");
+        const value = await makeAwaitable(this.dialog, SetSlotDialog, {
+            current,
+            note: "",
+        });
+        if (!value) {
+            return;
+        }
+        try {
+            const res = await this.pos.data.call(
+                "pos.order", "pos_reschedule", [[order.id], value]
+            );
+            if (res && res.error) {
+                this.env.services.notification.add(res.error, { type: "danger" });
+                return;
+            }
+            this.env.services.notification.add(
+                res && res.target_taken
+                    ? `Moved to ${res.slot}. Note: that time already has an appointment.`
+                    : `Appointment moved to ${res.slot}.`,
+                { type: res && res.target_taken ? "warning" : "success" }
+            );
+        } catch (e) {
+            // Log it: a swallowed exception here leaves nothing to diagnose.
+            console.error("Spa: reschedule failed", e);
+            this.env.services.notification.add("Could not reschedule this order.", {
+                type: "danger",
+            });
+            return;
+        }
+        await this.refreshSpaBookings();
+        await this.loadDayOrders();
+    },
+
+    // Cancel the appointment outright: not coming, or the date was a mistake.
+    // The way back from any wrong date - reschedule to move it, remove to drop
+    // it altogether.
+    async spaRemoveAppointment(order) {
+        // Confirmed first: rescheduling is reversible, this cancels a booking.
+        const confirmed = await makeAwaitable(this.dialog, ConfirmationDialog, {
+            title: "Remove appointment?",
+            body:
+                "This cancels the booking and frees its time slot. " +
+                "Anyone on the waiting list for that time will be given it. " +
+                "The payment on this order is not affected.",
+            confirmLabel: "Remove",
+        });
+        if (!confirmed) {
+            return;
+        }
+        try {
+            const res = await this.pos.data.call(
+                "pos.order", "pos_remove_appointment", [[order.id]]
+            );
+            if (res && res.error) {
+                this.env.services.notification.add(res.error, { type: "danger" });
+                return;
+            }
+            this.env.services.notification.add(
+                res && res.was
+                    ? `Appointment removed (was ${res.was}). The slot is free again.`
+                    : "Appointment removed.",
+                { type: "success" }
+            );
+        } catch (e) {
+            console.error("Spa: remove appointment failed", e);
+            this.env.services.notification.add("Could not remove the appointment.", {
+                type: "danger",
+            });
+            return;
+        }
+        await this.refreshSpaBookings();
+        await this.loadDayOrders();
     },
 
     // Approve / Reject / Mark Completed / Mark Paid — same transitions as the
@@ -578,6 +804,13 @@ patch(TicketScreen.prototype, {
             order.spa_channel = info.channel;
         }
         order.spa_booking_ref = bookingId;
+        // Carry the appointment across too. The order card shows date_order,
+        // which is when it was PAID - without this the time the customer is
+        // actually due in never reaches the order, and the booking that holds
+        // it is hidden from the lists as soon as this link is made.
+        if (info.slot_datetime) {
+            order.spa_slot_datetime = info.slot_datetime;
+        }
 
         if (info.partner_id) {
             let partner = this.pos.models["res.partner"].get(info.partner_id);
@@ -591,7 +824,12 @@ patch(TicketScreen.prototype, {
         }
 
         const tmplIds = info.service_tmpl_ids || [];
-        const missing = tmplIds.filter((id) => !this.pos.models["product.template"].get(id));
+        // Extras chosen online. Loaded in the same pass so a product the POS
+        // has never shown is fetched once, but added as its own plain line.
+        const addonIds = info.addon_tmpl_ids || [];
+        const missing = [...tmplIds, ...addonIds].filter(
+            (id) => !this.pos.models["product.template"].get(id)
+        );
         if (missing.length) {
             await this.pos.data.read("product.template", missing);
         }
@@ -606,6 +844,15 @@ patch(TicketScreen.prototype, {
                 line.setCustomerNote(info.answers);
                 first = false;
             }
+        }
+
+        for (const addonId of addonIds) {
+            // No skipSpaQuestions games and no member-type label: an add-on is
+            // an ordinary product, so it goes on at its own list price.
+            await this.pos.addLineToCurrentOrder(
+                { product_tmpl_id: addonId, qty: 1 },
+                { skipSpaQuestions: true }
+            );
         }
 
         this.pos.navigateToOrderScreen(order);

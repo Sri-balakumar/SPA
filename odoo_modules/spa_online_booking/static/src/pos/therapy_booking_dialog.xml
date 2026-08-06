@@ -146,6 +146,37 @@
                     </div>
                 </t>
 
+                <!-- ============ DISCLAIMER ============ -->
+                <!-- Last step, after the details, because the Client
+                     Information block below is filled from them. Title, wording
+                     and styling all come from the therapy record in Odoo, so
+                     the spa rewords it without a code change. -->
+                <t t-if="state.screen === 'disclaimer'">
+                    <h5 class="tp-section" t-esc="disclaimer.title"/>
+                    <!-- Rich text from the Odoo editor, rendered as markup via
+                         the same html() helper this dialog already uses for the
+                         therapy description - the field is sanitize=True, which
+                         is what makes that safe. -->
+                    <div class="tp-disclaimer tp-rich"
+                         style="max-height: 45vh; overflow-y: auto;"
+                         t-out="html(disclaimer.body)"/>
+
+                    <!-- Filled from the details step rather than typed again.
+                         This dialog has no email field, so only the two it
+                         actually collects are shown. -->
+                    <div class="tp-clientinfo mt-3">
+                        <h6 class="fw-bold mb-2">Client Information</h6>
+                        <div class="tp-ci-row">
+                            <span class="text-muted">Full Name</span>
+                            <b t-esc="state.custName || '—'"/>
+                        </div>
+                        <div class="tp-ci-row">
+                            <span class="text-muted">Contact Number</span>
+                            <b t-esc="state.custMobile || state.custWhatsapp || '—'"/>
+                        </div>
+                    </div>
+                </t>
+
                 <p t-if="state.error and state.therapies.length" class="text-danger mt-2 mb-0">
                     <t t-esc="state.error"/>
                 </p>
@@ -160,9 +191,17 @@
                     <button t-if="state.screen === 'questions'" class="btn btn-primary btn-lg ms-auto"
                             t-on-click="() => this.toDetails()">Continue</button>
 
+                    <!-- With a disclaimer the details lead to it; without one
+                         they add straight to the order exactly as before. -->
                     <button t-if="state.screen === 'details'" class="btn btn-primary btn-lg ms-auto"
+                            t-att-disabled="state.busy"
+                            t-on-click="() => disclaimer ? this.toDisclaimer() : this.confirm()">
+                        <t t-esc="disclaimer ? 'Continue' : (state.busy ? 'Adding…' : 'Add to Order')"/>
+                    </button>
+
+                    <button t-if="state.screen === 'disclaimer'" class="btn btn-primary btn-lg ms-auto"
                             t-att-disabled="state.busy" t-on-click="() => this.confirm()">
-                        <t t-esc="state.busy ? 'Adding…' : 'Add to Order'"/>
+                        <t t-esc="state.busy ? 'Adding…' : 'Accept &amp; Add to Order'"/>
                     </button>
 
                     <button t-if="state.screen === 'select'" class="btn btn-secondary btn-lg ms-auto"

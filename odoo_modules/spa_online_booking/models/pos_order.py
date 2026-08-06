@@ -1,4 +1,9 @@
-from odoo import api, fields, models
+import json
+import logging
+
+from odoo import _, api, fields, models
+
+_logger = logging.getLogger(__name__)
 
 # Order states that mean the customer has actually paid for the package.
 _PAID_STATES = ('paid', 'done', 'invoiced')
@@ -25,6 +30,33 @@ class PosOrder(models.Model):
     # The spa.booking this order was loaded from — used to de-duplicate the POS
     # channel tabs (a booking that became an order shows once, as the order).
     spa_booking_ref = fields.Integer(string='Spa Booking', index=True)
+
+    # When the customer is actually coming, as opposed to `date_order`, which is
+    # when they PAID. Kept here as its own column rather than read through
+    # spa_booking_ref because that is a plain Integer, not a Many2one, so a
+    # related field is not possible - and because the POS loads pos.order's
+    # columns automatically, which is what puts the appointment on the order
+    # card. Without it a rescheduled appointment was invisible: the order row
+    # showed the payment time, and the booking itself is hidden from the POS
+    # lists as soon as an order points at it.
+    spa_slot_datetime = fields.Datetime(
+        string='Appointment', index=True,
+        help="When the customer is due in. Set when a booking is loaded into "
+             "this order, or when the appointment is rescheduled.")
+
+    # The people on a family sale, as JSON, written by the Book Therapy screen.
+    # A carrier, not a store: the POS has no real order id until the order
+    # syncs, so it cannot create the member rows itself. _process_order drains
+    # this into proper spa.booking.member records and clears it.
+    spa_members_json = fields.Text(string='Family Members (pending)', copy=False)
+
+    # Set only when an appointment MOVES off a date it already had. Giving a
+    # counter sale its first appointment runs through the same method, and that
+    # is not a reschedule - see pos_reschedule for the one test both use.
+    spa_rescheduled = fields.Boolean(
+        string='Rescheduled', index=True, copy=False,
+        help="This order's appointment was moved off a date it already had. "
+             "Setting a first appointment is not a reschedule.")
 
     # ---- signed consent sheet -------------------------------------------
     def spa_sign_sheet(self):
@@ -57,9 +89,31 @@ class PosOrder(models.Model):
         # two therapies signed separately.
         sheet_signature = ''
         unsigned_lines = []
+        # The waiver(s) the customer accepted. Deduplicated by wording: two
+        # packages of the same therapy share one disclaimer and it should be
+        # printed once, not twice.
+        disclaimers, seen_disclaimers = [], set()
 
         for line in order.lines:
             tmpl = line.product_id.product_tmpl_id
+            # Prefer what was FROZEN at signing; fall back to the therapy's
+            # current wording for signatures taken before that was stored.
+            line_signature = line._spa_signature()
+            payload = {}
+            if line_signature and line_signature.disclaimer_body:
+                payload = {
+                    'title': line_signature.disclaimer_title or _('Disclaimer'),
+                    'body': line_signature.disclaimer_body,
+                    'as_signed': True,
+                }
+            else:
+                live = tmpl._spa_disclaimer()
+                if live.get('body'):
+                    payload = dict(live, as_signed=False)
+            if payload and payload['body'] not in seen_disclaimers:
+                seen_disclaimers.add(payload['body'])
+                disclaimers.append(dict(
+                    payload, service=line.product_id.display_name or ''))
             services.append({
                 'name': line.full_product_name or line.product_id.display_name or '',
                 'qty': line.qty or 0.0,
@@ -80,6 +134,11 @@ class PosOrder(models.Model):
                     'date': when,
                     'rows': rows,
                     'signature': line_sig,
+                    # Counter sales are not split by person - the answers live
+                    # in the line note, not on members. Present so every group
+                    # has the same shape and the sheet never reads undefined.
+                    'person': '',
+                    'person_label': '',
                 })
 
         # A therapy booked online answered its questions on the spa.booking, not
@@ -87,26 +146,56 @@ class PosOrder(models.Model):
         if order.spa_booking_ref:
             booking = self.env['spa.booking'].sudo().browse(order.spa_booking_ref)
             if booking.exists():
-                rows = [{
-                    'question': a.question_id.name or '',
-                    'answer': a.value_text or '',
-                } for a in booking.answer_ids if a.value_text]
-                # The line note is a copy of the booking's answers, so the same
-                # questionnaire can arrive twice - keep the first.
-                booked_sig = booking.signature or b''
-                booked_sig = booked_sig.decode() if booked_sig else ''
-                if booked_sig and not sheet_signature:
-                    sheet_signature = booked_sig
-                if rows and not any(g['rows'] == rows for g in groups):
-                    booked = booking.product_ids or booking.product_id
+                booked = booking.product_ids or booking.product_id
+                # ONE BLOCK PER PERSON. A family booking holds a separate
+                # health history and a separate signature for each person;
+                # merging them would print one contradictory questionnaire and
+                # attribute it to whoever paid.
+                for member in booking.member_ids.sorted('sequence'):
+                    rows = member._spa_answer_rows()
+                    member_sig = member.signature or b''
+                    member_sig = member_sig.decode() if member_sig else ''
+                    if member_sig and not sheet_signature:
+                        sheet_signature = member_sig
+                    # The line note is a copy of the lead's answers, so the same
+                    # questionnaire can arrive twice - keep the first.
+                    if rows and any(g['rows'] == rows for g in groups):
+                        continue
                     groups.append({
                         'service': ', '.join(booked.mapped('name')),
                         'ref': booking.name or order_ref,
                         'invoice': invoice,
                         'date': when,
                         'rows': rows,
-                        'signature': booked_sig,
+                        'signature': member_sig,
+                        # Named so the sheet can head each block with the person
+                        # it belongs to. Blank for an individual booking, which
+                        # is what keeps that sheet looking exactly as before.
+                        'person': member.name if len(booking.member_ids) > 1 else '',
+                        'person_label': (member._spa_label()
+                                         if len(booking.member_ids) > 1 else ''),
                     })
+                if not booking.member_ids:
+                    # Pre-members booking that the backfill did not reach.
+                    rows = [{
+                        'question': a.question_id.name or '',
+                        'answer': a.value_text or '',
+                    } for a in booking.answer_ids if a.value_text]
+                    booked_sig = booking.signature or b''
+                    booked_sig = booked_sig.decode() if booked_sig else ''
+                    if booked_sig and not sheet_signature:
+                        sheet_signature = booked_sig
+                    if rows and not any(g['rows'] == rows for g in groups):
+                        groups.append({
+                            'service': ', '.join(booked.mapped('name')),
+                            'ref': booking.name or order_ref,
+                            'invoice': invoice,
+                            'date': when,
+                            'rows': rows,
+                            'signature': booked_sig,
+                            'person': '',
+                            'person_label': '',
+                        })
         return {
             'order_id': order.id,
             'order_ref': order_ref,
@@ -126,6 +215,7 @@ class PosOrder(models.Model):
             'amount_total': order.amount_total or 0.0,
             'services': services,
             'groups': groups,
+            'disclaimers': disclaimers,
             'signature': sheet_signature,
             # Lines that still need a signature, so the Sign dialog knows what
             # to attach a freshly drawn one to.
@@ -150,6 +240,9 @@ class PosOrder(models.Model):
                 'pos_order_line_id': line.id,
                 'signature': signature,
             })
+            # Freeze the waiver wording as it is right now, so this sheet always
+            # shows what was actually agreed to rather than a later edit.
+            record._spa_snapshot_disclaimer()
             line.spa_signature_ref = record.id
         return True
 
@@ -184,6 +277,277 @@ class PosOrder(models.Model):
                 })
                 # today's visit counts as session 1
                 new_pass.action_use_session(note='Session 1 (purchase)')
+
+    def _get_invoice_lines_values(self, line_values, pos_line, move_type):
+        """Carry the POS line's id onto the CUSTOMER INVOICE line it becomes.
+
+        Core links the invoice to the ORDER but not line-to-line, so the
+        invoice report had no way to tell which family size a particular line
+        was sold at - matching on product breaks as soon as one order sells the
+        same package twice at different family sizes.
+
+        This must hook `_get_invoice_lines_values`, not `_prepare_product_aml_dict`
+        as it used to: the latter builds the SESSION's accounting journal
+        entries, so the id was landing on the wrong records and the invoice line
+        kept a null `pos_order_line_id`. That is what silently hid the
+        "Members Included" row - the member type was stored correctly all along,
+        the report just could not reach the line carrying it.
+        """
+        vals = super()._get_invoice_lines_values(line_values, pos_line, move_type)
+        # Product lines only: core returns a bare line_section dict for a combo,
+        # and an id on that would point the report at the wrong thing.
+        if pos_line and vals.get('product_id'):
+            vals['pos_order_line_id'] = pos_line.id
+        return vals
+
+    # ---- reschedule -----------------------------------------------------
+    def _spa_reschedule_booking(self):
+        """The spa.booking holding this order's appointment, created if needed.
+
+        An order rung up at the counter has no booking: the customer paid and
+        walked out, and the only date anywhere is `date_order`, which is when
+        they PAID, not when they are coming. Rescheduling one therefore has to
+        create the record that holds the appointment - otherwise the new date
+        has nowhere to live and vanishes the moment the dialog closes.
+
+        The id is stored back on the order, so rescheduling a second time moves
+        the same booking instead of scattering duplicates.
+        """
+        self.ensure_one()
+        Booking = self.env['spa.booking'].sudo()
+        if self.spa_booking_ref:
+            booking = Booking.browse(self.spa_booking_ref).exists()
+            if booking:
+                return booking
+
+        templates = self.lines.mapped('product_id.product_tmpl_id')
+        if not templates:
+            return Booking
+
+        partner = self.partner_id
+        booking = Booking.create({
+            'partner_name': partner.name or self.pos_reference or _('Customer'),
+            # spa.booking.mobile is required, and a counter sale may have no
+            # number at all - a placeholder beats refusing to reschedule.
+            # getattr, not partner.mobile: Odoo 19 dropped res.partner.mobile
+            # (it is folded into `phone`), so reading it directly raises. Same
+            # defensive lookup whatsapp_email already uses.
+            'mobile': (getattr(partner, 'mobile', '') or partner.phone or '-'),
+            'partner_id': partner.id or False,
+            'product_ids': [(6, 0, templates.ids)],
+            'product_id': templates[0].id,
+            'spa_channel': self.spa_channel or 'web',
+            # Already paid for and confirmed - and 'approved' is a holding
+            # state, so the booking properly occupies whatever slot it is given.
+            'state': 'approved',
+            'source': 'walk_in',
+            'company_id': self.company_id.id,
+        })
+        self.sudo().spa_booking_ref = booking.id
+        return booking
+
+    # ---- family members -------------------------------------------------
+    @api.model
+    def _process_order(self, order, existing_order):
+        """Turn a family sale's parked people into real booking members.
+
+        This is the first moment the order has a server id, which is why the
+        POS parks them on `spa_members_json` rather than creating the rows
+        itself. Draining it here also means it works for an order that was
+        rung up offline and synced later.
+
+        Never allowed to break the sync: a failure here would reject an order
+        the customer has already paid for, so it is logged and swallowed. The
+        people remain in the line note either way.
+        """
+        order_id = super()._process_order(order, existing_order)
+        record = self.browse(order_id).sudo().exists()
+        if not record or not record.spa_members_json:
+            return order_id
+        try:
+            people = json.loads(record.spa_members_json)
+        except (TypeError, ValueError):
+            _logger.warning(
+                "spa_online_booking: unreadable spa_members_json on order %s",
+                order_id)
+            record.spa_members_json = False
+            return order_id
+        try:
+            record.spa_store_members(people)
+        except Exception:            # noqa: BLE001 - see docstring
+            _logger.exception(
+                "spa_online_booking: could not store family members on order %s",
+                order_id)
+        else:
+            # Only once it worked, so a retry still has the data to work from.
+            record.spa_members_json = False
+        return order_id
+
+    def spa_store_members(self, people):
+        """Persist the people on a family sale as booking members.
+
+        The counter flow had nowhere to put person 2. `spa.booking.member`
+        requires a booking (booking_member.py), and Book Therapy never made
+        one - so everyone past the lead survived only as their name inside the
+        line's free-text note, and could not appear on the invoice, on the
+        order card or in Contacts.
+
+        Nothing new is invented here. It reuses the booking the reschedule flow
+        already creates for a counter sale, then the same two methods the
+        public website uses, so both channels end up with identically shaped
+        records:
+
+          _spa_set_members()          - the member rows, answers included
+          _spa_resolve_member_partners() - a CHILD contact per person under the
+                                        payer, matched on name + date of birth
+                                        so the same family returning is not
+                                        duplicated
+
+        `people` is one dict per person in order, shaped as _spa_set_members
+        documents. Returns the booking id so the POS can hold on to it.
+        """
+        self.ensure_one()
+        order = self.sudo()
+        if not people:
+            return False
+        booking = order._spa_reschedule_booking()
+        if not booking:
+            # No service line to hang a booking on - nothing to record, and
+            # certainly not a reason to fail the sale.
+            return False
+
+        # Tell the booking what was actually sold, BEFORE adding anyone.
+        # _spa_reschedule_booking() builds the record for RESCHEDULING, where
+        # the member type is irrelevant, so it leaves the 'individual' default -
+        # and then _check_member_count rejects the very people we are adding
+        # ("booked for 1 person(s) but 2 have been entered"). The line is the
+        # authoritative record of the package that was bought.
+        sold = order.lines.filtered(
+            lambda l: l.spa_member_type and l.spa_member_type != 'individual')[:1]
+        if sold and booking.spa_member_type != sold.spa_member_type:
+            booking.spa_member_type = sold.spa_member_type
+
+        # A savepoint so a rejected booking leaves NOTHING behind. The caller
+        # swallows failures - a paid sale must never be undone over this - but
+        # without this the member rows written before the constraint fired would
+        # still commit, leaving a booking its own constraint calls invalid.
+        with self.env.cr.savepoint():
+            booking._spa_set_members(people)
+            # Contacts only once the members exist: the resolver files each
+            # person under the payer, and reads the member rows to do it.
+            booking._spa_resolve_member_partners()
+        return booking.id
+
+    def pos_reschedule(self, slot_str):
+        """Move this order's appointment to another date and time.
+
+        sudo() like the other POS-called methods here: cashiers are read-only on
+        spa.booking. The payment is deliberately left alone - only the
+        appointment moves.
+        """
+        self.ensure_one()
+        order = self.sudo()
+        booking = order._spa_reschedule_booking()
+        if not booking:
+            return {'error': _("This order has no service to reschedule.")}
+
+        old_slot = booking.slot_datetime
+        products = booking._spa_slot_products()
+
+        # Does somebody else already hold the time we are moving TO? Reception
+        # is allowed to double-book deliberately, but should be told.
+        target_taken = False
+        new_slot = booking.pos_set_slot(slot_str)
+        if not new_slot:
+            return {'error': _("Could not read that date and time.")}
+        booking.invalidate_recordset()
+        if booking.slot_datetime:
+            target_taken = bool(booking._spa_slot_holder(
+                booking.slot_datetime, products, exclude_ids=booking.ids))
+
+        # A genuine MOVE, as opposed to giving a counter sale its very first
+        # appointment - this method does both, and old_slot is what tells them
+        # apart. The slot promotion below and the Rescheduled flag are the same
+        # question, so they share the one answer.
+        moved = bool(old_slot and old_slot != booking.slot_datetime)
+
+        # The time it just LEFT is now free - hand it to whoever was queuing for
+        # it, exactly as a cancellation would.
+        if moved:
+            booking._spa_promote_slot(
+                old_slot, products, exclude_ids=booking.ids,
+                freed_by=booking.partner_name or booking.name)
+
+        # Mirror it onto the order so the POS card can show WHEN the customer is
+        # coming, not just when they paid - and so the Orders date filter files
+        # the order under the new day.
+        vals = {'spa_slot_datetime': booking.slot_datetime}
+        if moved:
+            # Sticky: it stays true for the life of the appointment, so the
+            # Rescheduled tab and the card's pill keep telling reception that
+            # this customer has already been moved once.
+            vals['spa_rescheduled'] = True
+        order.write(vals)
+
+        booking.message_post(body=_(
+            "Appointment rescheduled from %(old)s to %(new)s by %(user)s.") % {
+                'old': (old_slot.strftime('%Y-%m-%d %H:%M') if old_slot
+                        else _("no date set")),
+                'new': new_slot,
+                'user': self.env.user.name,
+        })
+        return {
+            'slot': new_slot,
+            'booking_id': booking.id,
+            'target_taken': target_taken,
+        }
+
+    def pos_remove_appointment(self):
+        """Cancel this order's appointment outright.
+
+        The customer is not coming, or the date was entered by mistake. The
+        counterpart to rescheduling: reschedule moves a date, this drops it.
+
+        The POS order and its payment are untouched, exactly as with
+        rescheduling: cancelling a date is not a decision about money.
+        """
+        self.ensure_one()
+        order = self.sudo()
+        if not order.spa_booking_ref:
+            return {'error': _("There is no appointment on this order.")}
+        booking = self.env['spa.booking'].sudo().browse(
+            order.spa_booking_ref).exists()
+        if not booking:
+            return {'error': _("The booking for this order no longer exists.")}
+        # State alone, not the slot: action_reject cancels the booking but
+        # deliberately LEAVES slot_datetime set, so the record still shows what
+        # the appointment had been. 'rejected' is not a holding state, so the
+        # time is already free.
+        if booking.state == 'rejected':
+            return {'error': _("This appointment has already been removed.")}
+
+        was = booking.slot_datetime
+
+        # action_reject cancels the booking AND frees its slot, promoting
+        # whoever has waited longest. Deliberately NOT followed by a
+        # _spa_promote_slot call: that would run the promotion a second time and
+        # hand one slot to two people.
+        booking.action_reject()
+
+        # Cleared, so the card stops showing an appointment and the Orders date
+        # filter files the order under its payment day again. The Rescheduled
+        # flag goes with it: with no appointment there is no date for the
+        # Rescheduled tab to list this order under.
+        order.write({'spa_slot_datetime': False, 'spa_rescheduled': False})
+        booking.message_post(body=_(
+            "Appointment removed (was %(when)s) by %(user)s. The booking is "
+            "cancelled and the slot released.") % {
+                'when': (was.strftime('%Y-%m-%d %H:%M') if was
+                         else _("no date set")),
+                'user': self.env.user.name,
+        })
+        return {'removed': True, 'was': (was.strftime('%Y-%m-%d %H:%M')
+                                         if was else '')}
 
     @api.model_create_multi
     def create(self, vals_list):
