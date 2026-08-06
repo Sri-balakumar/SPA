@@ -12,7 +12,7 @@
     "splash": {
       "image": "./assets/nexgen_dark.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F5EEFB"
+      "backgroundColor": "#ffffff"
     },
     "assetBundlePatterns": [
       "**/*"

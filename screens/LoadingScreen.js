@@ -53,6 +53,13 @@ export default function LoadingScreen({ onDone }) {
   return (
     <View style={s.root}>
       <StatusBar style="dark" />
+      {/* Full-bleed with resizeMode contain, which is EXACTLY what the native
+          splash does with the same file (app.json splash: same image, contain,
+          #ffffff). Matching both sides is the whole point: the logo used to be
+          redrawn here at a fixed 70px height, so it visibly jumped size as the
+          native splash handed over and read as two splash screens rather than
+          one. Nothing here may change the logo's geometry - hence the spinner
+          being absolutely positioned below rather than laid out beside it. */}
       <Image source={require('../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
       <ActivityIndicator color={COLORS.purple} style={s.spinner} />
     </View>
@@ -60,9 +67,11 @@ export default function LoadingScreen({ onDone }) {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F5EEFB', alignItems: 'center', justifyContent: 'center' },
-  // 5:1, matching nexgen_dark.png — the old 150 height was sized for the
-  // taller Stretch & Go wordmark and would letterbox this logo.
-  logo: { width: '72%', maxWidth: 340, height: 70 },
-  spinner: { marginTop: 20 },
+  // White to match the native splash background, so the handover is invisible.
+  root: { flex: 1, backgroundColor: '#ffffff' },
+  logo: { width: '100%', height: '100%' },
+  // Out of the layout flow: the logo must sit exactly where the native splash
+  // left it. Kept - unlike the reference app, this screen covers a live Odoo
+  // auto-login, and a static screen during a slow one looks frozen.
+  spinner: { position: 'absolute', left: 0, right: 0, bottom: 64 },
 });
