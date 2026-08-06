@@ -72,14 +72,49 @@ export async function clearCredentials() {
   try { await AsyncStorage.removeItem(CRED_KEY); } catch (e) {}
 }
 
+// A LAN / on-premise address, as opposed to something on the internet.
+// These are the hosts that essentially never have a valid TLS certificate: a
+// self-hosted Odoo on the shop network is plain http, and Android rejects a
+// self-signed certificate anyway. Guessing https for them is what made the
+// connect screen fail with nothing more than "cannot reach the server".
+function isLanHost(url) {
+  const host = url.replace(/^https?:\/\//i, '').split('/')[0]
+    .replace(/:\d+$/, '').toLowerCase();
+  return (
+    host === 'localhost'
+    || /\.local$/.test(host)
+    || !host.includes('.')                        // bare name, e.g. "shop-pc"
+    || /^10\./.test(host)                         // private ranges
+    || /^192\.168\./.test(host)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    || /^127\./.test(host)
+    || /^169\.254\./.test(host)
+  );
+}
+
 // Turn whatever the user typed into a clean base URL:
-//  - add https:// if no scheme was given
 //  - trim spaces and a trailing slash
+//  - if no scheme was given, GUESS one: http for a LAN address, https for a
+//    public hostname.
+// The guess used to be https always, which meant typing "10.0.0.5:8069" - the
+// obvious thing to type for a shop server - produced a URL that could never
+// connect. It is only a guess either way, so jsonrpc() in odoo.js retries with
+// the other scheme when the transport fails and keeps whichever answers; this
+// heuristic just means the first attempt is usually the right one.
 export function normalizeUrl(raw) {
   let u = (raw || '').trim();
   if (!u) return '';
-  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  if (!/^https?:\/\//i.test(u)) {
+    u = (isLanHost(u) ? 'http://' : 'https://') + u;
+  }
   return u.replace(/\/+$/, '');
+}
+
+// The same URL on the other scheme, for the retry described above.
+export function swapScheme(url) {
+  if (/^http:\/\//i.test(url)) return url.replace(/^http:\/\//i, 'https://');
+  if (/^https:\/\//i.test(url)) return url.replace(/^https:\/\//i, 'http://');
+  return url;
 }
 
 export function getBaseUrl() {

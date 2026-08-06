@@ -12,7 +12,16 @@
 //  Unlike a hardcoded config, the server URL + database come from the
 //  runtime `connection` store — the user types them on the login screen.
 // ============================================================
-import { getBaseUrl, getDb } from './connection';
+import { getBaseUrl, getDb, setBaseUrl, swapScheme } from './connection';
+
+function post(base, path, params) {
+  return fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params }),
+  });
+}
 
 async function jsonrpc(path, params) {
   const base = getBaseUrl();
@@ -20,14 +29,29 @@ async function jsonrpc(path, params) {
 
   let res;
   try {
-    res = await fetch(`${base}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'call', params }),
-    });
+    res = await post(base, path, params);
   } catch (e) {
-    throw new Error('Cannot reach the server. Check the URL and your connection.');
+    // A THROW here is a transport failure - DNS, refused connection, or a TLS
+    // handshake against a server that only speaks plain http. It is not an HTTP
+    // error: a 404 or 500 resolves normally and is handled further down.
+    //
+    // The scheme is the most common reason to land here, and the user has no
+    // way to tell a wrong scheme from a wrong address - both just say "cannot
+    // reach the server". So try the other one once. Whichever answers becomes
+    // the stored base URL, so every later call (including spaApi.js, which
+    // reads the same store) goes straight there and saveConnection() persists
+    // the corrected form.
+    const alt = swapScheme(base);
+    if (alt !== base) {
+      try {
+        res = await post(alt, path, params);
+        setBaseUrl(alt);
+      } catch (e2) {
+        throw new Error('Cannot reach the server. Check the URL and your connection.');
+      }
+    } else {
+      throw new Error('Cannot reach the server. Check the URL and your connection.');
+    }
   }
 
   let data;
