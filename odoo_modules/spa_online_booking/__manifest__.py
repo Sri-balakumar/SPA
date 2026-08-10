@@ -21,6 +21,17 @@
     'data': [
         'security/ir.model.access.csv',
         'data/spa_customer_sequence.xml',
+        # RESTORED. 19.0.11.12.0 dropped this from the manifest while leaving the
+        # file in the tree, so a fresh install created no therapies and no
+        # packages at all - the "no services available yet" state the file's own
+        # comment warns about. That bit for real: the module was uninstalled,
+        # which deleted every record it owned, and with the catalogue unlisted
+        # there was nothing to recreate them from.
+        #
+        # noupdate="1" inside the file means edits made in Odoo survive an
+        # upgrade - but NOT an uninstall, which deletes module-owned records
+        # regardless. Keeping it listed is what makes the catalogue recoverable.
+        'data/spa_starter_catalogue.xml',
         # Loaded before the therapy view: that view's Copy button references
         # this action by id, so the action has to exist first.
         'wizards/copy_questions_wizard_views.xml',
