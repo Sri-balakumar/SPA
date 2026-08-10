@@ -60,7 +60,7 @@ export default function LoadingScreen({ onDone }) {
           native splash handed over and read as two splash screens rather than
           one. Nothing here may change the logo's geometry - hence the spinner
           being absolutely positioned below rather than laid out beside it. */}
-      <Image source={require('../assets/nexgen_dark.png')} style={s.logo} resizeMode="contain" />
+      <Image source={require('../assets/splash.png')} style={s.logo} resizeMode="contain" />
       <ActivityIndicator color={COLORS.purple} style={s.spinner} />
     </View>
   );

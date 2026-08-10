@@ -10,7 +10,7 @@
     "backgroundColor": "#ffffff",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/nexgen_dark.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
