@@ -3,7 +3,7 @@
 // live from Odoo alongside the therapy. Purple/lavender theme.
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, useWindowDimensions,
+  View, Text, TouchableOpacity, ScrollView, Image, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,11 +11,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import LangButton from '../../components/LangButton';
-import { loadTherapies } from '../../spaApi';
+import { loadTherapies, mediaUrl } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { toDigits, money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
+
+// One line of the therapy's details. Left out when Odoo has no value for it,
+// same as the POS, so an unfilled field never shows as a blank row.
+function InfoRow({ label, value, rtl, first }) {
+  if (!value) return null;
+  return (
+    <View style={[s.infoRow, !first && s.infoRowLine, rtl && s.infoRowRtl]}>
+      <Text style={[s.infoLbl, rtl && s.rtlTxt]}>{label}</Text>
+      <Text style={[s.infoVal, rtl ? s.infoValRtl : null]}>{value}</Text>
+    </View>
+  );
+}
 
 export default function PackagesScreen({ form, set, next, onBack, onHome }) {
   const { t, lang } = useLang();
@@ -45,6 +57,20 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
     };
   });
   const [selected, setSelected] = useState(null);
+
+  // ---- therapy details (same block the POS shows above the tabs) ----
+  // All of it comes from the therapy's POS category in Odoo, translated via
+  // ?lang by the re-fetch below.
+  const svc = form.serviceObj || {};
+  const bannerSrc = svc.image_data ? { uri: svc.image_data } : mediaUrl(svc.image_url);
+  const aboutTxt = svc.description || svc.tagline || '';
+  const infoRows = [
+    { key: 'dur', label: t('sessionDuration'),
+      value: svc.duration_min ? `${toDigits(svc.duration_min, lang)} ${t('minutesWord')}` : '' },
+    { key: 'ideal', label: t('idealFor'), value: svc.ideal_for },
+    { key: 'focus', label: t('focusAreas'), value: svc.focus_areas },
+  ].filter((r) => r.value);
+  const hasInfo = !!(bannerSrc || aboutTxt || infoRows.length);
 
   // ---- Individual / Family tabs ----
   const memberType = form.memberType || 'individual';
@@ -135,6 +161,16 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 100 }]}>
         <View style={{ width: contentW }}>
+          {hasInfo ? (
+            <View style={s.info}>
+              {bannerSrc ? <Image source={bannerSrc} style={s.banner} resizeMode="cover" /> : null}
+              {aboutTxt ? <Text style={[s.about, rtl && s.rtlTxt]}>{aboutTxt}</Text> : null}
+              {infoRows.map((r, i) => (
+                <InfoRow key={r.key} label={r.label} value={r.value} rtl={rtl} first={i === 0 && !aboutTxt} />
+              ))}
+            </View>
+          ) : null}
+
           {/* Shown only when this therapy really has more than one member type,
               so a spa selling individual packages only never sees a row of tabs
               where three of them are empty. */}
@@ -217,6 +253,20 @@ const s = StyleSheet.create({
   subtitle: { fontSize: 13.5, color: COLORS.muted, textAlign: 'center', marginTop: 6 },
 
   scroll: { alignItems: 'center', paddingTop: 18 },
+  // Therapy details card above the tabs.
+  info: {
+    backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 20,
+    shadowColor: '#4A2F6B', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 3,
+  },
+  banner: { width: '100%', height: 180, borderRadius: 14, marginBottom: 14 },
+  about: { fontSize: 14, lineHeight: 21, color: COLORS.ink, marginBottom: 6 },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11 },
+  infoRowLine: { borderTopWidth: 1, borderTopColor: COLORS.line },
+  infoRowRtl: { flexDirection: 'row-reverse' },
+  infoLbl: { fontSize: 13.5, color: COLORS.muted },
+  infoVal: { flex: 1, fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep, textAlign: 'right', marginLeft: 12 },
+  infoValRtl: { textAlign: 'left', writingDirection: 'rtl', marginLeft: 0, marginRight: 12 },
+
   sectionTitle: { fontSize: 13, fontWeight: '800', color: COLORS.muted, marginBottom: 12, marginLeft: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   card: {

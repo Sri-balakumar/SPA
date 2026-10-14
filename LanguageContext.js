@@ -190,6 +190,8 @@ const STR = {
   completedSessions: { en: 'Completed Sessions', ar: 'الجلسات المكتملة' },
   remainingSessions: { en: 'Remaining Sessions', ar: 'الجلسات المتبقية' },
   sessionDuration: { en: 'Session Duration', ar: 'مدة الجلسة' },
+  idealFor: { en: 'Ideal For', ar: 'مناسب لـ' },
+  focusAreas: { en: 'Focus Areas', ar: 'مناطق التركيز' },
   pricePerSession: { en: 'Price per Session', ar: 'سعر الجلسة' },
   validTill: { en: 'Valid Till', ar: 'صالحة حتى' },
   nextSession: { en: 'Next Session', ar: 'الجلسة التالية' },
