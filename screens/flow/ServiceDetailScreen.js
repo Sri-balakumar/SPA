@@ -26,7 +26,9 @@ export default function ServiceDetailScreen({ form, next, onBack, onHome }) {
   // Not rounded any more: money() applies the currency's own precision, and
   // rounding here would throw away the decimals a 3-decimal currency needs.
   const price = svc.list_price || 0;
-  const dur = svc.spa_duration || 60;
+  // A therapy carries its minutes as duration_min (/api/spa/therapies);
+  // spa_duration only exists on a product, so it was always empty here.
+  const dur = svc.duration_min || 0;
 
   return (
     <View style={s.root}>
@@ -55,10 +57,12 @@ export default function ServiceDetailScreen({ form, next, onBack, onHome }) {
 
           <View style={s.chips}>
             <View style={s.chip}><Text style={s.chipTxt}>From {money(price, lang)}</Text></View>
-            <View style={s.chip}>
-              <Ionicons name="time-outline" size={14} color={COLORS.purple} style={{ marginRight: 4 }} />
-              <Text style={s.chipTxt}>{dur} min</Text>
-            </View>
+            {dur ? (
+              <View style={s.chip}>
+                <Ionicons name="time-outline" size={14} color={COLORS.purple} style={{ marginRight: 4 }} />
+                <Text style={s.chipTxt}>{dur} min</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={s.card}>

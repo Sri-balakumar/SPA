@@ -32,7 +32,7 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
   const { width } = useWindowDimensions();
   const contentW = Math.min(width - 32, 620);
   const pkg = form.package || {};
-  const dur = pkg.duration || form.serviceObj?.duration_min || 60;
+  const dur = pkg.duration || form.serviceObj?.duration_min || 0;
 
   // ---- optional extras ----
   const addons = pkg.addons || [];
@@ -111,7 +111,7 @@ export default function PackageDetailsScreen({ form, set, next, onBack, onHome }
           <Text style={[s.desc, rtl && s.rtlTxt]}>{pkg.description}</Text>
           <View style={s.rule} />
           <Row rtl={rtl} label={t('numberOfSessions')} value={`${toDigits(pkg.sessions, lang)} ${pkg.sessions > 1 ? t('sessionsWord') : t('sessionWord')}`} />
-          <Row rtl={rtl} label={t('sessionDuration')} value={`${toDigits(dur, lang)} ${t('minutesWord')}`} />
+          {dur > 0 && <Row rtl={rtl} label={t('sessionDuration')} value={`${toDigits(dur, lang)} ${t('minutesWord')}`} />}
           {pkg.save > 0 && <Row rtl={rtl} label={t('youSave')} value={money(pkg.save, lang)} />}
         </View>
 

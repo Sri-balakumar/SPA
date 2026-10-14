@@ -111,7 +111,9 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
               const displayDesc = svc.description || svc.tagline || meta.desc || '';
               // Not rounded: money() applies the currency's own precision.
               const priceTxt = money(svc.from_price || 0, lang);
-              const minTxt = `${svc.duration_min || 60} min`;
+              // Real minutes from Odoo, never a made-up 60: when Odoo sends none
+              // the time is left off, same as the booking website.
+              const minTxt = svc.duration_min ? `${svc.duration_min} min` : '';
               return (
                 <TouchableOpacity key={svc.id} style={[s.card, { width: cardW }]} activeOpacity={0.9} onPress={() => choose(svc)}>
                   <View style={s.cardTop}>
@@ -128,9 +130,13 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
                   <View style={s.descBox}><Text style={s.desc} numberOfLines={4}>{displayDesc}</Text></View>
                   <View style={s.priceBar}>
                     <Text style={s.priceTxt}>{priceTxt}</Text>
-                    <Text style={s.dot}>·</Text>
-                    <Ionicons name="time-outline" size={12} color={COLORS.muted} style={{ marginRight: 3 }} />
-                    <Text style={s.priceTxt}>{minTxt}</Text>
+                    {minTxt ? (
+                      <>
+                        <Text style={s.dot}>·</Text>
+                        <Ionicons name="time-outline" size={12} color={COLORS.muted} style={{ marginRight: 3 }} />
+                        <Text style={s.priceTxt}>{minTxt}</Text>
+                      </>
+                    ) : null}
                     <View style={{ flex: 1 }} />
                     <Ionicons name="arrow-forward" size={18} color={COLORS.purpleDark} />
                   </View>
@@ -153,7 +159,7 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
               <Text style={s.detailPrice}>{money(selected?.list_price || 0, lang)}</Text>
               <Text style={s.detailDot}>·</Text>
               <Ionicons name="time-outline" size={15} color={COLORS.muted} style={{ marginRight: 4 }} />
-              <Text style={s.detailMin}>{selected?.spa_duration || 60} min</Text>
+              <Text style={s.detailMin}>{selected?.duration_min || 0} min</Text>
             </View>
             <View style={s.detailRule} />
             <ScrollView style={{ maxHeight: 260 }} contentContainerStyle={{ paddingBottom: 6 }}>
