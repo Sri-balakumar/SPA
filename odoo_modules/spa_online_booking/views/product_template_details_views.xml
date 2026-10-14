@@ -14,6 +14,7 @@
                     <group>
                         <group>
                             <field name="spa_session_count"/>
+                            <field name="spa_duration"/>
                         </group>
                     </group>
 
