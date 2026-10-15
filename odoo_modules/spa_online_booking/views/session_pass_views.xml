@@ -69,6 +69,10 @@
                             <field name="use_ids" readonly="1">
                                 <list>
                                     <field name="date"/>
+                                    <!-- Two different people: spa_therapist_id
+                                         gave the session, user_id was logged
+                                         in when it was counted (reception). -->
+                                    <field name="spa_therapist_id"/>
                                     <field name="user_id"/>
                                     <field name="note"/>
                                 </list>

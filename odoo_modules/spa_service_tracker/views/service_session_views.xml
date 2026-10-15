@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- LIST: every session, newest first. Read-only — the underlying model is
+         a SQL view, so there is nothing here to edit. -->
+    <record id="view_spa_service_session_list" model="ir.ui.view">
+        <field name="name">spa.service.session.list</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <list string="Sessions" create="false" edit="false" delete="false"
+                  sample="1" decoration-muted="state == 'cancelled'"
+                  decoration-info="state == 'scheduled'">
+                <field name="date"/>
+                <field name="assignee_id" widget="many2one_avatar_user"/>
+                <field name="partner_id"/>
+                <field name="order_id" optional="show"/>
+                <field name="pass_id" string="Package" optional="hide"/>
+                <field name="therapy_id" optional="show"/>
+                <field name="product_tmpl_id"/>
+                <field name="source" optional="show"/>
+                <field name="channel" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'done'"
+                       decoration-info="state == 'scheduled'"
+                       decoration-warning="state == 'open'"
+                       decoration-danger="state == 'cancelled'"/>
+                <field name="session_count" sum="Sessions"/>
+                <field name="amount" sum="Value" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"
+                       optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- DETAIL: everything known about one session on a single screen —
+         customer, package, order, invoice and the appointment history — with
+         Print Invoice at the top. Read-only throughout: the model is a SQL
+         view, so there is nothing here that could be saved. -->
+    <record id="view_spa_service_session_form" model="ir.ui.view">
+        <field name="name">spa.service.session.form</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <form string="Session" create="false" edit="false" delete="false">
+                <header>
+                    <!-- Hidden rather than disabled when there is no invoice:
+                         a POS sale only creates one when Invoice was ticked at
+                         payment, so for many sessions there is genuinely
+                         nothing to print. action_print_invoice raises a clear
+                         message anyway, for any other route in. -->
+                    <button name="action_print_invoice" type="object"
+                            string="Print Invoice" class="btn-primary"
+                            icon="fa-file-pdf-o"
+                            invisible="not invoice_id"/>
+                    <button name="action_open_order" type="object"
+                            string="Open Order" class="btn-secondary"
+                            invisible="not order_id"/>
+                    <button name="action_open_package" type="object"
+                            string="Open Package" class="btn-secondary"
+                            invisible="not pass_id"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="scheduled,open,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="product_tmpl_id" readonly="1"/></h1>
+                        <h3><field name="date" readonly="1"/></h3>
+                    </div>
+                    <group>
+                        <group string="Session">
+                            <field name="assignee_id" widget="many2one_avatar_user"
+                                   readonly="1"/>
+                            <field name="therapy_id" readonly="1"/>
+                            <field name="source" readonly="1"/>
+                            <field name="channel" readonly="1"/>
+                            <field name="session_count" readonly="1"/>
+                            <field name="amount" readonly="1"/>
+                            <field name="company_id" readonly="1"
+                                   groups="base.group_multi_company"/>
+                        </group>
+                        <group string="Customer">
+                            <field name="partner_id" readonly="1"/>
+                            <field name="partner_customer_id" readonly="1"/>
+                            <field name="partner_phone" readonly="1"/>
+                            <field name="partner_whatsapp" readonly="1"/>
+                            <field name="partner_email" readonly="1"/>
+                            <field name="partner_dob" readonly="1"/>
+                            <field name="partner_gender" readonly="1"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Order &amp; Invoice">
+                            <field name="order_id" readonly="1"/>
+                            <field name="pos_reference" readonly="1"/>
+                            <field name="invoice_id" readonly="1"/>
+                            <field name="order_amount_total" readonly="1"/>
+                            <field name="order_amount_paid" readonly="1"/>
+                        </group>
+                        <group string="Package">
+                            <field name="pass_id" readonly="1"/>
+                            <field name="sessions_total" readonly="1"
+                                   invisible="not pass_id"/>
+                            <field name="sessions_used" readonly="1"
+                                   invisible="not pass_id"/>
+                            <field name="sessions_left" readonly="1"
+                                   invisible="not pass_id"/>
+                            <field name="pass_assignee_names" readonly="1"
+                                   invisible="not pass_id"/>
+                        </group>
+                    </group>
+                    <group string="Appointment">
+                        <field name="slot_datetime" readonly="1"/>
+                        <field name="rescheduled" readonly="1"/>
+                        <!-- Only when it was actually moved; on an order that
+                             never changed date this is empty and saying
+                             "Moved From: " with nothing after it reads as a
+                             missing value rather than an absent event. -->
+                        <field name="prev_slot_datetime" readonly="1"
+                               invisible="not prev_slot_datetime"/>
+                    </group>
+                    <notebook>
+                        <page string="Sessions Taken" name="uses"
+                              invisible="not pass_id">
+                            <field name="use_ids" readonly="1">
+                                <list create="false" delete="false">
+                                    <field name="date"/>
+                                    <field name="spa_therapist_id" string="Assignee"/>
+                                    <field name="user_id" string="Recorded By"/>
+                                    <field name="note"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Appointments" name="bookings"
+                              invisible="not pass_id">
+                            <field name="booking_ids" readonly="1">
+                                <list create="false" delete="false">
+                                    <field name="name"/>
+                                    <field name="slot_datetime"/>
+                                    <field name="spa_therapist_id" string="Assignee"/>
+                                    <field name="state"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Order Lines" name="lines"
+                              invisible="not order_id">
+                            <field name="line_ids" readonly="1">
+                                <list create="false" delete="false">
+                                    <field name="full_product_name" string="Service"/>
+                                    <field name="qty"/>
+                                    <field name="spa_therapist_id" string="Assignee"/>
+                                    <field name="price_subtotal_incl" string="Subtotal"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- PIVOT: the "which person did which service" grid. Assignee down the
+         side, therapy across the top, sessions in the cells — swap either
+         axis for Customer, Service, Day, Week or Month from the UI. -->
+    <record id="view_spa_service_session_pivot" model="ir.ui.view">
+        <field name="name">spa.service.session.pivot</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <pivot string="Sessions by Assignee" sample="1">
+                <field name="assignee_id" type="row"/>
+                <field name="therapy_id" type="col"/>
+                <field name="session_count" type="measure"/>
+                <field name="amount" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <!-- GRAPH: sessions per assignee at a glance. -->
+    <record id="view_spa_service_session_graph" model="ir.ui.view">
+        <field name="name">spa.service.session.graph</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <graph string="Sessions" type="bar" sample="1">
+                <field name="assignee_id"/>
+                <field name="session_count" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_spa_service_session_search" model="ir.ui.view">
+        <field name="name">spa.service.session.search</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <search string="Sessions">
+                <field name="assignee_id"/>
+                <field name="partner_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="therapy_id"/>
+                <field name="order_id"/>
+
+                <!-- "My sessions" for a therapist who has a login. -->
+                <filter name="f_mine" string="My Sessions"
+                        domain="[('assignee_id', '=', uid)]"/>
+                <separator/>
+                <filter name="f_done" string="Finished"
+                        domain="[('state', '=', 'done')]"/>
+                <filter name="f_scheduled" string="Scheduled"
+                        domain="[('state', '=', 'scheduled')]"/>
+                <filter name="f_cancelled" string="Cancelled"
+                        domain="[('state', '=', 'cancelled')]"/>
+                <separator/>
+                <!-- The gap this whole report is meant to close: sessions
+                     nobody has been put against. -->
+                <filter name="f_unassigned" string="Unassigned"
+                        domain="[('assignee_id', '=', False)]"/>
+                <separator/>
+                <!-- One dynamic date filter gives Today / this Month / this
+                     Quarter / this Year AND an arbitrary custom range with
+                     period-on-period comparison. No hand-built pickers. -->
+                <filter name="f_date" string="Date" date="date"/>
+
+                <!-- A bare <group>: in Odoo 19 the search RNG rejects both
+                     `expand` and a `separator` inside it, and the whole view
+                     is then refused at install with a bare "Invalid view". -->
+                <group>
+                    <filter name="g_assignee" string="Assignee"
+                            context="{'group_by': 'assignee_id'}"/>
+                    <filter name="g_customer" string="Customer"
+                            context="{'group_by': 'partner_id'}"/>
+                    <filter name="g_order" string="Order"
+                            context="{'group_by': 'order_id'}"/>
+                    <filter name="g_package" string="Package"
+                            context="{'group_by': 'pass_id'}"/>
+                    <filter name="g_therapy" string="Therapy"
+                            context="{'group_by': 'therapy_id'}"/>
+                    <filter name="g_service" string="Service"
+                            context="{'group_by': 'product_tmpl_id'}"/>
+                    <filter name="g_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="g_source" string="Type"
+                            context="{'group_by': 'source'}"/>
+                    <filter name="g_channel" string="Channel"
+                            context="{'group_by': 'channel'}"/>
+                    <filter name="g_day" string="Day"
+                            context="{'group_by': 'date:day'}"/>
+                    <filter name="g_week" string="Week"
+                            context="{'group_by': 'date:week'}"/>
+                    <filter name="g_month" string="Month"
+                            context="{'group_by': 'date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Opens on the PIVOT, grouped by assignee: the question the report
+         exists to answer is "who did how much", and a list of rows makes you
+         group it yourself before it says anything. -->
+    <record id="action_spa_service_session" model="ir.actions.act_window">
+        <field name="name">Service Tracker</field>
+        <field name="res_model">spa.service.session</field>
+        <field name="view_mode">pivot,graph,list,form</field>
+        <!-- Bound explicitly, like the Packages action. Nothing else defines a
+             view for spa.service.session today, but leaving it to Odoo's
+             priority-then-lowest-id lookup is exactly how the Packages list
+             ended up showing spa_online_booking's view instead of its own. -->
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'pivot', 'view_id': ref('view_spa_service_session_pivot')}),
+            (0, 0, {'view_mode': 'graph', 'view_id': ref('view_spa_service_session_graph')}),
+            (0, 0, {'view_mode': 'list',  'view_id': ref('view_spa_service_session_list')}),
+            (0, 0, {'view_mode': 'form',  'view_id': ref('view_spa_service_session_form')})]"/>
+        <field name="context">{'search_default_g_assignee': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No sessions yet</p>
+            <p>Every session shows up here once it is sold, redeemed off a
+               package, or booked — with the member of staff it was assigned
+               to. Group by Assignee, Customer, Service or Day, and filter to
+               any date range.</p>
+        </field>
+    </record>
+
+    <!-- A second entry straight to the day's work, because "what is on today
+         and who has it" is a different question from the monthly totals. -->
+    <record id="action_spa_service_session_today" model="ir.actions.act_window">
+        <field name="name">Today's Sessions</field>
+        <field name="res_model">spa.service.session</field>
+        <field name="view_mode">list,pivot,graph,form</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'list',  'view_id': ref('view_spa_service_session_list')}),
+            (0, 0, {'view_mode': 'pivot', 'view_id': ref('view_spa_service_session_pivot')}),
+            (0, 0, {'view_mode': 'graph', 'view_id': ref('view_spa_service_session_graph')}),
+            (0, 0, {'view_mode': 'form',  'view_id': ref('view_spa_service_session_form')})]"/>
+        <field name="context">{'search_default_f_date': 1,
+                               'search_default_g_assignee': 1}</field>
+    </record>
+
+    <menuitem id="menu_spa_service_tracker_root"
+              name="Service Tracker"
+              parent="point_of_sale.menu_point_root"
+              sequence="91"/>
+
+    <menuitem id="menu_spa_service_session"
+              name="Sessions by Assignee"
+              parent="menu_spa_service_tracker_root"
+              action="action_spa_service_session"
+              sequence="10"/>
+
+    <menuitem id="menu_spa_service_session_today"
+              name="Today's Sessions"
+              parent="menu_spa_service_tracker_root"
+              action="action_spa_service_session_today"
+              sequence="20"/>
+
+</odoo>

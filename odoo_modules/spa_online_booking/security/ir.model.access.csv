@@ -11,7 +11,11 @@ access_spa_session_pass_use_pos,spa.session.pass.use.pos,model_spa_session_pass_
 access_spa_service_signature_user,spa.service.signature.user,model_spa_service_signature,base.group_user,1,1,1,1
 access_spa_service_signature_pos,spa.service.signature.pos,model_spa_service_signature,point_of_sale.group_pos_user,1,1,1,0
 access_spa_question_copy_wizard,spa.question.copy.wizard,model_spa_question_copy_wizard,spa_kiosk.group_spa_manager,1,1,1,1
+access_spa_starter_cleanup,spa.starter.cleanup,model_spa_starter_cleanup,spa_kiosk.group_spa_manager,1,1,1,1
 access_spa_package_price_user,spa.package.price.user,model_spa_package_price,base.group_user,1,1,1,1
 access_spa_package_price_pos,spa.package.price.pos,model_spa_package_price,point_of_sale.group_pos_user,1,0,0,0
 access_spa_booking_member_user,spa.booking.member.user,model_spa_booking_member,base.group_user,1,1,1,1
 access_spa_booking_member_pos,spa.booking.member.pos,model_spa_booking_member,point_of_sale.group_pos_user,1,1,1,1
+access_spa_member_type_user,spa.member.type.user,model_spa_member_type,base.group_user,1,0,0,0
+access_spa_member_type_manager,spa.member.type.manager,model_spa_member_type,point_of_sale.group_pos_manager,1,1,1,1
+access_spa_member_type_pos,spa.member.type.pos,model_spa_member_type,point_of_sale.group_pos_user,1,0,0,0

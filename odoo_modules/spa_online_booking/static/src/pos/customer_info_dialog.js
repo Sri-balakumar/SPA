@@ -1,6 +1,7 @@
 import { Component, useState } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
 import { SpaSignDialog } from "@spa_online_booking/pos/spa_sign_dialog";
+import { ageFromDob } from "@spa_online_booking/pos/phone_country";
 import { sigDataUrl } from "@spa_online_booking/pos/spa_signature";
 
 // In-POS "Customer" lookup: search a customer by name / phone / WhatsApp and
@@ -93,7 +94,10 @@ export class CustomerInfoDialog extends Component {
                 this.orm.searchRead(
                     "spa.session.pass",
                     [["partner_id", "=", partnerId]],
-                    ["id", "name", "product_tmpl_id", "sessions_total", "sessions_used", "sessions_left", "state"],
+                    // spa_assignee_names is computed, not stored — searchRead
+                    // evaluates it per record, which is what we want: it spans
+                    // the pass's uses AND its scheduled bookings.
+                    ["id", "name", "product_tmpl_id", "sessions_total", "sessions_used", "sessions_left", "state", "spa_assignee_names"],
                     { order: "create_date desc" }
                 ),
                 this.orm.call("spa.session.pass", "pos_customer_singles", [partnerId]),
@@ -308,21 +312,14 @@ ${(r.answers || []).length ? `<h2>Questions &amp; Answers</h2>${r.answers.map((g
         setTimeout(() => frame.remove(), 2000);
     }
 
+    // Age in whole years from a "YYYY-MM-DD" date string. The counting lives in
+    // spa_validation.js, so the age here is the one the booking page and the
+    // Book Therapy screen show - this used to do its own `new Date(dob)`, which
+    // reads a bare date as UTC midnight and is a day out for anyone east of
+    // London in the early hours.
     fmtAge(dob) {
-        if (!dob) {
-            return "";
-        }
-        const d = new Date(dob);
-        if (isNaN(d.getTime())) {
-            return "";
-        }
-        const now = new Date();
-        let age = now.getFullYear() - d.getFullYear();
-        const m = now.getMonth() - d.getMonth();
-        if (m < 0 || (m === 0 && now.getDate() < d.getDate())) {
-            age--;
-        }
-        return age >= 0 && age < 130 ? String(age) : "";
+        const age = ageFromDob(dob);
+        return age === null || age < 0 ? "" : String(age);
     }
     capGender(g) {
         return g ? g.charAt(0).toUpperCase() + g.slice(1) : "";

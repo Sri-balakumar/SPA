@@ -86,6 +86,7 @@
                         <tr style="background:#f2f2f2; color:#555;">
                             <th style="text-align:left; padding:4px 8px; border-bottom:1px solid #ddd;">Product</th>
                             <th style="text-align:left; padding:4px 8px; border-bottom:1px solid #ddd;">Barcode</th>
+                            <th style="text-align:left; padding:4px 8px; border-bottom:1px solid #ddd;">Assignee</th>
                             <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Qty</th>
                             <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Unit Price</th>
                             <th style="text-align:right; padding:4px 8px; border-bottom:1px solid #ddd;">Subtotal</th>
@@ -94,6 +95,10 @@
                             <tr>
                                 <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0;"><t t-esc="p['name']"/></td>
                                 <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; color:#777;"><t t-esc="p['barcode']"/></td>
+                                <!-- get(), not ['assignee']: a report re-run
+                                     from a queued job built before this column
+                                     existed would raise on a missing key. -->
+                                <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0;"><t t-esc="p.get('assignee') or '-'"/></td>
                                 <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right;"><t t-esc="'%.3f' % p['qty']"/></td>
                                 <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right;"><t t-esc="'%.3f' % p['unit']"/></td>
                                 <td style="padding:4px 8px; border-bottom:1px solid #f0f0f0; text-align:right; font-weight:bold;"><t t-esc="'%.3f' % p['subtotal']"/></td>

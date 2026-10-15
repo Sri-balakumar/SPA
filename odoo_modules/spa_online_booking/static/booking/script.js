@@ -24,29 +24,24 @@
     slot: 4, review: 5,
   };
 
-  // The country codes the spa serves. Same list as the POS
-  // (static/src/pos/phone_country.js) - a number typed here and a number typed
-  // at the till have to come out in the same shape.
-  const COUNTRIES = [
-    { code: '+968', flag: '\u{1F1F4}\u{1F1F2}', name: 'Oman' },
-    { code: '+971', flag: '\u{1F1E6}\u{1F1EA}', name: 'United Arab Emirates' },
-    { code: '+966', flag: '\u{1F1F8}\u{1F1E6}', name: 'Saudi Arabia' },
-    { code: '+974', flag: '\u{1F1F6}\u{1F1E6}', name: 'Qatar' },
-    { code: '+973', flag: '\u{1F1E7}\u{1F1ED}', name: 'Bahrain' },
-    { code: '+965', flag: '\u{1F1F0}\u{1F1FC}', name: 'Kuwait' },
-    { code: '+91', flag: '\u{1F1EE}\u{1F1F3}', name: 'India' },
-    { code: '+44', flag: '\u{1F1EC}\u{1F1E7}', name: 'United Kingdom' },
-    { code: '+1', flag: '\u{1F1FA}\u{1F1F8}', name: 'United States' },
-  ];
-  const DEFAULT_DIAL_CODE = '+968';
+  // The country codes the spa serves, and the rules for what a valid number,
+  // email address and date of birth look like. Both come from
+  // static/booking/spa_validation.js, which the POS bundle loads too - a number
+  // typed here and a number typed at the till are judged by the same code, so
+  // there is no second list to keep in sync any more.
+  const V = window.SpaValidate;
+  const COUNTRIES = V.COUNTRIES;
+  const DEFAULT_DIAL_CODE = V.DEFAULT_DIAL_CODE;
 
   const state = {
     token: null,
     currency: { symbol: '', position: 'before' },
     therapies: [],
-    // Individual / Family tabs and the small print under the package list.
+    // Member type tabs and the small print under the package list.
     memberTypes: [],
-    memberType: 'individual',
+    // Set from the payload once it loads (renderMemberTabs); there is no
+    // base key to read before then.
+    memberType: null,
     packageNote: '',
     screen: 'grid',
     currentTherapyId: null,
@@ -85,6 +80,54 @@
 
   function showBanner(msg) { const b = $('#stateBanner'); b.textContent = msg; b.hidden = false; }
   function hideBanner() { $('#stateBanner').hidden = true; }
+
+  // ---------- per-field errors on the details screen ----------
+  // Which error paragraph and which input belong to each field. The banner at
+  // the top of the page still speaks, but it cannot say WHICH box is wrong -
+  // and on a form this long that is the whole problem.
+  const FIELD_ERR = {
+    whatsapp: { err: '#errWhatsapp', input: '#fieldWhatsapp', pc: true },
+    phone: { err: '#errPhone', input: '#fieldPhone', pc: true },
+    name: { err: '#errName', input: '#fieldName' },
+    dob: { err: '#errDob', input: '#fieldDob' },
+    gender: { err: '#errGender', input: '#fieldGender' },
+    email: { err: '#errEmail', input: '#fieldEmail' },
+  };
+
+  // Paint one field's message, or clear it when `code` is falsy. `code` is a
+  // key from spa_validation.js; it is translated here so Arabic works. dialCode
+  // fills the country name and digit count into the phone-length message.
+  function setFieldError(field, code, dialCode) {
+    const map = FIELD_ERR[field];
+    if (!map) { return; }
+    const box = $(map.err);
+    const input = $(map.input);
+    const text = code ? V.resolve(code, dialCode, I18N_MESSAGES()) : '';
+    if (box) { box.textContent = text; box.hidden = !text; }
+    if (input) { input.classList.toggle('is-bad', !!text); }
+    // The phone fields draw their border on the .pc wrapper, not the input.
+    if (map.pc && input && input.closest('.pc')) {
+      input.closest('.pc').classList.toggle('is-bad', !!text);
+    }
+  }
+
+  function clearFieldErrors() {
+    Object.keys(FIELD_ERR).forEach((field) => setFieldError(field, null));
+  }
+
+  // The translated text for every validation code, in the language on screen.
+  // Built fresh each call because the language can be switched at any time.
+  function I18N_MESSAGES() {
+    const out = {};
+    Object.keys(V.MESSAGES).forEach((key) => {
+      // t() hands back the key itself when it has no string for it. Leaving
+      // that out means resolve() falls through to the English wording in
+      // spa_validation.js rather than printing "err_dob_future" at a customer.
+      const text = t(key);
+      if (text !== key) { out[key] = text; }
+    });
+    return out;
+  }
 
   async function api(path, opts = {}) {
     const res = await fetch(API + path, opts);
@@ -179,6 +222,9 @@
   // ---------- screen router ----------
   function showScreen(screen) {
     hideBanner();
+    // Person 2's form opens clean, and stepping back onto the details does not
+    // reopen with complaints about boxes that have since been filled in.
+    clearFieldErrors();
     state.screen = screen;
     $$('.screen').forEach(s => s.classList.toggle('is-active', s.dataset.screen === screen));
 
@@ -234,10 +280,23 @@
   }
 
   // ---------- the people on this booking ----------
-  // How many people the chosen family size covers. Mirrors spa_headcount() on
-  // the server, which re-checks - so a wrong number here is refused, not booked.
+  // The base (single-person) type's key, from the server - never the
+  // literal 'individual', which is a code the spa can change.
+  function baseMemberKey() {
+    var base = (state.memberTypes || []).find(function (m) { return m.is_individual; });
+    return base ? base.key : null;
+  }
+  function memberTypeInfo() {
+    return (state.memberTypes || []).find(function (m) {
+      return m.key === state.memberType;
+    });
+  }
+  // How many people the chosen type covers. From the server payload, NOT a
+  // map in here: the old {family_2: 2, ...} had to be kept in step with the
+  // POS copy and the Python one by hand. The server re-checks either way.
   function headcount() {
-    return { family_2: 2, family_3: 3, family_4: 4 }[state.memberType] || 1;
+    var info = memberTypeInfo();
+    return (info && info.headcount) || 1;
   }
   function isFamily() { return headcount() > 1; }
   function isLeadPerson() { return state.memberIndex === 0; }
@@ -387,6 +446,118 @@
     if (next) showScreen(next);
   }
 
+  // ---------- details validation ----------
+  // The fields this person has to get right, in the order they appear on the
+  // page - so "the first thing wrong" is also the topmost thing wrong. Only the
+  // lead gives numbers: they are the booking's contact, and demanding one from
+  // everybody would make it impossible to book for a child.
+  function detailFields() {
+    return isLeadPerson()
+      ? ['whatsapp', 'name', 'dob', 'gender', 'phone', 'email']
+      // Their plain phone box stays optional, but the email they DO give still
+      // has to be an address we can send anything to.
+      : ['name', 'dob', 'gender', 'email'];
+  }
+
+  function dialCodeFor(field) {
+    if (field === 'whatsapp') return state.dialCodes.fieldWhatsapp;
+    if (field === 'phone') return state.dialCodes.fieldPhone;
+    return null;
+  }
+
+  // What is wrong with one field right now, as a code from spa_validation.js,
+  // or null. Reads the inputs directly so it is equally usable on a keystroke
+  // and on Continue.
+  function detailFieldCode(field) {
+    switch (field) {
+      case 'whatsapp':
+        return V.phoneError(state.dialCodes.fieldWhatsapp, $('#fieldWhatsapp').value);
+      case 'phone':
+        // While the box is ticked this field is a mirror of the WhatsApp number
+        // and is not editable; complaining about it twice helps nobody.
+        if ($('#fieldSameNumber').checked) return null;
+        {
+          const code = V.phoneError(state.dialCodes.fieldPhone, $('#fieldPhone').value);
+          // An empty box here has its own wording: the fix is either to type a
+          // number or to tick the box, and the WhatsApp message says neither.
+          return code === 'err_phone_required' ? 'err_alt_number_required' : code;
+        }
+      case 'name':
+        return $('#fieldName').value.trim() ? null : 'err_name_required';
+      case 'dob':
+        return V.dobError($('#fieldDob').value);
+      case 'gender':
+        return $('#fieldGender').value ? null : 'err_gender_required';
+      case 'email':
+        // Optional - blank passes. Anything typed has to be a real address, or
+        // the customer silently loses their confirmation mail.
+        return V.emailError($('#fieldEmail').value);
+      default:
+        return null;
+    }
+  }
+
+  // What is currently in a field, for deciding whether it is worth validating
+  // at all (see fillFrom - a blank box on a freshly loaded contact is not an
+  // error yet).
+  function detailFieldValue(field) {
+    const map = FIELD_ERR[field];
+    const el = map && $(map.input);
+    return el ? el.value.trim() : '';
+  }
+
+  // Re-check one field and repaint its message. Returns the code so validate()
+  // can report the first failure without checking twice.
+  function checkDetailField(field) {
+    const code = detailFieldCode(field);
+    setFieldError(field, code, dialCodeFor(field));
+    // The banner only ever shows the CURRENT topmost problem; leaving the old
+    // one up there contradicts the field that has just gone green.
+    if (state.screen === 'details' && !$('#stateBanner').hidden) {
+      const still = detailFields().find(f => !$(FIELD_ERR[f].err).hidden);
+      if (still) showBanner($(FIELD_ERR[still].err).textContent);
+      else hideBanner();
+    }
+    return code;
+  }
+
+  // Live checking, as the customer types. Bound once at start-up.
+  // The country pickers re-dispatch an `input` event on their field after a
+  // country change (see bindCountryPicker), so switching +968 to +91 re-checks
+  // the length here for free.
+  function bindDetailValidation() {
+    const live = {
+      fieldWhatsapp: ['whatsapp', 'input'],
+      fieldPhone: ['phone', 'input'],
+      fieldName: ['name', 'input'],
+      fieldEmail: ['email', 'input'],
+      fieldDob: ['dob', 'change'],
+      fieldGender: ['gender', 'change'],
+    };
+    Object.keys(live).forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const [field, event] = live[id];
+      el.addEventListener(event, () => checkDetailField(field));
+      // `change` alone misses a date typed rather than picked, and `input`
+      // alone misses nothing - so date fields listen for both.
+      if (event === 'change') el.addEventListener('input', () => checkDetailField(field));
+    });
+    // Ticking the box makes the mobile field a mirror; untick and it is its own
+    // number again. Either way both messages have to be re-derived.
+    const same = document.getElementById('fieldSameNumber');
+    if (same) {
+      same.addEventListener('change', () => {
+        checkDetailField('phone');
+        checkDetailField('whatsapp');
+      });
+    }
+    // The future cannot be picked at all, only typed - and dobError catches
+    // that. Set from the browser's own date, so it is right in every timezone.
+    const dob = document.getElementById('fieldDob');
+    if (dob) dob.setAttribute('max', V.todayIso());
+  }
+
   function validate(screen) {
     state.validationError = null;
     if (screen === 'therapy') return !!state.selectedPackageId;
@@ -418,17 +589,26 @@
       state.dob = $('#fieldDob').value;
       state.gender = $('#fieldGender').value;
       state.email = $('#fieldEmail').value.trim();
-      if (!state.name) return false;
-      // Only the lead gives a number: they are the booking's contact. Demanding
-      // one from everybody would make it impossible to book for a child.
-      if (!isLeadPerson()) return true;
-      // Country code + what was typed. Composing it here is what stops a bare
-      // number reaching the API, which refuses it as missing_country_code.
-      state.phone = fullNumber('fieldPhone');
-      state.whatsapp = fullNumber('fieldWhatsapp');
-      if (!state.phone || !state.whatsapp) return false;
-      const err = phoneError(state.whatsapp) || phoneError(state.phone);
-      if (err) { state.validationError = err; return false; }
+      if (isLeadPerson()) {
+        // Country code + what was typed. Composing it here is what stops a bare
+        // number reaching the API, which refuses it as missing_country_code.
+        state.phone = fullNumber('fieldPhone');
+        state.whatsapp = fullNumber('fieldWhatsapp');
+      }
+      // Every field is checked, not just the first failing one, so the customer
+      // sees everything they have to fix in one go instead of one per press.
+      let firstField = null;
+      let firstCode = null;
+      detailFields().forEach((field) => {
+        const code = checkDetailField(field);
+        if (code && !firstCode) { firstCode = code; firstField = field; }
+      });
+      if (firstCode) {
+        // The banner echoes the topmost problem; the field itself already
+        // carries its own copy of the message.
+        state.validationError = V.resolve(firstCode, dialCodeFor(firstField), I18N_MESSAGES());
+        return false;
+      }
       return true;
     }
     if (screen === 'slot') {
@@ -484,7 +664,7 @@
     // It used to only pick a price, so a stale value was harmless; it now
     // decides HOW MANY PEOPLE are entered, and a wrong count is refused by the
     // server after the customer has filled the whole form in.
-    state.memberType = 'individual';
+    state.memberType = baseMemberKey();
     state.members = [];
     state.memberIndex = 0;
     showScreen('therapy');
@@ -540,7 +720,7 @@
     bar.innerHTML = '';
     if (!show) {
       // One type only: show everything, whatever it is called.
-      state.memberType = types.length ? types[0].key : 'individual';
+      state.memberType = types.length ? types[0].key : baseMemberKey();
       return;
     }
     if (!types.some(m => m.key === state.memberType)) {
@@ -1010,6 +1190,9 @@
     $('#fieldGender').value = '';
     setAge('');
     state.partnerId = null;
+    // Those boxes are empty because WE emptied them, not because the customer
+    // left them blank - complaining about fields nobody has touched is noise.
+    ['name', 'dob', 'gender', 'email'].forEach(f => setFieldError(f, null));
     showSignatureOnFile(false);
   }
 
@@ -1019,6 +1202,13 @@
     $('#fieldDob').value = c.date_of_birth || '';
     $('#fieldGender').value = c.gender || '';
     setAge(c.date_of_birth || '');
+    // A contact saved before these rules existed can carry a nonsense date of
+    // birth. Flag what came back wrong, but stay quiet about what the contact
+    // simply does not have yet - Continue will ask for that.
+    ['name', 'dob', 'gender'].forEach((f) => {
+      setFieldError(f, null);
+      if (detailFieldValue(f)) checkDetailField(f);
+    });
     // Nothing about an earlier signature is fetched or reused: a signature is
     // consent to THIS service, so it is always drawn again on the questions
     // step, whoever the customer turns out to be.
@@ -1234,6 +1424,10 @@
     const c = COUNTRIES.find(x => x.code === code) || COUNTRIES[0];
     pc.querySelector('.pc__flag').textContent = c.flag;
     pc.querySelector('.pc__code').textContent = c.code;
+    // A real number from that country, so the shape being asked for is visible
+    // before anything is typed rather than only once it is wrong.
+    const input = document.getElementById(inputId);
+    if (input && c.example) input.placeholder = c.example;
   }
 
   function bindCountryPicker(inputId) {
@@ -1273,14 +1467,9 @@
   });
 
   ['fieldWhatsapp', 'fieldPhone'].forEach(bindCountryPicker);
-
-  function phoneError(value) {
-    const val = (value || '').trim();
-    if (!val.startsWith('+')) return 'err_phone_country_code';
-    const digits = val.replace(/\D/g, '');
-    if (digits.length < 8 || digits.length > 15) return 'err_phone_invalid';
-    return null;
-  }
+  // After the pickers exist, so the synthetic `input` event they fire on a
+  // country change lands on a listener that is already there.
+  bindDetailValidation();
 
   // ---------- submit ----------
   async function submitBooking() {
@@ -1322,7 +1511,7 @@
         service_ids: [state.selectedPackageId],
         // Which family size was chosen: the server prices the booking from it,
         // so sending the wrong one would charge the wrong amount.
-        member_type: state.memberType || 'individual',
+        member_type: state.memberType || baseMemberKey(),
         // Everyone the package covers, each with their own answers and their
         // own signature. The server checks the count against the family size.
         members: membersOut,
@@ -1342,7 +1531,16 @@
       let msgKey = 'err_submit_failed';
       const code = e.data && e.data.error;
       if (code === 'invalid_phone') {
-        msgKey = e.data.reason === 'missing_country_code' ? 'err_phone_country_code' : 'err_phone_invalid';
+        msgKey = { missing_country_code: 'err_phone_country_code',
+                   not_mobile: 'err_phone_not_mobile' }[e.data.reason] || 'err_phone_invalid';
+      } else if (code === 'invalid_email') {
+        msgKey = 'err_email_invalid';
+      } else if (code === 'invalid_dob') {
+        // The server checks the date too, and is the only one that sees a
+        // tablet or an API caller. Say what it actually objected to.
+        msgKey = e.data.reason === 'too_old' ? 'err_dob_too_old' : 'err_dob_future';
+      } else if (code === 'missing_fields') {
+        msgKey = 'err_incomplete_step';
       } else if (code === 'already_booked') {
         msgKey = 'err_already_booked';
       } else if (e.status === 410) {

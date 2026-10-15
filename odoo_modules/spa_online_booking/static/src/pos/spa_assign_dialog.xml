@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <t t-name="spa_online_booking.SpaAssignDialog">
+        <Dialog title="title">
+            <div class="spa-assign">
+                <p class="text-muted mb-2">
+                    Choose who performed each session. Leave a session blank to
+                    clear its assignee.
+                </p>
+                <table class="table table-sm align-middle mb-0">
+                    <tbody>
+                        <tr t-foreach="props.rows" t-as="row" t-key="row.line_id">
+                            <td class="fw-bold" style="width: 45%;">
+                                <t t-esc="row.product"/>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-lg"
+                                        t-on-change="(ev) => this.onPick(row.line_id, ev)">
+                                    <option value="">— Unassigned —</option>
+                                    <!-- The current pick is marked on the
+                                         OPTION, not with a `value` on the
+                                         select: an attribute does not move a
+                                         select's selection once it is live. -->
+                                    <option t-foreach="props.staff" t-as="user"
+                                            t-key="user.id"
+                                            t-att-value="user.id"
+                                            t-att-selected="state.chosen[row.line_id] === user.id ? 'selected' : false"
+                                            t-esc="user.name"/>
+                                </select>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <t t-set-slot="footer">
+                <button class="btn btn-primary btn-lg" t-on-click="() => this.confirm()">
+                    Save
+                </button>
+                <button class="btn btn-secondary btn-lg" t-on-click="() => this.props.close()">
+                    Cancel
+                </button>
+            </t>
+        </Dialog>
+    </t>
+
+</templates>

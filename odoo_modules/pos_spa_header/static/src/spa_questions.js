@@ -23,8 +23,26 @@ patch(PosStore.prototype, {
                 );
                 if (questions && questions.length) {
                     line._spaAsked = true;
+                    // The therapy's disclaimer, shown as a second step in the
+                    // same dialog once the questions are answered. Fetched in
+                    // its own call because get_pos_spa_questions returns a bare
+                    // list that every caller indexes as one. `{}` when the
+                    // therapy has none, and then no second step is shown.
+                    let disclaimer = {};
+                    try {
+                        disclaimer = await this.data.call(
+                            "product.template",
+                            "get_pos_spa_disclaimer",
+                            [tmplId]
+                        );
+                    } catch (e) {
+                        // An older backend without the method must not stop the
+                        // questions being asked.
+                        console.warn("Spa questions: no disclaimer available", e);
+                    }
                     const answers = await makeAwaitable(this.dialog, SpaQuestionsDialog, {
                         questions,
+                        disclaimer: disclaimer || {},
                     });
                     if (answers) {
                         line.setCustomerNote(answers);

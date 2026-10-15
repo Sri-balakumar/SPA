@@ -4,6 +4,7 @@ import { onMounted } from "@odoo/owl";
 import { makeAwaitable } from "@point_of_sale/app/utils/make_awaitable_dialog";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { SetSlotDialog } from "@spa_online_booking/pos/set_slot_dialog";
+import { SpaAssignDialog } from "@spa_online_booking/pos/spa_assign_dialog";
 
 const { DateTime } = luxon;
 
@@ -20,12 +21,40 @@ patch(TicketScreen.prototype, {
         this.state.spaDate = null; // 'YYYY-MM-DD' filter, or null = today
         // Sub-filter within a channel tab: pending | today | upcoming | completed
         this.state.spaSubFilter = "pending";
+        // Who performed each session, per order: { orderId: [ {line_id,
+        // product, user_id, user_name}, ... ] }. Fetched rather than loaded
+        // with the order, because res.users reaches the POS as the cashier
+        // ALONE - see the note on pos.order.line.spa_therapist_id.
+        this.state.spaAssignees = {};
+        // The staff the Assign pickers offer, and whether this user may assign
+        // at all (Spa Reception / administrator). Both come from one call.
+        this.state.spaStaff = [];
+        this.state.spaCanAssign = false;
+        // Mirrors the "Assignee mandatory" setting. Only when this is on does
+        // Session Done refuse an unassigned session.
+        this.state.spaAssignRequired = false;
+        // Assignee chosen inline on a pending prepaid session card, before
+        // "Session Done" counts it: { bookingId: userId|"" }.
+        this.state.spaSessionAssignee = {};
         // Fetch the day's paid orders so the "All" tab can show them next to
         // the active (unpaid) ones the POS already keeps in memory.
         onMounted(async () => {
+            await this.loadSpaStaff();
             await this.refreshSpaBookings();
             await this.loadDayOrders();
         });
+    },
+
+    // The assignable staff list + this user's right to assign. Once per visit
+    // to the screen: it changes about as often as the staff rota does, and the
+    // server re-checks the group on every write anyway.
+    async loadSpaStaff() {
+        // Shared with the payment gate and the Redeem dialog, so all three
+        // agree about the policy and only one round trip is made.
+        const info = await this.pos.spaLoadAssignStaff();
+        this.state.spaStaff = (info && info.staff) || [];
+        this.state.spaCanAssign = !!(info && info.can_assign);
+        this.state.spaAssignRequired = !!(info && info.required);
     },
 
     setSpaDate(value) {
@@ -48,7 +77,7 @@ patch(TicketScreen.prototype, {
     async loadDayOrders() {
         const d = this.state.spaDate
             ? DateTime.fromISO(this.state.spaDate)
-            : DateTime.now();
+            : this.spaZoned(DateTime.now());
         if (!d.isValid) {
             return;
         }
@@ -74,10 +103,186 @@ patch(TicketScreen.prototype, {
         } catch (e) {
             console.warn("Spa: failed to load the day's orders", e);
         }
+        await this.refreshSpaAssignees();
+    },
+
+    // Who performed each session, for every synced order the register is
+    // holding. `loadDayOrders` has already narrowed the server side to the
+    // selected day, so this is the day's orders plus whatever is open at the
+    // till - a handful of rows, not the whole history.
+    async refreshSpaAssignees() {
+        // getAll(), not a spread: pos.models[...] is a Model instance and has
+        // no Symbol.iterator - `for...of` over it throws.
+        const ids = this.pos.models["pos.order"]
+            .getAll()
+            .filter((o) => o.id > 0)
+            .map((o) => o.id);
+        if (!ids.length) {
+            this.state.spaAssignees = {};
+            return;
+        }
+        try {
+            this.state.spaAssignees = await this.pos.data.call(
+                "pos.order", "spa_assignees", [ids]
+            );
+        } catch (e) {
+            console.warn("Spa: failed to load session assignees", e);
+        }
+    },
+
+    // The rows for one order's card, or [] while they are still loading.
+    // A saved order is answered by the server (state.spaAssignees); an ONGOING
+    // one has no server id, so its rows are built from the lines in memory and
+    // whatever has been parked on it for the sync.
+    spaOrderAssignees(o) {
+        if (!o) {
+            return [];
+        }
+        if (o.id > 0) {
+            return this.state.spaAssignees[o.id] || [];
+        }
+        return this.spaLocalAssigneeRows(o);
+    },
+
+    // What the POS has parked for an unsaved order: { lineUuid: userId }.
+    spaParkedAssignees(o) {
+        try {
+            return JSON.parse(o.spa_assignees_json || "{}") || {};
+        } catch {
+            return {};
+        }
+    },
+
+    // Same row shape the server returns, built client-side. `line_id` carries
+    // the line UUID rather than an id — that is what the carrier is keyed on,
+    // and pos.order._spa_store_assignees_payload matches it back on sync.
+    spaLocalAssigneeRows(o) {
+        const parked = this.spaParkedAssignees(o);
+        return (o.lines || []).map((line) => {
+            const userId = parked[line.uuid] || false;
+            const user = userId
+                ? this.state.spaStaff.find((u) => u.id === userId)
+                : null;
+            return {
+                line_id: line.uuid,
+                product:
+                    line.getFullProductName?.() || line.full_product_name || "",
+                user_id: userId,
+                user_name: user ? user.name : "",
+            };
+        });
+    },
+
+    // One line for the card: "Aisha — GO Ease, Rana — Heat Pack", or the names
+    // alone when there is only one session on the order.
+    spaAssigneeLabel(o) {
+        const rows = this.spaOrderAssignees(o);
+        if (!rows.length) {
+            return "";
+        }
+        const named = rows.filter((r) => r.user_name);
+        if (!named.length) {
+            return "Unassigned";
+        }
+        if (rows.length === 1) {
+            return named[0].user_name;
+        }
+        const parts = named.map((r) => `${r.user_name} — ${r.product}`);
+        const missing = rows.length - named.length;
+        if (missing) {
+            parts.push(`${missing} unassigned`);
+        }
+        return parts.join(", ");
+    },
+
+    // Muted grey normally, amber while nobody has been put against the order,
+    // so an unassigned visit is visible without blocking anything.
+    spaAssigneeClass(o) {
+        const rows = this.spaOrderAssignees(o);
+        return rows.length && !rows.some((r) => r.user_name)
+            ? "sg-meta--unassigned"
+            : "";
+    },
+
+    // "Assign" on an order card: one picker per session, saved in one write.
+    async spaAssignOrder(o) {
+        const rows = this.spaOrderAssignees(o);
+        if (!rows.length) {
+            this.env.services.notification.add(
+                "This order has no sessions to assign.",
+                { type: "warning" }
+            );
+            return;
+        }
+        const payload = await makeAwaitable(this.dialog, SpaAssignDialog, {
+            rows,
+            staff: this.state.spaStaff,
+            title: `Assign Sessions — ${o.pos_reference || ""}`,
+        });
+        if (!payload) {
+            return;
+        }
+        // An ongoing order has no server record to write to. Park the pick on
+        // the order instead; pos.order._process_order applies it the moment
+        // the order syncs, matching lines on the UUIDs used as keys here.
+        if (!(o.id > 0)) {
+            const parked = { ...this.spaParkedAssignees(o), ...payload };
+            for (const key of Object.keys(parked)) {
+                if (!parked[key]) {
+                    delete parked[key];
+                }
+            }
+            o.spa_assignees_json = JSON.stringify(parked);
+            return;
+        }
+        try {
+            const updated = await this.pos.data.call(
+                "pos.order", "spa_set_assignees", [[o.id], payload]
+            );
+            this.state.spaAssignees = {
+                ...this.state.spaAssignees,
+                [o.id]: updated,
+            };
+        } catch (e) {
+            console.warn("Spa: failed to save the assignees", e);
+            this.env.services.notification.add(
+                "Could not save the assignees. Only Spa Reception and the " +
+                    "administrator can assign a session.",
+                { type: "danger" }
+            );
+        }
+    },
+
+    // ---- the clock these cards print on ---------------------------------
+    //
+    // The COMPANY's, taken from its country and shipped with the company record
+    // (res_company.spa_display_tz). Left to itself luxon uses the BROWSER's OS
+    // timezone, so a till opened from India showed an Oman order 1h30 late -
+    // and disagreed with the server-rendered dates in Customer Details, which
+    // are on this same clock now.
+    //
+    // Empty when the POS loaded before this field existed: IndexedDB keeps the
+    // old copy of the company and Ctrl+F5 does not clear it. Everything then
+    // falls back to the browser zone, i.e. exactly the old behaviour.
+    spaTz() {
+        return this.pos.config?.company_id?.spa_display_tz || "";
+    },
+    // A luxon DateTime moved onto that clock, or left alone when there is none.
+    spaZoned(dt) {
+        const tz = this.spaTz();
+        if (!dt || !tz) {
+            return dt;
+        }
+        const zoned = dt.setZone(tz);
+        return zoned.isValid ? zoned : dt;
+    },
+    // "Now" on the company's clock, as YYYY-MM-DD.
+    spaToday() {
+        return this.spaZoned(DateTime.now()).toFormat("yyyy-MM-dd");
     },
 
     _spaDay() {
-        return this.state.spaDate || DateTime.now().toFormat("yyyy-MM-dd");
+        return this.state.spaDate || this.spaToday();
     },
 
     // The day an order is filed under by the date filter: its APPOINTMENT when
@@ -96,7 +301,7 @@ patch(TicketScreen.prototype, {
         if (slot) {
             return String(slot).slice(0, 10);
         }
-        return o.date_order ? o.date_order.toFormat("yyyy-MM-dd") : "";
+        return o.date_order ? this.spaZoned(o.date_order).toFormat("yyyy-MM-dd") : "";
     },
 
     _orderBookingIds() {
@@ -219,10 +424,10 @@ patch(TicketScreen.prototype, {
 
     // ---- branded order/booking card helpers ----
     spaOrderDate(o) {
-        return o.date_order ? o.date_order.toFormat("dd LLL yyyy") : "";
+        return o.date_order ? this.spaZoned(o.date_order).toFormat("dd LLL yyyy") : "";
     },
     spaOrderTime(o) {
-        return o.date_order ? o.date_order.toFormat("h:mm a") : "";
+        return o.date_order ? this.spaZoned(o.date_order).toFormat("h:mm a") : "";
     },
 
     // The appointment, shown ALONGSIDE the order date rather than replacing it:
@@ -321,15 +526,12 @@ patch(TicketScreen.prototype, {
     // browser (constructFullProductName), so the suffix is gone by the time
     // this card renders. The field survives.
     spaOrderMemberType(o) {
-        const labels = {
-            family_2: "Family 2",
-            family_3: "Family 3",
-            family_4: "Family 4",
-        };
         for (const line of o.getOrderlines()) {
-            const label = labels[line.spa_member_type];
-            if (label) {
-                return label;
+            // spa.member.type is loaded into the POS session, so the record is
+            // right here - no labels map to keep in step with the backend.
+            const type = line.spa_member_type;
+            if (type && !type.is_individual) {
+                return type.name || "";
             }
         }
         return "";
@@ -443,7 +645,7 @@ patch(TicketScreen.prototype, {
     // Group a channel's bookings by status for the Online/Web/Tab sub-filters.
     // "today"/"upcoming" are by appointment date; "completed" holds paid ones.
     spaGroups() {
-        const today = DateTime.now().toFormat("yyyy-MM-dd");
+        const today = this.spaToday();
         // When a specific date is picked in the filter, scope EVERY section to
         // that day, so the list shows the chosen date's bookings instead of the
         // current day's. The today/upcoming split is then relative to the
@@ -513,6 +715,31 @@ patch(TicketScreen.prototype, {
     },
 
     async refreshSpaBookings() {
+        await this._loadSpaBookings();
+        this._seedSpaSessionAssignees();
+    },
+
+    // Preselect each card's picker with the assignee already on the booking,
+    // so re-rendering the list does not make a saved choice look unset. Only
+    // untouched cards are seeded: a pick made but not yet submitted (reception
+    // choosing, then reading the notes before pressing Approve) must survive
+    // the periodic refresh.
+    _seedSpaSessionAssignees() {
+        for (const b of this.state.spaBookings || []) {
+            if (!(b.id in this.state.spaSessionAssignee)) {
+                this.state.spaSessionAssignee[b.id] = b.assignee_id || 0;
+            }
+        }
+        for (const b of (this.state.spaSessions && this.state.spaSessions.pending) || []) {
+            if (!(b.id in this.state.spaSessionAssignee)) {
+                this.state.spaSessionAssignee[b.id] = b.assignee_id || 0;
+            }
+        }
+    },
+
+    // Everything up to the seeding above. Split out because the fetch has
+    // several early returns, and each one has to be followed by the seeding.
+    async _loadSpaBookings() {
         try {
             if (this.state.spaType === "sessions") {
                 this.state.spaSessions = await this.pos.data.call(
@@ -615,7 +842,7 @@ patch(TicketScreen.prototype, {
         const term = (this.state.search.searchTerm || "").toLowerCase();
         const day =
             this.state.spaDate ||
-            (term ? null : DateTime.now().toFormat("yyyy-MM-dd"));
+            (term ? null : this.spaToday());
         const dayOK = (o) => {
             // An in-progress (ongoing/paused) order may have neither an
             // appointment nor a date_order stamped yet — treat it as today's,
@@ -689,7 +916,9 @@ patch(TicketScreen.prototype, {
         // day it was rung up - a sensible starting point either way.
         const current =
             (order.raw && order.raw.spa_slot_datetime) ||
-            (order.date_order ? order.date_order.toFormat("yyyy-LL-dd HH:mm:ss") : "");
+            (order.date_order
+                ? this.spaZoned(order.date_order).toFormat("yyyy-LL-dd HH:mm:ss")
+                : "");
         const value = await makeAwaitable(this.dialog, SetSlotDialog, {
             current,
             note: "",
@@ -723,18 +952,45 @@ patch(TicketScreen.prototype, {
         await this.loadDayOrders();
     },
 
-    // Cancel the appointment outright: not coming, or the date was a mistake.
-    // The way back from any wrong date - reschedule to move it, remove to drop
-    // it altogether.
+    // The date this order's appointment had before the last reschedule, as the
+    // raw "YYYY-MM-DD HH:MM:SS" string, or "". Read from `raw` for the same
+    // reason spaOrderDay() does: the server stores naive local wall clock in
+    // that column, so the luxon-converted getter would shift an evening
+    // appointment by a day.
+    spaPrevSlot(order) {
+        return (order.raw && order.raw.spa_prev_slot_datetime) || "";
+    },
+
+    // Whether this button steps the appointment back or cancels it outright.
+    spaCanUndo(order) {
+        return Boolean(this.spaPrevSlot(order));
+    },
+
+    spaRemoveLabel(order) {
+        return this.spaCanUndo(order) ? "Undo" : "Remove";
+    },
+
+    spaRemoveTitle(order) {
+        return this.spaCanUndo(order)
+            ? `Put this appointment back to ${this.spaPrevSlot(order).slice(0, 16)}`
+            : "Cancel this appointment and free the time slot";
+    },
+
+    // One button, two jobs, chosen by whether there is a date to go back to.
+    // Reschedule moved it; this steps it back, or drops it when there is nowhere
+    // to step to. The server decides - this only asks the right question first.
     async spaRemoveAppointment(order) {
-        // Confirmed first: rescheduling is reversible, this cancels a booking.
+        const prev = this.spaPrevSlot(order).slice(0, 16);
         const confirmed = await makeAwaitable(this.dialog, ConfirmationDialog, {
-            title: "Remove appointment?",
-            body:
-                "This cancels the booking and frees its time slot. " +
-                "Anyone on the waiting list for that time will be given it. " +
-                "The payment on this order is not affected.",
-            confirmLabel: "Remove",
+            title: prev ? "Move appointment back?" : "Remove appointment?",
+            body: prev
+                ? `This puts the appointment back to ${prev}. The time it is ` +
+                  "on now is freed for the waiting list. The payment on this " +
+                  "order is not affected."
+                : "This cancels the booking and frees its time slot. " +
+                  "Anyone on the waiting list for that time will be given it. " +
+                  "The payment on this order is not affected.",
+            confirmLabel: prev ? "Move back" : "Remove",
         });
         if (!confirmed) {
             return;
@@ -747,15 +1003,26 @@ patch(TicketScreen.prototype, {
                 this.env.services.notification.add(res.error, { type: "danger" });
                 return;
             }
-            this.env.services.notification.add(
-                res && res.was
-                    ? `Appointment removed (was ${res.was}). The slot is free again.`
-                    : "Appointment removed.",
-                { type: "success" }
-            );
+            if (res && res.undone) {
+                // Same warning the forward path gives: going back can land on a
+                // slot the waiting list has since been given.
+                this.env.services.notification.add(
+                    res.target_taken
+                        ? `Appointment moved back to ${res.slot}. Note: that time already has an appointment.`
+                        : `Appointment moved back to ${res.slot}.`,
+                    { type: res.target_taken ? "warning" : "success" }
+                );
+            } else {
+                this.env.services.notification.add(
+                    res && res.was
+                        ? `Appointment removed (was ${res.was}). The slot is free again.`
+                        : "Appointment removed.",
+                    { type: "success" }
+                );
+            }
         } catch (e) {
             console.error("Spa: remove appointment failed", e);
-            this.env.services.notification.add("Could not remove the appointment.", {
+            this.env.services.notification.add("Could not update the appointment.", {
                 type: "danger",
             });
             return;
@@ -764,16 +1031,48 @@ patch(TicketScreen.prototype, {
         await this.loadDayOrders();
     },
 
+    // Who this booking is down to, as an id — the pick reception has just made
+    // if there is one, otherwise whatever is already saved on the booking
+    // (set at Approve, or by the Redeem dialog). Falling back to the saved
+    // value matters for a cashier: they cannot assign, so their picker is
+    // never rendered, and without this "Session Done" would look permanently
+    // disabled to them even on a session reception had already assigned.
+    spaSessionAssignee(b) {
+        return this.state.spaSessionAssignee[b.id] || b.assignee_id || 0;
+    },
+
+    // Inline picker on a pending prepaid session card. Stored as a NUMBER, so
+    // the template can mark the chosen option with `=== user.id` - OWL has no
+    // `String` in its template scope to convert the other way.
+    setSpaSessionAssignee(bookingId, ev) {
+        this.state.spaSessionAssignee[bookingId] = parseInt(ev.target.value, 10) || 0;
+    },
+
     // Approve / Reject / Mark Completed / Mark Paid — same transitions as the
     // back-office form. Refreshes the list so the row's status/buttons update.
     async spaBookingAction(bookingId, action) {
+        // The picked assignee rides along on EVERY transition, not just
+        // session_done: Approve is where reception decides who is taking the
+        // customer, and the server records it on the booking either way.
+        // Blank is allowed - assigning never blocks a transition.
+        const assigneeId = this.state.spaSessionAssignee[bookingId] || false;
         try {
-            await this.pos.data.call("spa.booking", "pos_booking_action", [[bookingId], action]);
+            await this.pos.data.call("spa.booking", "pos_booking_action", [
+                [bookingId],
+                action,
+                assigneeId,
+            ]);
         } catch (e) {
             console.warn("Spa booking action failed", e);
-            this.env.services.notification.add("Could not update the booking.", {
-                type: "danger",
-            });
+            // Show the server's own words when it has any. The unassigned
+            // "Session Done" refusal explains WHY it is refused, and replacing
+            // that with "Could not update the booking" would leave reception
+            // pressing a button that silently does nothing.
+            const detail = (e && e.data && e.data.message) || (e && e.message) || "";
+            this.env.services.notification.add(
+                detail || "Could not update the booking.",
+                { type: "danger" }
+            );
             return;
         }
         await this.refreshSpaBookings();

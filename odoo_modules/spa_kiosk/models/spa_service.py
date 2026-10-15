@@ -1,5 +1,7 @@
 import re
 
+from markupsafe import Markup
+
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
@@ -103,6 +105,75 @@ class PosCategoryHeadingStyle(models.Model):
                 raise ValidationError(
                     'Pick the heading colour with the colour picker - "%s" is '
                     'not a colour like #16A34A.' % category.spa_heading_color)
+
+    # ---- disclaimer -----------------------------------------------------
+    # Its own page, shown after the questions wherever they are asked. The
+    # wording used to be one hard-coded sentence (`terms_agree` in the booking
+    # page's i18n.js), identical for every therapy and only changeable by
+    # editing source. It is a per-therapy field now, so the wording that a
+    # customer consents to is set by whoever owns the therapy.
+    # A switch rather than "empty the field to hide it": a waiver is long and
+    # hard-won, and clearing it to stop it showing means retyping it to bring it
+    # back. On by default, so a therapy that already has one keeps showing it.
+    spa_disclaimer_active = fields.Boolean(
+        string='Show Disclaimer Page', default=True,
+        help="Turn this off to hide the disclaimer page without losing the "
+             "wording. The customer is then not asked to accept terms or sign "
+             "for this therapy either.")
+    spa_disclaimer_title = fields.Char(
+        string='Disclaimer Title', translate=True, default='Disclaimer',
+        help="Heading of the disclaimer page.")
+    # Rich text, edited with Odoo's own editor - a waiver needs a bold clause
+    # heading beside plain body text and the odd emphasised sentence, which one
+    # colour + three tick boxes covering the whole block could never express.
+    # `sanitize=True` is what makes it safe to render as markup downstream; it
+    # strips scripts on write, exactly as spa_description above relies on.
+    spa_disclaimer = fields.Html(
+        string='Disclaimer', translate=True, sanitize=True,
+        help="Shown on its own page after the questions. Format it with the "
+             "toolbar. Leave it empty and no disclaimer page is shown for this "
+             "therapy at all.")
+
+    @api.model
+    def _spa_html_is_blank(self, html):
+        """True when this HTML carries no words and no picture.
+
+        An editor that has merely been clicked into stores `<p><br></p>`, which
+        is not blank to `strip()`. Without this the therapy would grow a
+        disclaimer page holding nothing.
+        """
+        if not html:
+            return True
+        text = re.sub(r'<(img|table|hr)\b', 'x', html or '', flags=re.I)
+        text = re.sub(r'<[^>]*>', '', text)
+        text = text.replace('&nbsp;', ' ').replace('\xa0', ' ')
+        return not text.strip()
+
+    def _spa_disclaimer_payload(self):
+        """`{title, body}` for the screens, or `{}` when there is none.
+
+        `body` is sanitized HTML - consumers render it as markup. There is no
+        `style` any more: the look is inside the HTML, set with the editor.
+
+        THE one gate: the POS dialog, both Book Therapy screens, the booking
+        website and the kiosk all ask here and all read `{}` as "no disclaimer
+        page". So the switch below turns the page off everywhere at once.
+        """
+        if not self:
+            return {}
+        self.ensure_one()
+        if not self.spa_disclaimer_active:
+            return {}
+        body = self.spa_disclaimer or ''
+        if self._spa_html_is_blank(body):
+            return {}
+        return {
+            'title': self.spa_disclaimer_title or 'Disclaimer',
+            # Markup so the kiosk's QWeb `t-out` renders it instead of escaping
+            # it to visible <p> tags. It subclasses str, so the JSON controllers
+            # serialise it exactly as before.
+            'body': Markup(body),
+        }
 
 
 class SpaQuestion(models.Model):

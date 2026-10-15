@@ -131,18 +131,30 @@
                     <div class="tp-form">
                         <label class="tp-field">
                             <span>Full name *</span>
-                            <input type="text" class="form-control form-control-lg" t-model="state.custName"/>
+                            <input type="text"
+                                   t-att-class="state.fieldErrors.name ? 'form-control form-control-lg tp-bad' : 'form-control form-control-lg'"
+                                   t-model="state.custName" t-on-input="() => this.checkField('name')"/>
+                            <p t-if="state.fieldErrors.name" class="tp-err"><t t-esc="state.fieldErrors.name"/></p>
                         </label>
-                        <label class="tp-field">
+                        <!-- Both numbers are optional, so neither carries an
+                             asterisk - but one that IS typed has to be a number
+                             we could actually message. -->
+                        <div class="tp-field">
                             <span>WhatsApp number</span>
-                            <input type="tel" class="form-control form-control-lg"
-                                   placeholder="+968 9XXXXXXX" t-model="state.custWhatsapp"/>
-                        </label>
-                        <label class="tp-field">
+                            <PhoneField dialCode="state.custWaDialCode" value="state.custWhatsapp"
+                                        error="state.fieldErrors.whatsapp or ''"
+                                        onDialCode="(code) => this.setDialCode('whatsapp', code)"
+                                        onInput="(value) => this.setNumber('whatsapp', value)"/>
+                            <p t-if="state.fieldErrors.whatsapp" class="tp-err"><t t-esc="state.fieldErrors.whatsapp"/></p>
+                        </div>
+                        <div class="tp-field">
                             <span>Mobile number</span>
-                            <input type="tel" class="form-control form-control-lg"
-                                   placeholder="+968 9XXXXXXX" t-model="state.custMobile"/>
-                        </label>
+                            <PhoneField dialCode="state.custDialCode" value="state.custMobile"
+                                        error="state.fieldErrors.mobile or ''"
+                                        onDialCode="(code) => this.setDialCode('mobile', code)"
+                                        onInput="(value) => this.setNumber('mobile', value)"/>
+                            <p t-if="state.fieldErrors.mobile" class="tp-err"><t t-esc="state.fieldErrors.mobile"/></p>
+                        </div>
                     </div>
                 </t>
 
@@ -172,7 +184,7 @@
                         </div>
                         <div class="tp-ci-row">
                             <span class="text-muted">Contact Number</span>
-                            <b t-esc="state.custMobile || state.custWhatsapp || '—'"/>
+                            <b t-esc="contactNumber || '—'"/>
                         </div>
                     </div>
                 </t>

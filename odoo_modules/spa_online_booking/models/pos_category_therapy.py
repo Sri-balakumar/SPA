@@ -100,9 +100,29 @@ class PosCategory(models.Model):
     # keep an English brand name like "GO Ease"). Column becomes jsonb on upgrade.
     name = fields.Char(translate=True)
 
+    # Off by default. It used to be on, which meant every POS category ever
+    # created - stock, retail, anything - turned up as a bookable therapy on
+    # the public booking page, and nobody knew why. Being bookable is a
+    # deliberate act now.
+    @api.model
+    def _load_pos_data_fields(self, config):
+        """Let the register tell a therapy line from a bottle of water.
+
+        The payment screen refuses to validate an order whose SESSIONS have no
+        assignee, and `pos_categ_ids` is already loaded on product.template -
+        so this one flag is all the client needs to classify a line, with no
+        round trip and no guessing from the product name.
+
+        super() + append: pos.category's own implementation returns a plain
+        list of core fields, and replacing it would drop them.
+        """
+        return super()._load_pos_data_fields(config) + ['spa_is_therapy']
+
     spa_is_therapy = fields.Boolean(
-        string='Show as Therapy online', default=True,
-        help="Show this category as a therapy on the online booking page.")
+        string='Show as Therapy online', default=False,
+        help="Tick to offer this category as a therapy on the online booking "
+             "page. Off by default - a category is only bookable once somebody "
+             "says so.")
     spa_tagline = fields.Char(string='Tagline', translate=True)
     spa_description = fields.Html(
         string='Therapy Description', translate=True, sanitize=True)

@@ -1,9 +1,5 @@
 from odoo import _, fields, models
 
-# SPA_MEMBER_HEADCOUNT now lives beside SPA_MEMBER_TYPES in package_price.py -
-# the booking model and the public controllers need it too. Re-exported here so
-# anything already importing it from this module keeps working.
-from .package_price import SPA_MEMBER_HEADCOUNT, SPA_MEMBER_TYPES  # noqa: F401
 
 
 class AccountMoveLine(models.Model):
@@ -59,12 +55,21 @@ class AccountMoveLine(models.Model):
         if not tmpl:
             return []
         therapy = self._spa_therapy()
+        # Only from the linked POS line: the member type and the assignee are
+        # properties of the SALE, not of the product, so an invoice line with
+        # no link cannot know them and says nothing rather than guessing.
+        pos_line = self.pos_order_line_id
+        assignee = pos_line.spa_therapist_id if pos_line else self.env['res.users']
+
         # The therapy is the ONLY reliable marker of a spa line. Do not also
         # accept spa_duration: it is declared with default=60, so every product
         # in the database has one - a bottle of water would print
         # "Duration: 60 Minutes" and a "Package" row on the invoice.
         if not therapy:
-            return []
+            # An add-on filed under no therapy - a heat pack, say - is still a
+            # session somebody gave, so name them when reception has. Nothing
+            # else prints, and an ordinary invoice line grows no rows at all.
+            return [(_("Assignee"), assignee.name)] if assignee else []
 
         rows = []
         if therapy:
@@ -74,13 +79,11 @@ class AccountMoveLine(models.Model):
         package = self._spa_package_name()
         if package:
             rows.append((_("Package"), package))
+        if assignee:
+            rows.append((_("Assignee"), assignee.name))
 
-        # Only from the linked POS line: the member type is a property of the
-        # SALE, not of the product, so an invoice line with no link cannot know
-        # it and says nothing rather than guessing "Individual".
-        pos_line = self.pos_order_line_id
         if pos_line and pos_line.spa_member_type:
-            people = SPA_MEMBER_HEADCOUNT.get(pos_line.spa_member_type)
+            people = pos_line.spa_member_type.spa_headcount()
             if people:
                 rows.append((
                     _("Members Included"),

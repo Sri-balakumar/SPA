@@ -19,7 +19,7 @@
                     <span class="nq-ico nq-ico--title"><i class="fa fa-whatsapp"/></span>
                     <div>
                         <div class="nq-title">Send Booking Link</div>
-                        <div class="nq-sub">Sent on your own WhatsApp session to the customer's number.</div>
+                        <div class="nq-sub">Send it on your own WhatsApp session, by email, or both.</div>
                     </div>
                 </div>
                 <div class="nq-divider"><span class="nq-divider__mark"><i class="fa fa-child"/></span></div>
@@ -50,27 +50,33 @@
                     </div>
                 </div>
 
+                <!-- Two ways to reach the customer, neither required on its
+                     own. What IS required is one of them, so neither box
+                     carries an asterisk and the send button below renames
+                     itself after whatever has actually been filled in. -->
                 <div class="nq-field nq-field--stacked">
-                    <label class="nq-label-top">Mobile Number <span class="nq-req">*</span></label>
-                    <div class="sl-phone">
-                        <div class="sl-cc" t-on-click="() => state.ccOpen = !state.ccOpen">
-                            <span class="sl-flag" t-esc="selectedCountry.flag"/>
-                            <span t-esc="selectedCountry.code"/>
-                            <i class="fa fa-chevron-down sl-cc-chev"/>
-                        </div>
-                        <input type="tel" class="sl-number" placeholder="98765 43210"
-                               t-model="state.number"
-                               t-on-keyup="(ev) => ev.key === 'Enter' &amp;&amp; this.canSend ? this.send() : null"/>
-                        <div t-if="state.ccOpen" class="sl-cc-menu">
-                            <div t-foreach="countries" t-as="c" t-key="c.code"
-                                 class="sl-cc-opt" t-on-click="() => this.selectCountry(c.code)">
-                                <span class="sl-flag" t-esc="c.flag"/>
-                                <span t-esc="c.name"/>
-                                <span class="sl-cc-code" t-esc="c.code"/>
-                            </div>
-                        </div>
+                    <label class="nq-label-top">Mobile Number</label>
+                    <PhoneField dialCode="state.dialCode" value="state.number"
+                                error="state.fieldErrors.phone or ''"
+                                onDialCode.bind="selectCountry"
+                                onInput.bind="onNumberInput"
+                                onEnter.bind="sendOnEnter"/>
+                    <p t-if="state.fieldErrors.phone" class="tp-err"><t t-esc="state.fieldErrors.phone"/></p>
+                </div>
+
+                <div class="nq-field nq-field--stacked">
+                    <label class="nq-label-top">Email</label>
+                    <input type="email"
+                           t-att-class="state.fieldErrors.email ? 'nq-input tp-bad' : 'nq-input'"
+                           placeholder="name@example.com"
+                           t-model="state.email"
+                           t-on-input="() => this.checkField('email')"
+                           t-on-keyup="(ev) => ev.key === 'Enter' &amp;&amp; this.canSend ? this.send() : null"/>
+                    <p t-if="state.fieldErrors.email" class="tp-err"><t t-esc="state.fieldErrors.email"/></p>
+                    <div class="nq-help">
+                        Enter a mobile number, an email address, or both - whichever
+                        the customer gave you.
                     </div>
-                    <div class="nq-help">Include the country code, e.g. <t t-esc="selectedCountry.code"/>.</div>
                 </div>
 
                 <!-- The one permanent link. It is the same URL for every
@@ -87,18 +93,28 @@
                     </div>
                 </div>
 
-                <!-- Result, inline: no second screen to dismiss. -->
-                <p t-if="state.sent" class="nq-help text-success mt-2 sl-result">
-                    <i class="fa fa-check-circle me-1"/>Sent on WhatsApp to <t t-esc="state.sentTo"/>
+                <!-- Result, inline: no second screen to dismiss. One line per
+                     channel, because a link can go out on WhatsApp and fail by
+                     email in the same press. -->
+                <p t-if="state.waSent" class="nq-help text-success mt-2 sl-result">
+                    <i class="fa fa-check-circle me-1"/>Sent on WhatsApp to <t t-esc="state.waSentTo"/>
                 </p>
-                <p t-if="state.sendError" class="nq-help text-danger mt-2 sl-result" t-esc="state.sendError"/>
+                <p t-if="state.waError" class="nq-help text-danger mt-2 sl-result">
+                    <i class="fa fa-whatsapp me-1"/><t t-esc="state.waError"/>
+                </p>
+                <p t-if="state.mailSent" class="nq-help text-success mt-2 sl-result">
+                    <i class="fa fa-check-circle me-1"/>Emailed to <t t-esc="state.mailSentTo"/>
+                </p>
+                <p t-if="state.mailError" class="nq-help text-danger mt-2 sl-result">
+                    <i class="fa fa-envelope me-1"/><t t-esc="state.mailError"/>
+                </p>
                 <p t-if="state.error" class="nq-error sl-result"><t t-esc="state.error"/></p>
             </div>
 
             <t t-set-slot="footer">
                 <button class="btn sl-generate" t-att-disabled="!canSend"
                         t-on-click="() => this.send()">
-                    <i class="fa fa-whatsapp me-1"/><t t-esc="state.busy ? 'Sending…' : 'Send Message'"/>
+                    <i t-att-class="'fa ' + sendIcon + ' me-1'"/><t t-esc="sendLabel"/>
                 </button>
                 <button class="btn nq-discard" t-att-disabled="!state.bookingUrl"
                         t-on-click="() => this.copyLink()">

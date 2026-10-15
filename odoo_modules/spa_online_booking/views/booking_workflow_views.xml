@@ -40,6 +40,12 @@
                      the back office is the fallback when the POS is not to
                      hand. -->
                 <field name="slot_datetime"/>
+                <!-- Who this appointment is given to. `groups` on a view field
+                     node is presentation only, so this hides the field from a
+                     cashier while spa.booking's own access rules stay the
+                     thing that actually governs the write. -->
+                <field name="spa_therapist_id"
+                       groups="spa_kiosk.group_spa_receptionist,base.group_system"/>
                 <field name="time_note" readonly="1"
                        invisible="not time_note"/>
                 <field name="email" readonly="1" invisible="not email"/>

@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class ResConfigSettings(models.TransientModel):
@@ -6,12 +6,34 @@ class ResConfigSettings(models.TransientModel):
 
     # Which WhatsApp session sends booking links. There is normally more
     # than one session on the database, so don't guess.
-    spa_whatsapp_session_id = fields.Many2one(
-        'whatsapp.session', string='WhatsApp Session',
-        domain="[('status', '=', 'connected')]",
+    #
+    # A Selection rather than the Many2one this used to be. Not a style choice:
+    # a Many2one needs its comodel to exist when the registry is built, so
+    # pointing one at whatsapp.session made this module refuse to load on any
+    # database without a WhatsApp module - the exact coupling the manifest now
+    # avoids. A Selection binds to nothing and simply offers no choices there.
+    #
+    # The stored value is unchanged either way: config_parameter keeps the id
+    # as a string in ir.config_parameter, which is what
+    # spa.booking.session._get_wa_session() reads back. Existing settings
+    # survive the change untouched.
+    spa_whatsapp_session_id = fields.Selection(
+        selection='_spa_whatsapp_session_options', string='WhatsApp Session',
         config_parameter='spa_online_booking.whatsapp_session_id',
         help="Booking links are sent on this WhatsApp session. If it is "
              "empty or disconnected, the first connected session is used.")
+
+    @api.model
+    def _spa_whatsapp_session_options(self):
+        """Connected WhatsApp sessions, or nothing when there is no WhatsApp
+        module on this database. Replaces the old domain=[('status','=',
+        'connected')], which only a Many2one could carry."""
+        if 'whatsapp.session' not in self.env:
+            return []
+        sessions = self.env['whatsapp.session'].sudo().search(
+            [('active', '=', True), ('status', '=', 'connected')])
+        return [(str(session.id), session.name or 'WhatsApp')
+                for session in sessions]
 
     spa_min_lead_hours = fields.Integer(
         string='Minimum booking notice (hours)',
@@ -36,6 +58,22 @@ class ResConfigSettings(models.TransientModel):
         config_parameter='spa_online_booking.package_note',
         help="Shown under the package list, e.g. "
              "\"Prices in OMR • Valid 3 months\". Leave empty to show nothing.")
+
+    # Whether a session may be finished without naming who gave it. Off by
+    # default so switching this module on never stops a till that was working
+    # a minute earlier; turn it on once every therapist has a user account.
+    #
+    # A database-wide ir.config_parameter rather than a per-register field:
+    # "must every session name a therapist?" is a policy of the business, and
+    # the back-office paths that enforce it (spa.booking.action_session_done)
+    # have no pos.config to read.
+    spa_assign_required = fields.Boolean(
+        string='Assignee mandatory',
+        config_parameter='spa_online_booking.assign_required',
+        help="Require a member of staff on every session. When on, an order "
+             "cannot be paid and a prepaid session cannot be marked done "
+             "until each session names who is giving it. When off, the "
+             "assignee is recorded wherever it is set but nothing is blocked.")
 
     # Per-POS toggles for which channel tabs show in the POS Orders screen.
     pos_spa_show_online = fields.Boolean(

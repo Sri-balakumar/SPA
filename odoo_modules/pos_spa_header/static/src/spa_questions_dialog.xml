@@ -2,8 +2,8 @@
 <templates id="template" xml:space="preserve">
 
     <t t-name="pos_spa_header.SpaQuestionsDialog">
-        <Dialog title="'Service Questions'">
-            <div class="spa-questions">
+        <Dialog title="title">
+            <div class="spa-questions" t-if="state.step === 'questions'">
                 <t t-foreach="props.questions" t-as="q" t-key="q.id">
                     <!-- Section title, printed once above the first question
                          under it - the list arrives already grouped. -->
@@ -44,10 +44,29 @@
                     </div>
                 </t>
             </div>
+
+            <!-- Step two: the therapy's disclaimer, read after the questions.
+                 t-esc, never t-raw: the body is operator-entered text, not
+                 markup. The inline style is built server-side and its colour is
+                 already restricted to a hex value. -->
+            <!-- Rich text from the Odoo editor, rendered as markup (the field
+                 is sanitize=True, which is what makes that safe). -->
+            <div class="spa-disclaimer" t-if="state.step === 'disclaimer'"
+                 style="line-height: 1.6; max-height: 55vh; overflow-y: auto;"
+                 t-out="html(disclaimer.body)"/>
+
             <t t-set-slot="footer">
-                <button class="btn btn-primary btn-lg" t-on-click="confirm"
-                        t-att-disabled="!isValid()">Confirm</button>
-                <button class="btn btn-secondary btn-lg" t-on-click="() => this.skip()">Skip</button>
+                <t t-if="state.step === 'questions'">
+                    <button class="btn btn-primary btn-lg" t-on-click="next"
+                            t-att-disabled="!isValid()">
+                        <t t-esc="disclaimer ? 'Next' : 'Confirm'"/>
+                    </button>
+                    <button class="btn btn-secondary btn-lg" t-on-click="() => this.skip()">Skip</button>
+                </t>
+                <t t-else="">
+                    <button class="btn btn-primary btn-lg" t-on-click="confirm">Accept</button>
+                    <button class="btn btn-secondary btn-lg" t-on-click="back">Back</button>
+                </t>
             </t>
         </Dialog>
     </t>

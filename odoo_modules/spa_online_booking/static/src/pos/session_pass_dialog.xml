@@ -81,6 +81,19 @@
                                         <b t-esc="p.sessions_left"/> of <t t-esc="p.sessions_total"/> sessions left
                                     </div>
                                 </div>
+                                <!-- Who is taking the customer. Chosen here so
+                                     the session reaches Orders → Sessions
+                                     already assigned, and "Session Done" —
+                                     which refuses an unassigned session — can
+                                     be pressed without a second trip. -->
+                                <select t-if="state.canAssign" class="sg-redeem__assignee"
+                                        t-on-change="(ev) => this.onPickAssignee(p.id, ev)">
+                                    <option value="">— Assignee —</option>
+                                    <option t-foreach="state.staff" t-as="user" t-key="user.id"
+                                            t-att-value="user.id"
+                                            t-att-selected="state.assignee[p.id] === user.id ? 'selected' : false"
+                                            t-esc="user.name"/>
+                                </select>
                                 <button class="sg-redeem__use" t-att-disabled="state.busy === p.id"
                                         t-on-click="() => this.useSession(p)">
                                     <i class="fa fa-check me-1"/>

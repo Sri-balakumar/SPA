@@ -1,6 +1,7 @@
 import { Component, useState, onWillStart, onMounted } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
-import { COUNTRIES } from "@spa_online_booking/pos/phone_country";
+import { phoneError, emailError, resolveMessage } from "@spa_online_booking/pos/phone_country";
+import { PhoneField } from "@spa_online_booking/pos/phone_field";
 
 // Branded "Send Booking Link" dialog.
 //
@@ -11,24 +12,37 @@ import { COUNTRIES } from "@spa_online_booking/pos/phone_country";
 // mobile; the old Contact picker and Customer Name box are gone because the
 // customer fills those in on the booking page itself. Sending reports back
 // inline on the same screen - there is no second "link ready" popup.
+//
+// The link can go by WhatsApp, by email, or by both. NEITHER box is required on
+// its own - what is required is at least one of them, which is why the number
+// no longer carries a red asterisk and the send button renames itself after
+// whatever is actually filled in.
 export class SendLinkDialog extends Component {
     static template = "spa_online_booking.SendLinkDialog";
-    static components = { Dialog };
+    static components = { Dialog, PhoneField };
     static props = ["onGenerate", "close", "companyId?", "loadSessions?", "loadLink?"];
 
     setup() {
-        this.countries = COUNTRIES;
         this.state = useState({
             dialCode: "+968",
             number: "",
+            email: "",
             bookingUrl: "",
-            sent: false,
-            sentTo: "",
-            sendError: "",
+            // One message per box, painted under the box it belongs to and
+            // refreshed as staff type - same idiom as the Book Therapy details
+            // step (therapy_screen.js checkField).
+            fieldErrors: {},
+            // Per channel, so a send that goes out on one and fails on the
+            // other can say exactly that rather than one blurred verdict.
+            waSent: false,
+            waSentTo: "",
+            waError: "",
+            mailSent: false,
+            mailSentTo: "",
+            mailError: "",
             busy: false,
             error: "",
             copied: false,
-            ccOpen: false,
             // Which of our WhatsApp numbers sends this link. Preselected by the
             // server (connected one first), changeable when there are several.
             sessions: [],
@@ -112,12 +126,20 @@ export class SendLinkDialog extends Component {
     get logoUrl() {
         return this.props.companyId ? `/web/image/res.company/${this.props.companyId}/logo` : "";
     }
-    get selectedCountry() {
-        return this.countries.find((c) => c.code === this.state.dialCode) || this.countries[0];
-    }
+    // The country decides how many digits are expected and what the number may
+    // open with, so switching it re-judges what is already typed.
     selectCountry(code) {
         this.state.dialCode = code;
-        this.state.ccOpen = false;
+        this.checkField("phone");
+    }
+    onNumberInput(value) {
+        this.state.number = value;
+        this.checkField("phone");
+    }
+    sendOnEnter() {
+        if (this.canSend) {
+            this.send();
+        }
     }
 
     get digits() {
@@ -126,37 +148,140 @@ export class SendLinkDialog extends Component {
     get fullNumber() {
         return this.state.dialCode + this.digits;
     }
-    // Drives the greyed-out Send button.
+    // ---- what has been filled in, and whether it is usable ----------------
+    get hasPhone() {
+        return this.digits.length > 0;
+    }
+    get hasEmail() {
+        return (this.state.email || "").trim().length > 0;
+    }
+    // Empty boxes say nothing: neither is required on its own, so an untouched
+    // one is not a mistake. Only what has been typed gets judged.
+    get phoneMessage() {
+        if (!this.hasPhone) {
+            return "";
+        }
+        return resolveMessage(
+            phoneError(this.state.dialCode, this.state.number),
+            this.state.dialCode
+        );
+    }
+    get emailMessage() {
+        return this.hasEmail ? resolveMessage(emailError(this.state.email)) : "";
+    }
+    get phoneOk() {
+        return this.hasPhone && !this.phoneMessage;
+    }
+    get emailOk() {
+        return this.hasEmail && !this.emailMessage;
+    }
+
+    // Drives the greyed-out Send button: one usable recipient is enough, but a
+    // box that has been filled in WRONGLY blocks the send even when the other
+    // one is fine - staff meant to reach both, and half a send looks identical
+    // to a whole one once the dialog is closed.
     get canSend() {
-        return !this.state.busy && this.digits.length > 0;
+        if (this.state.busy) {
+            return false;
+        }
+        if (this.phoneMessage || this.emailMessage) {
+            return false;
+        }
+        return this.phoneOk || this.emailOk;
+    }
+
+    // The button says what pressing it will actually do.
+    get sendLabel() {
+        if (this.state.busy) {
+            return "Sending…";
+        }
+        if (this.phoneOk && this.emailOk) {
+            return "Send Both";
+        }
+        if (this.emailOk && !this.hasPhone) {
+            return "Send Email";
+        }
+        if (this.phoneOk && !this.hasEmail) {
+            return "Send WhatsApp";
+        }
+        // Nothing usable yet, or one box is mid-correction: keep the neutral
+        // label rather than flickering between channels on every keystroke.
+        return "Send Message";
+    }
+    get sendIcon() {
+        if (this.phoneOk && this.emailOk) {
+            return "fa-paper-plane";
+        }
+        if (this.emailOk && !this.hasPhone) {
+            return "fa-envelope";
+        }
+        return "fa-whatsapp";
+    }
+
+    // Re-check one box and repaint its message, on every keystroke.
+    checkField(field) {
+        const message = field === "email" ? this.emailMessage : this.phoneMessage;
+        if (message) {
+            this.state.fieldErrors[field] = message;
+        } else {
+            delete this.state.fieldErrors[field];
+        }
     }
 
     async send() {
         if (!this.canSend) {
-            this.state.error = "Enter the customer's mobile number.";
+            // Say which of the two is at fault. "Enter the mobile number" was
+            // the only complaint before, and it is now wrong twice over: the
+            // number is optional, and the problem may be the email.
+            this.checkField("phone");
+            this.checkField("email");
+            this.state.error =
+                this.phoneMessage ||
+                this.emailMessage ||
+                "Enter a mobile number, an email address, or both.";
             return;
         }
+        const number = this.phoneOk ? this.fullNumber : false;
+        const email = this.emailOk ? this.state.email.trim() : false;
         this.state.busy = true;
         this.state.error = "";
-        this.state.sent = false;
-        this.state.sendError = "";
+        this.state.waSent = false;
+        this.state.waError = "";
+        this.state.mailSent = false;
+        this.state.mailError = "";
         try {
             const res = await this.props.onGenerate({
-                whatsapp_number: this.fullNumber,
+                whatsapp_number: number,
+                email: email,
                 session_id: this.state.sessionId || false,
             });
             if (res && res.booking_url) {
                 // Same URL as the one already on screen; refreshed anyway so a
                 // link created on the very first send still shows up.
                 this.state.bookingUrl = res.booking_url;
-                this.state.sent = !!res.sent;
-                this.state.sentTo = this.fullNumber;
-                this.state.sendError =
-                    res.send_error ||
-                    (res.sent ? "" : "WhatsApp did not accept the message - copy the link instead.");
+                if (number) {
+                    // `sent` / `send_error` are the older keys, still returned
+                    // as aliases - read them so a server that has not been
+                    // restarted yet still reports its result properly.
+                    const ok = res.whatsapp_sent !== undefined ? res.whatsapp_sent : res.sent;
+                    this.state.waSent = !!ok;
+                    this.state.waSentTo = number;
+                    this.state.waError =
+                        res.whatsapp_error ||
+                        res.send_error ||
+                        (ok ? "" : "WhatsApp did not accept the message - copy the link instead.");
+                }
+                if (email) {
+                    this.state.mailSent = !!res.email_sent;
+                    this.state.mailSentTo = email;
+                    this.state.mailError =
+                        res.email_error ||
+                        (res.email_sent
+                            ? ""
+                            : "The email could not be sent - copy the link instead.");
+                }
             } else {
-                this.state.error =
-                    "Could not send the link. Check the number includes a country code.";
+                this.state.error = "Could not send the link. Please try again.";
             }
         } catch (e) {
             console.warn("Spa send link: failed", e);

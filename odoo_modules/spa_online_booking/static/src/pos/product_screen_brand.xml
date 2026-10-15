@@ -8,7 +8,10 @@
         <xpath expr="//OrderSummary" position="after">
             <TherapyScreen t-if="pos.showTherapyBooking"/>
             <div t-elif="currentOrder?.isEmpty()" class="sg-pos-brand">
-                <img t-att-src="pos.brandLogoUrl" alt="Logo"/>
+                <!-- t-if: before the company is resolved there is no URL to
+                     request, and an img with an empty src asks the browser for
+                     the page itself and draws a broken-image icon. -->
+                <img t-if="pos.brandLogoUrl" t-att-src="pos.brandLogoUrl" alt="Logo"/>
             </div>
         </xpath>
         <xpath expr="//ActionpadWidget" position="after">

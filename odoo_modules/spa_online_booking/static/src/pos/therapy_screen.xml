@@ -77,7 +77,7 @@
                                     <button class="tp-mtab"
                                             t-att-class="{ 'is-active': state.memberType === m.key }"
                                             t-on-click="() => this.pickMemberType(m.key)">
-                                        <i t-attf-class="fa {{ m.key === 'individual' ? 'fa-user' : 'fa-users' }} me-2"/>
+                                        <i t-attf-class="fa {{ m.is_individual ? 'fa-user' : 'fa-users' }} me-2"/>
                                         <t t-esc="m.label"/>
                                     </button>
                                 </t>
@@ -87,7 +87,16 @@
                         <h5 class="tp-section">Available Packages</h5>
                         <div class="tp-plist">
                             <t t-if="!visiblePackages.length">
-                                <p class="text-muted mb-0">No packages for this option yet.</p>
+                                <!--
+                                  Names the cause. "No packages for this option"
+                                  was misleading - there is no option being
+                                  matched, and the usual reason was a missing
+                                  member type rather than a missing product.
+                                -->
+                                <p class="text-muted mb-0">
+                                    No packages under this therapy yet — open the service
+                                    and add this therapy under Point of Sale → Category.
+                                </p>
                             </t>
                             <t t-foreach="visiblePackages" t-as="p" t-key="p.id">
                                 <label class="tp-prow" t-att-class="{ 'is-selected': state.packageId === p.id }">
@@ -106,7 +115,7 @@
                                              product's own - a Family 3 customer must see what
                                              they will actually be charged. -->
                                         <span class="tp-prow__amt" t-esc="fmt(priceFor(p))"/>
-                                        <span class="tp-prow__save" t-if="p.save and state.memberType === 'individual'">Save <t t-esc="fmt(p.save)"/></span>
+                                        <span class="tp-prow__save" t-if="p.save and memberTypeInfo and memberTypeInfo.is_individual">Save <t t-esc="fmt(p.save)"/></span>
                                     </span>
                                 </label>
                             </t>
@@ -293,23 +302,11 @@
                              gets one optional plain number, further down. -->
                         <div class="tp-field" t-if="isLeadPerson">
                             <span>Phone number *</span>
-                            <div class="sl-phone">
-                                <div class="sl-cc" t-on-click="() => state.ccOpen = !state.ccOpen">
-                                    <span class="sl-flag" t-esc="selectedCountry.flag"/>
-                                    <span t-esc="selectedCountry.code"/>
-                                    <i class="fa fa-chevron-down sl-cc-chev"/>
-                                </div>
-                                <input type="tel" class="sl-number" placeholder="9XXXXXXX"
-                                       t-model="state.custMobile" t-on-input="() => this.onPhoneInput()"/>
-                                <div t-if="state.ccOpen" class="sl-cc-menu">
-                                    <div t-foreach="countries" t-as="c" t-key="c.code"
-                                         class="sl-cc-opt" t-on-click="() => this.selectCountry(c.code)">
-                                        <span class="sl-flag" t-esc="c.flag"/>
-                                        <span t-esc="c.name"/>
-                                        <span class="sl-cc-code" t-esc="c.code"/>
-                                    </div>
-                                </div>
-                            </div>
+                            <PhoneField dialCode="state.custDialCode" value="state.custMobile"
+                                        error="state.fieldErrors.phone or ''"
+                                        onDialCode.bind="selectCountry"
+                                        onInput.bind="setMobile"/>
+                            <p t-if="state.fieldErrors.phone" class="tp-err"><t t-esc="state.fieldErrors.phone"/></p>
                         </div>
 
                         <!-- Who does this number belong to? A number is often shared
@@ -358,11 +355,19 @@
 
                         <label class="tp-field">
                             <span>Full name *</span>
-                            <input type="text" class="form-control form-control-lg" placeholder="Enter full name" t-model="state.custName"/>
+                            <input type="text" class="form-control form-control-lg" placeholder="Enter full name"
+                                   t-att-class="state.fieldErrors.name ? 'form-control form-control-lg tp-bad' : 'form-control form-control-lg'"
+                                   t-model="state.custName" t-on-input="() => this.checkField('name')"/>
+                            <p t-if="state.fieldErrors.name" class="tp-err"><t t-esc="state.fieldErrors.name"/></p>
                         </label>
                         <label class="tp-field">
                             <span>Date of birth *</span>
-                            <input type="date" class="form-control form-control-lg" t-model="state.custDob"/>
+                            <!-- max stops the picker offering the future at all;
+                                 the check below still runs for a typed date. -->
+                            <input type="date" t-att-max="maxDob"
+                                   t-att-class="state.fieldErrors.dob ? 'form-control form-control-lg tp-bad' : 'form-control form-control-lg'"
+                                   t-model="state.custDob" t-on-input="() => this.checkField('dob')"/>
+                            <p t-if="state.fieldErrors.dob" class="tp-err"><t t-esc="state.fieldErrors.dob"/></p>
                         </label>
                         <div class="tp-form__row">
                             <label class="tp-field">
@@ -372,37 +377,27 @@
                             </label>
                             <label class="tp-field">
                                 <span>Gender *</span>
-                                <select class="form-select form-select-lg" t-model="state.custGender">
+                                <select t-att-class="state.fieldErrors.gender ? 'form-select form-select-lg tp-bad' : 'form-select form-select-lg'"
+                                        t-model="state.custGender" t-on-change="() => this.checkField('gender')">
                                     <option value="">Select</option>
                                     <option value="male">Male</option>
                                     <option value="female">Female</option>
                                     <option value="other">Other</option>
                                 </select>
+                                <p t-if="state.fieldErrors.gender" class="tp-err"><t t-esc="state.fieldErrors.gender"/></p>
                             </label>
                         </div>
                         <label class="tp-check" t-if="isLeadPerson">
-                            <input type="checkbox" t-model="state.custWaSame"/>
+                            <input type="checkbox" t-model="state.custWaSame" t-on-change="() => this.onWaSameToggle()"/>
                             <span>WhatsApp number same as phone number</span>
                         </label>
                         <div class="tp-field" t-if="isLeadPerson and !state.custWaSame">
                             <span>WhatsApp number *</span>
-                            <div class="sl-phone">
-                                <div class="sl-cc" t-on-click="() => state.waCcOpen = !state.waCcOpen">
-                                    <span class="sl-flag" t-esc="selectedWaCountry.flag"/>
-                                    <span t-esc="selectedWaCountry.code"/>
-                                    <i class="fa fa-chevron-down sl-cc-chev"/>
-                                </div>
-                                <input type="tel" class="sl-number" placeholder="9XXXXXXX"
-                                       t-model="state.custWhatsapp"/>
-                                <div t-if="state.waCcOpen" class="sl-cc-menu">
-                                    <div t-foreach="countries" t-as="c" t-key="c.code"
-                                         class="sl-cc-opt" t-on-click="() => this.selectWaCountry(c.code)">
-                                        <span class="sl-flag" t-esc="c.flag"/>
-                                        <span t-esc="c.name"/>
-                                        <span class="sl-cc-code" t-esc="c.code"/>
-                                    </div>
-                                </div>
-                            </div>
+                            <PhoneField dialCode="state.custWaDialCode" value="state.custWhatsapp"
+                                        error="state.fieldErrors.whatsapp or ''"
+                                        onDialCode.bind="selectWaCountry"
+                                        onInput.bind="setWhatsapp"/>
+                            <p t-if="state.fieldErrors.whatsapp" class="tp-err"><t t-esc="state.fieldErrors.whatsapp"/></p>
                         </div>
                         <!-- One plain optional number for persons 2+. Kept off
                              state.custMobile: that field belongs to the lead
@@ -415,9 +410,11 @@
                         </label>
                         <label class="tp-field">
                             <span>Email</span>
-                            <input type="email" class="form-control form-control-lg"
+                            <input type="email"
+                                   t-att-class="state.fieldErrors.email ? 'form-control form-control-lg tp-bad' : 'form-control form-control-lg'"
                                    placeholder="name@example.com - leave blank if none"
-                                   t-model="state.custEmail"/>
+                                   t-model="state.custEmail" t-on-input="() => this.checkField('email')"/>
+                            <p t-if="state.fieldErrors.email" class="tp-err"><t t-esc="state.fieldErrors.email"/></p>
                         </label>
 
                     </div>

@@ -1,5 +1,12 @@
 import { Component, useState, onWillStart, markup } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
+import {
+    DEFAULT_DIAL_CODE,
+    joinPhone,
+    phoneError,
+    resolveMessage,
+} from "@spa_online_booking/pos/phone_country";
+import { PhoneField } from "@spa_online_booking/pos/phone_field";
 
 // The in-POS version of the website booking flow: therapy grid -> therapy
 // detail + packages (radio) -> package details -> questions. On confirm it
@@ -8,8 +15,13 @@ import { Dialog } from "@web/core/dialog/dialog";
 // /api/spa/therapies endpoint the website uses, so both stay in sync.
 export class TherapyBookingDialog extends Component {
     static template = "spa_online_booking.TherapyBookingDialog";
-    static components = { Dialog };
+    static components = { Dialog, PhoneField };
     static props = ["addPackage", "close"];
+
+    // Both numbers are optional on this dialog - staff often add a package to a
+    // walk-in order before anyone has asked for a phone number. So an empty box
+    // passes; what is refused is a number that could never work.
+    _detailFields = ["name", "whatsapp", "mobile"];
 
     setup() {
         this.state = useState({
@@ -27,6 +39,14 @@ export class TherapyBookingDialog extends Component {
             custName: "",
             custWhatsapp: "",
             custMobile: "",
+            // Country per number, exactly as the Book Therapy screen and the
+            // Send Booking Link dialog do it - the digits alone are not a
+            // number, and typing "+968" into the box used to be the only way to
+            // say which country this was.
+            custDialCode: DEFAULT_DIAL_CODE,
+            custWaDialCode: DEFAULT_DIAL_CODE,
+            // One message per box, painted under the box it belongs to.
+            fieldErrors: {},
             busy: false,
         });
 
@@ -224,6 +244,66 @@ export class TherapyBookingDialog extends Component {
         });
     }
 
+    // ---- customer details ----
+    // What the waiver prints, and what the order is stamped with. The digits
+    // live in the box and the country in the picker, so neither is the number
+    // on its own - printing state.custMobile would put a bare "91234567" on a
+    // signed consent form.
+    get contactNumber() {
+        return (
+            joinPhone(this.state.custDialCode, this.state.custMobile) ||
+            joinPhone(this.state.custWaDialCode, this.state.custWhatsapp)
+        );
+    }
+
+    // Same idiom as therapy_screen.js and send_link_dialog.js: one message per
+    // box, refreshed as staff type, and the rules themselves come from
+    // spa_validation.js so the till agrees with the booking page.
+    _fieldError(field) {
+        switch (field) {
+            case "name":
+                return this.state.custName.trim() ? "" : resolveMessage("err_name_required");
+            case "mobile":
+                return resolveMessage(
+                    phoneError(this.state.custDialCode, this.state.custMobile, false),
+                    this.state.custDialCode
+                );
+            case "whatsapp":
+                return resolveMessage(
+                    phoneError(this.state.custWaDialCode, this.state.custWhatsapp, false),
+                    this.state.custWaDialCode
+                );
+            default:
+                return "";
+        }
+    }
+    checkField(field) {
+        const message = this._fieldError(field);
+        if (message) {
+            this.state.fieldErrors[field] = message;
+        } else {
+            delete this.state.fieldErrors[field];
+        }
+    }
+    setDialCode(field, code) {
+        if (field === "mobile") {
+            this.state.custDialCode = code;
+        } else {
+            this.state.custWaDialCode = code;
+        }
+        // The country decides the expected length and opening digits, so
+        // switching it re-judges what is already typed.
+        this.checkField(field);
+    }
+    setNumber(field, value) {
+        if (field === "mobile") {
+            this.state.custMobile = value;
+        } else {
+            this.state.custWhatsapp = value;
+        }
+        this.checkField(field);
+    }
+
     buildNote() {
         const th = this.therapy;
         const p = this.pkg;
@@ -239,8 +319,13 @@ export class TherapyBookingDialog extends Component {
     }
 
     async confirm() {
-        if (!(this.state.custName || "").trim()) {
-            this.state.error = "Please enter the customer's name.";
+        // Repaint every box, then complain about the first one that is wrong:
+        // pointing at one field while a second is also broken sends staff round
+        // the loop twice.
+        this._detailFields.forEach((field) => this.checkField(field));
+        const bad = this._detailFields.find((field) => this.state.fieldErrors[field]);
+        if (bad) {
+            this.state.error = this.state.fieldErrors[bad];
             return;
         }
         this.state.busy = true;
@@ -248,8 +333,11 @@ export class TherapyBookingDialog extends Component {
         try {
             await this.props.addPackage(this.state.packageId, this.buildNote(), {
                 name: this.state.custName.trim(),
-                whatsapp: (this.state.custWhatsapp || "").trim(),
-                mobile: (this.state.custMobile || "").trim(),
+                // E.164, not the raw digits: the country lives in the picker
+                // now, so joining them here is what makes the stored number
+                // match the one the booking page and the API write.
+                whatsapp: joinPhone(this.state.custWaDialCode, this.state.custWhatsapp),
+                mobile: joinPhone(this.state.custDialCode, this.state.custMobile),
             });
             this.props.close();
         } catch (e) {

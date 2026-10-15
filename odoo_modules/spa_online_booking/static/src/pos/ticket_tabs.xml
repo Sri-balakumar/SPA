@@ -164,6 +164,13 @@
                                         <span><i class="fa fa-clock-o me-1"/><t t-esc="u.time"/></span>
                                         <span class="sg-sep">|</span>
                                         <span t-esc="u.package"/>
+                                        <!-- Who gave it. A counted session has
+                                             no order line to read, so this is
+                                             the only record of the assignee. -->
+                                        <span t-if="u.assignee" class="sg-sep">|</span>
+                                        <span t-if="u.assignee">
+                                            <i class="fa fa-user-md me-1"/><t t-esc="u.assignee"/>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -188,8 +195,8 @@
                     <t t-if="!movedOrders.length">
                         <div class="d-flex h-100 flex-column align-items-center justify-content-center text-muted">
                             <i class="fa fa-refresh fa-2x mb-2"/>
-                            <t t-if="state.spaDate">No appointments were moved to this day.</t>
-                            <t t-else="">No appointments moved to today.</t>
+                            <t t-if="state.spaDate">No appointments were scheduled or moved to this day.</t>
+                            <t t-else="">No appointments scheduled or moved to today.</t>
                         </div>
                     </t>
                     <t t-else="">
@@ -316,6 +323,16 @@
                                 <span class="sg-meta__v" t-esc="spaOrderSlot(o)"/>
                             </div>
                         </div>
+                        <!-- Who gave each session. Amber while nobody has been
+                             put against the order - visible, never blocking. -->
+                        <div t-if="spaAssigneeLabel(o)"
+                             t-attf-class="sg-meta {{ spaAssigneeClass(o) }}">
+                            <i class="fa fa-user-md"/>
+                            <div>
+                                <span class="sg-meta__k">Assignee</span>
+                                <span class="sg-meta__v" t-esc="spaAssigneeLabel(o)"/>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="sg-card__side">
@@ -326,14 +343,26 @@
             <!-- Same condition Sign and Reschedule carry, so the row is never
                  rendered empty (a bare :empty rule would not work - QWeb emits
                  whitespace between the buttons). -->
-            <div t-if="o.id > 0" class="sg-card__actions">
-                <button class="sg-card__signbtn" title="Sign and print this order"
+            <!-- Assign is available on an ONGOING order too, which has no
+                 server id yet - the pick is parked on the order and applied
+                 when it syncs. Sign, Reschedule and Invoice still need a saved
+                 order, so they keep their own o.id test. -->
+            <div t-if="o.id > 0 or state.spaCanAssign" class="sg-card__actions">
+                <button t-if="o.id > 0" class="sg-card__signbtn" title="Sign and print this order"
                         t-on-click.stop="() => this.spaSignOrder(o)">
                     <i class="fa fa-pencil-square-o me-1"/>Sign
                 </button>
+                <!-- Reception and the administrator only. The server re-checks
+                     the group on the write, so hiding it here is convenience,
+                     not the control. -->
+                <button t-if="state.spaCanAssign" class="sg-card__signbtn"
+                        title="Say who performed each session on this order"
+                        t-on-click.stop="() => this.spaAssignOrder(o)">
+                    <i class="fa fa-user-md me-1"/>Assign
+                </button>
                 <!-- Paid, but the customer cannot come that day. Moves the
                      appointment only - the payment on this order is untouched. -->
-                <button class="sg-card__signbtn"
+                <button t-if="o.id > 0" class="sg-card__signbtn"
                         title="Move this appointment to another date"
                         t-on-click.stop="() => this.spaRescheduleOrder(o)">
                     <i class="fa fa-calendar me-1"/>Reschedule
@@ -341,9 +370,10 @@
                 <!-- Shown on any order that HAS an appointment, whatever set it. -->
                 <button t-if="o.spa_slot_datetime"
                         class="sg-card__signbtn sg-card__rmbtn"
-                        title="Cancel this appointment and free the time slot"
+                        t-att-title="spaRemoveTitle(o)"
                         t-on-click.stop="() => this.spaRemoveAppointment(o)">
-                    <i class="fa fa-calendar-times-o me-1"/>Remove
+                    <i t-attf-class="fa {{ spaCanUndo(o) ? 'fa-undo' : 'fa-calendar-times-o' }} me-1"/>
+                    <t t-esc="spaRemoveLabel(o)"/>
                 </button>
                 <button t-if="o.finalized and o.raw and o.raw.account_move" class="sg-card__invbtn"
                         t-on-click.stop="() => this.spaDownloadInvoice(o)">
@@ -369,6 +399,11 @@
                         <span t-if="b.prepaid" class="sg-pill sg-pill--prepaid"><i class="fa fa-ticket me-1"/>Prepaid</span>
                         <span t-if="b.mobile" class="sg-bcard__phone">
                             <i class="fa fa-phone me-1"/><t t-esc="b.mobile"/>
+                        </span>
+                        <!-- Once reception has chosen, the name is on the card
+                             itself - the picker below is for changing it. -->
+                        <span t-if="b.assignee" class="sg-pill sg-pill--blue">
+                            <i class="fa fa-user-md me-1"/><t t-esc="b.assignee"/>
                         </span>
                     </div>
                     <div class="sg-bcard__meta">
@@ -397,6 +432,25 @@
             </div>
 
             <div class="sg-bcard__actions">
+                <!-- Picked BEFORE the button next to it is pressed, because
+                     both destinations are write-once from here: Approve is
+                     when reception decides who is taking the customer, and
+                     Session Done counts a prepaid session on the spot, leaving
+                     only a spa.session.pass.use row behind. Blank is allowed -
+                     assigning never blocks a transition. -->
+                <select t-if="state.spaCanAssign and (b.state === 'pending' or b.state === 'approved' or b.state === 'in_service')"
+                        class="form-select form-select-sm sg-bcard__assignee"
+                        style="max-width: 14rem;"
+                        t-on-change="(ev) => this.setSpaSessionAssignee(b.id, ev)">
+                    <option value="">— Assignee —</option>
+                    <!-- Marked on the option, not with a `value` on the select:
+                         the list re-renders on every refresh and an attribute
+                         does not move a live select's selection. -->
+                    <option t-foreach="state.spaStaff" t-as="user" t-key="user.id"
+                            t-att-value="user.id"
+                            t-att-selected="state.spaSessionAssignee[b.id] === user.id ? 'selected' : false"
+                            t-esc="user.name"/>
+                </select>
                 <button t-if="b.state === 'pending'" class="sg-btn-approve"
                         t-on-click="() => this.spaBookingAction(b.id, 'approve')">
                     <i class="fa fa-check-circle me-1"/>Approve
@@ -409,9 +463,18 @@
                         t-on-click="() => this.spaBookingAction(b.id, 'complete')">Mark Completed</button>
                 <button t-if="b.state === 'completed' and !b.prepaid" class="sg-btn-approve"
                         t-on-click="() => this.spaBookingAction(b.id, 'paid')">Mark Paid</button>
-                <!-- prepaid session: finish it without a charge/Load step -->
+                <!-- prepaid session: finish it without a charge/Load step.
+                     Disabled until somebody is picked - this button counts the
+                     session off the customer's package and the usage row it
+                     writes is the only record of who gave it, so unlike every
+                     other step here it cannot be corrected afterwards. Only
+                     when "Assignee mandatory" is on, and the server refuses it
+                     on the same condition (action_session_done). -->
                 <button t-if="b.prepaid and (b.state === 'approved' or b.state === 'in_service')"
-                        class="sg-btn-approve" t-on-click="() => this.spaBookingAction(b.id, 'session_done')">
+                        class="sg-btn-approve"
+                        t-att-disabled="state.spaAssignRequired and !spaSessionAssignee(b)"
+                        t-att-title="(state.spaAssignRequired and !spaSessionAssignee(b)) ? 'Choose who is taking this session first' : 'Count this session off the package'"
+                        t-on-click="() => this.spaBookingAction(b.id, 'session_done')">
                     <i class="fa fa-check me-1"/>Session Done
                 </button>
                 <button t-if="spaCanLoad(b) and !b.prepaid" class="sg-btn-load"

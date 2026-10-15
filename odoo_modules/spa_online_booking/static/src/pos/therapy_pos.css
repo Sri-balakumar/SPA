@@ -243,6 +243,14 @@
 .nq-add { border: 1.5px dashed #cfe9d6; background: #fff; color: var(--nq-green); border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 600; }
 .nq-error { color: #c0392b; margin: 12px 0 0; font-weight: 500; }
 
+/* Per-field validation message on the Book Therapy details step. Sits directly
+   under the input it is about, so the complaint and the box to fix it are in
+   the same place - same red as .nq-error above. */
+.tp-err { color: #c0392b; margin: 6px 0 0; font-size: .85rem; font-weight: 500; }
+/* And the box itself reads as wrong, for anyone scanning the form rather than
+   reading it. !important because .form-control sets its own border. */
+.tp-bad { border-color: #c0392b !important; box-shadow: none !important; }
+
 /* footer buttons */
 .modal .nq-save { background: var(--nq-green, #16A34A); color: #fff; font-weight: 700; padding: 12px 26px; border-radius: 12px; }
 .modal .nq-save:hover { background: #12833b; }
@@ -694,3 +702,26 @@
 /* --- Sign dialog --------------------------------------------------------- */
 .sg-sign .sg-qa-group { margin-bottom: 10px; }
 .sg-sign .tp-sign__pad { height: 170px; }
+
+/* --- Session assignee ------------------------------------------------- */
+/* Amber, not red: nobody has been put against this order yet, which is worth
+   noticing but never blocks paying, signing or invoicing. */
+.sg-meta--unassigned > i { color: #b26a00; }
+.sg-meta--unassigned .sg-meta__v { color: #b26a00; font-weight: 600; }
+/* The inline picker on a pending prepaid session card - a prepaid session is
+   counted the moment "Session Done" lands, so it has to be chosen first. */
+.sg-bcard__assignee { margin-right: auto; }
+/* One row per session in the Assign dialog; the pickers line up whatever the
+   service names are. */
+.spa-assign table td { vertical-align: middle; }
+/* Assignee under a row in POS > Customer > Customer Details, in both the
+   Therapy Sessions and the Single Sessions & Visits lists. */
+.sg-cust-pass__who { font-size: 0.82rem; color: #6c4bb6; margin-top: 2px; }
+/* Assignee picker in the Redeem dialog, between the pack name and Use a
+   Session. Narrow enough that the button stays on the same row. */
+.sg-redeem__assignee {
+    max-width: 12rem; margin-right: 8px; padding: 6px 8px;
+    border: 1px solid #d7dbe0; border-radius: 8px; background: #fff;
+}
+/* A disabled Session Done reads as "not yet", not as broken. */
+.sg-bcard__actions .sg-btn-approve:disabled { opacity: .45; cursor: not-allowed; }

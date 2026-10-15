@@ -10,8 +10,8 @@ import pytz
 from odoo import fields, http
 from odoo.http import request
 from odoo.addons.web.controllers.utils import ensure_db
-from odoo.addons.spa_online_booking.models.package_price import (
-    SPA_MEMBER_TYPES, spa_headcount)
+from odoo.addons.spa_online_booking.models.date_of_birth import date_of_birth_error
+from odoo.addons.spa_online_booking.models.package_price import spa_headcount
 
 try:
     import phonenumbers
@@ -26,7 +26,13 @@ def normalize_phone(raw):
 
     Requires an explicit country code (leading '+'). Returns
     ``(e164, None)`` when valid, otherwise ``(None, reason)`` where reason is
-    ``'missing_country_code'`` or ``'invalid_number'``.
+    ``'missing_country_code'``, ``'invalid_number'`` or ``'not_mobile'``.
+
+    A landline is refused: every booking taken here is confirmed and chased on
+    WhatsApp, so a number that cannot receive a message is not a number we can
+    use. The browser enforces this with a table of per-country mobile prefixes
+    (spa_validation.js); here it comes from `phonenumbers`, which knows the real
+    allocated ranges and is the stricter of the two.
     """
     value = (raw or '').strip()
     if not value.startswith('+'):
@@ -46,6 +52,13 @@ def normalize_phone(raw):
         return None, 'invalid_number'
     if not phonenumbers.is_valid_number(parsed):
         return None, 'invalid_number'
+    # FIXED_LINE_OR_MOBILE is the North American case: +1 has no separate
+    # mobile range, so the library cannot tell them apart and refusing it would
+    # reject every legitimate US number.
+    if phonenumbers.number_type(parsed) not in (
+            phonenumbers.PhoneNumberType.MOBILE,
+            phonenumbers.PhoneNumberType.FIXED_LINE_OR_MOBILE):
+        return None, 'not_mobile'
     return phonenumbers.format_number(
         parsed, phonenumbers.PhoneNumberFormat.E164), None
 
@@ -320,6 +333,13 @@ def _partner_age(partner):
 MAX_SIGNATURE_BYTES = 2 * 1024 * 1024
 MAX_EMAIL_LEN = 254
 
+# Deliberately not the full RFC 5322 grammar - nobody wants that regex, and the
+# strict version rejects addresses that work. This catches what people actually
+# get wrong: no @, no dot in the domain, a space, or a bare domain like
+# "angitha.com". Kept in step with EMAIL_RE in static/booking/spa_validation.js,
+# which is the same rule in the browser.
+EMAIL_RE = re.compile(r'^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$')
+
 
 # Per-IP throttle for the public customer lookup. Deliberately in memory: it
 # only has to blunt someone walking a range of phone numbers through a page
@@ -349,10 +369,7 @@ def _parse_email(payload):
     email = (payload.get('email') or '').strip()
     if not email:
         return False, None
-    if len(email) > MAX_EMAIL_LEN or ' ' in email:
-        return False, 'invalid_email'
-    local, sep, domain = email.rpartition('@')
-    if not sep or not local or '.' not in domain:
+    if len(email) > MAX_EMAIL_LEN or not EMAIL_RE.match(email):
         return False, 'invalid_email'
     return email, None
 
@@ -444,7 +461,21 @@ def _spa_parse_members(payload, questions, member_type):
         if sig_error:
             return None, json_response(
                 {'error': sig_error, 'person': index + 1}, 400)
-        dob, gender = _parse_personal(entry)
+        dob, gender, dob_error = _parse_personal(entry)
+        if dob_error:
+            return None, json_response({
+                'error': 'invalid_dob',
+                'field': 'date_of_birth',
+                'reason': dob_error,
+                'person': index + 1,
+            }, 400)
+        # Person 2's email was never checked at all - only the lead's. Same
+        # rule for everyone, or the family flow is the way round it.
+        member_email, member_email_error = _parse_email(entry)
+        if member_email_error:
+            return None, json_response(
+                {'error': member_email_error, 'field': 'email',
+                 'person': index + 1}, 400)
 
         # Each person answers for themselves, so required questions are
         # checked per person - person 2's blank health history is exactly the
@@ -470,7 +501,7 @@ def _spa_parse_members(payload, questions, member_type):
             'date_of_birth': dob,
             'gender': gender,
             'phone': (entry.get('phone') or '').strip()[:MAX_NAME_LEN],
-            'email': (entry.get('email') or '').strip()[:MAX_NAME_LEN],
+            'email': member_email,
             'signature': signature,
             'terms_accepted': bool(entry.get('terms_accepted')),
             'answers': answers,
@@ -480,20 +511,30 @@ def _spa_parse_members(payload, questions, member_type):
 
 def _parse_personal(payload):
     """Pull the optional Date of Birth + Gender from a booking payload.
-    Returns (date_or_False, 'male'/'female'/'other'/False). Kept optional so
-    existing callers that don't send them keep working."""
+
+    Returns (date_or_False, 'male'/'female'/'other'/False, reason_or_None).
+    The date stays OPTIONAL - callers that never send one keep working - but a
+    date that IS sent has to be a real, past, plausible one. It used to be
+    swallowed: a birthday of 2029 simply became False and the booking was
+    accepted with no date at all and nobody any the wiser.
+    """
     dob_raw = (payload.get('date_of_birth') or payload.get('dob')
                or payload.get('birthday') or '').strip()
-    dob = False
-    if dob_raw:
-        try:
-            dob = datetime.strptime(dob_raw, '%Y-%m-%d').date()
-        except ValueError:
-            dob = False
     gender = (payload.get('gender') or '').strip().lower()
     if gender not in ('male', 'female', 'other'):
         gender = False
-    return dob, gender
+    if not dob_raw:
+        return False, gender, None
+    try:
+        dob = datetime.strptime(dob_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return False, gender, 'invalid_date'
+    # Same helper the model constraint raises from, so the API and the till
+    # cannot drift apart on what counts as a plausible birthday.
+    reason = date_of_birth_error(dob, request.env)
+    if reason:
+        return False, gender, reason
+    return dob, gender, None
 
 
 # Salon opening hours for the (stubbed) hourly slot grid. Used by both the
@@ -542,16 +583,15 @@ def _local_now():
     This is what makes "hide already-passed times for today" correct even when
     the Odoo server itself runs in a different timezone (e.g. UTC). Falls back
     to the raw server clock if no timezone is configured."""
-    # sudo the tz reads so this works for the public user too (the tablet /
-    # website endpoints run as public, which can't read res.partner directly).
-    tz_name = request.env.context.get('tz') or request.env.user.sudo().tz \
-        or request.env.company.sudo().partner_id.tz
-    if tz_name:
-        try:
-            return datetime.now(pytz.timezone(tz_name)).replace(tzinfo=None)
-        except Exception:
-            pass
-    return datetime.now()
+    # The company's zone, derived from its country: the public user (tablet /
+    # website endpoints run as public) gets the salon's clock rather than none,
+    # and a staff member abroad gets the salon's clock rather than their own.
+    # sudo() because public cannot read res.partner or res.country directly.
+    try:
+        return datetime.now(
+            request.env.company.sudo()._spa_display_tz()).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
 
 
 def _lead_hours(param, default=0):
@@ -659,13 +699,13 @@ class SpaBookingApiController(http.Controller):
     def _spa_asset_version():
         """The cache-busting token for the booking page's CSS/JS, as bytes.
 
-        The newest modification time of the three asset files. That changes
+        The newest modification time of the page's asset files. That changes
         exactly when one of them is edited - no upgrade needed, and nothing to
         remember. Deliberately NOT read from the ORM: this route is auth='none'
         precisely so a customer with no session can reach it, and request.env
         is not dependable there.
 
-        Not cached on the class either. It is three stat() calls on a page that
+        Not cached on the class either. It is a few stat() calls on a page that
         is served once per customer, and caching would mean a file edited while
         the server runs stays invisible until a restart - the exact failure
         this replaces.
@@ -673,7 +713,7 @@ class SpaBookingApiController(http.Controller):
         import os
         here = os.path.join(os.path.dirname(__file__), '..', 'static', 'booking')
         newest = 0
-        for name in ('style.css', 'i18n.js', 'script.js'):
+        for name in ('style.css', 'i18n.js', 'script.js', 'spa_validation.js'):
             try:
                 newest = max(newest, int(os.path.getmtime(os.path.join(here, name))))
             except OSError:
@@ -915,6 +955,17 @@ class SpaBookingApiController(http.Controller):
                 'disclaimer': cat._spa_disclaimer_payload(),
                 'packages': pkg_data,
             })
+            # Packages that no member type prices are invisible on every
+            # screen, and nothing used to say so - the therapy rendered with
+            # "no packages" while the products sat there correctly configured.
+            # One line here is the difference between a five-minute answer and
+            # an afternoon of guessing.
+            if pkg_data and not any(p.get('prices') for p in pkg_data):
+                _logger.warning(
+                    "Therapy %r returned %s package(s) but none of them is "
+                    "priced for any member type, so all of them will be hidden. "
+                    "Check spa.member.type has a record with is_individual set.",
+                    cat.name, len(pkg_data))
         # The public user's default company may use a different currency than
         # the register that fulfils these bookings. Show the currency of the POS
         # that sells the therapies so the page matches the counter.
@@ -928,11 +979,11 @@ class SpaBookingApiController(http.Controller):
                    else request.env.company)
         currency = company.currency_id
         # Member-type tabs and the small print, both driven from the backend so
-        # the screens do not hard-code commercial wording. Labels come from the
-        # field's own selection, so adding a member type there reaches both
-        # surfaces without touching either.
-        member_types = [{'key': key, 'label': label}
-                        for key, label in SPA_MEMBER_TYPES]
+        # the screens do not hard-code commercial wording. `headcount` rides
+        # along so neither client has to keep its own copy of how many people
+        # a type covers - which is exactly what used to need editing in two
+        # JavaScript files every time a type was added.
+        member_types = request.env['spa.member.type'].sudo()._spa_payload()
         note = request.env['ir.config_parameter'].sudo().get_param(
             'spa_online_booking.package_note', '')
 
@@ -1112,6 +1163,15 @@ class SpaBookingApiController(http.Controller):
         email, email_error = _parse_email(payload)
         if email_error:
             return json_response({'error': email_error, 'field': 'email'}, 400)
+        # The date of birth is checked HERE rather than left to the model
+        # constraint, so the caller gets a field name and a reason back instead
+        # of a 500 with a traceback in it.
+        dob, gender, dob_error = _parse_personal(payload)
+        if dob_error:
+            return json_response({
+                'error': 'invalid_dob', 'field': 'date_of_birth',
+                'reason': dob_error,
+            }, 400)
         signature, sig_error = _parse_signature(payload)
         if sig_error:
             return json_response({'error': sig_error, 'field': 'signature'}, 400)
@@ -1145,10 +1205,12 @@ class SpaBookingApiController(http.Controller):
         # One entry per person the package covers. Validates the count and each
         # person's required answers, and folds the top-level fields in as
         # person 1 - so a client that sends no `members` still books correctly.
-        member_type = (
-            payload.get('member_type')
-            if payload.get('member_type') in dict(SPA_MEMBER_TYPES)
-            else 'individual')
+        MemberType = request.env['spa.member.type'].sudo()
+        # Clients send the CODE; an unknown one falls back to the base type
+        # rather than being trusted, so a bad payload cannot book a family
+        # for a headcount nobody configured.
+        member_type = (MemberType._spa_by_code(payload.get('member_type'))
+                       or MemberType._spa_base_type())
         people, member_error = _spa_parse_members(payload, questions, member_type)
         if member_error is not None:
             return member_error
@@ -1199,7 +1261,7 @@ class SpaBookingApiController(http.Controller):
             # this, so an unknown value falls back to individual rather than
             # reaching the field and being refused (normalised further up,
             # because the member count is checked against it).
-            'spa_member_type': member_type,
+            'spa_member_type': member_type.id,
             # Only extras actually offered on one of the booked packages are
             # accepted - this endpoint is public, so an id from the payload is
             # never trusted to be a legitimate add-on.
@@ -1207,8 +1269,8 @@ class SpaBookingApiController(http.Controller):
                 payload.get('addon_ids'), products))],
             'state': 'waiting' if waitlisted else 'pending',
             'slot_datetime': slot_dt,
-            'date_of_birth': _parse_personal(payload)[0],
-            'gender': _parse_personal(payload)[1],
+            'date_of_birth': dob,
+            'gender': gender,
             'email': email,
             'signature': signature,
             'terms_accepted': bool(payload.get('terms_accepted')),
@@ -1374,6 +1436,15 @@ class SpaBookingApiController(http.Controller):
         email, email_error = _parse_email(payload)
         if email_error:
             return json_response({'error': email_error, 'field': 'email'}, 400)
+        # The date of birth is checked HERE rather than left to the model
+        # constraint, so the caller gets a field name and a reason back instead
+        # of a 500 with a traceback in it.
+        dob, gender, dob_error = _parse_personal(payload)
+        if dob_error:
+            return json_response({
+                'error': 'invalid_dob', 'field': 'date_of_birth',
+                'reason': dob_error,
+            }, 400)
         signature, sig_error = _parse_signature(payload)
         if sig_error:
             return json_response({'error': sig_error, 'field': 'signature'}, 400)
@@ -1411,8 +1482,8 @@ class SpaBookingApiController(http.Controller):
             'source': 'online_link',
             'spa_channel': 'tab',
             'slot_datetime': slot_dt,
-            'date_of_birth': _parse_personal(payload)[0],
-            'gender': _parse_personal(payload)[1],
+            'date_of_birth': dob,
+            'gender': gender,
             'email': email,
             'signature': signature,
             'terms_accepted': bool(payload.get('terms_accepted')),

@@ -79,6 +79,11 @@
                                 <div class="sg-cust-pass__count">
                                     <t t-esc="p.sessions_used"/> taken · <b t-esc="p.sessions_left"/> of <t t-esc="p.sessions_total"/> left
                                 </div>
+                                <!-- Everyone who has given, or is booked to
+                                     give, a session off this pack. -->
+                                <div t-if="p.spa_assignee_names" class="sg-cust-pass__who">
+                                    <i class="fa fa-user-md me-1"/><t t-esc="p.spa_assignee_names"/>
+                                </div>
                             </div>
                             <div class="sg-cust-pass__btns">
                                 <button class="sg-pass-btn" title="Questions this customer answered for this service"
@@ -105,6 +110,9 @@
                                     <div class="sg-cust-pass__count">
                                         <t t-esc="s.date or '—'"/>
                                         <t t-if="s.ref"> · <t t-esc="s.ref"/></t>
+                                    </div>
+                                    <div t-if="s.assignee" class="sg-cust-pass__who">
+                                        <i class="fa fa-user-md me-1"/><t t-esc="s.assignee"/>
                                     </div>
                                 </div>
                                 <div class="sg-cust-pass__btns">
@@ -260,7 +268,7 @@
                         <table class="sg-rep-table">
                             <thead>
                                 <tr>
-                                    <th>#</th><th>Date</th><th>Status</th><th>Note</th><th class="text-end">Value</th>
+                                    <th>#</th><th>Date</th><th>Status</th><th>Assignee</th><th>Note</th><th class="text-end">Value</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -273,6 +281,12 @@
                                               t-att-class="s.status === 'completed' ? 'sg-pill--green' : (s.status === 'scheduled' ? 'sg-pill--blue' : 'sg-pill--gray')"
                                               t-esc="s.status_label"/>
                                     </td>
+                                    <!-- Its own column now: it used to be
+                                         shown only when there was no note, and
+                                         a pass use ALWAYS has one ("SPA-0023
+                                         (prepaid session)"), so the person was
+                                         never actually visible here. -->
+                                    <td t-esc="s.assignee or '—'"/>
                                     <td class="text-muted" t-esc="s.note or (s.by ? 'by ' + s.by : '')"/>
                                     <td class="text-end" t-esc="money(s.value)"/>
                                 </tr>

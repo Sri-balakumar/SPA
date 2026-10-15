@@ -70,3 +70,27 @@ class ProductTemplate(models.Model):
                 'options': q.option_ids.mapped('name'),
             })
         return res
+
+    def _spa_disclaimer(self):
+        """The disclaimer of the therapy these services are filed under.
+
+        Same resolution as `_spa_questions()`: the THERAPY is the source of
+        truth, so one edit covers every package under it. A service filed under
+        no therapy simply has no disclaimer.
+        """
+        self.ensure_one()
+        therapy = self.pos_categ_ids.filtered('spa_is_therapy')[:1]
+        return therapy._spa_disclaimer_payload()
+
+    @api.model
+    def get_pos_spa_disclaimer(self, product_tmpl_id):
+        """`{title, body, style}` for the POS disclaimer step, `{}` if none.
+
+        Deliberately a sibling of `get_pos_spa_questions` rather than a new key
+        inside it: that one returns a bare list and every caller indexes it as
+        one, so turning it into a dict would break each of them at once.
+        """
+        tmpl = self.browse(product_tmpl_id).sudo()
+        if not tmpl.exists():
+            return {}
+        return tmpl._spa_disclaimer()

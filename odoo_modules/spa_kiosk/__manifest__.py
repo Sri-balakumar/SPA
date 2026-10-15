@@ -1,6 +1,6 @@
 {
     'name': 'Spa Kiosk',
-    'version': '19.0.1.7.0',
+    'version': '19.0.2.4.0',
     'category': 'Services',
     'summary': 'Spa self-service kiosk with per-service questions',
     'description': 'Walk-in kiosk: select a service, enter details, answer service-specific questions, choose payment mode, submit for receptionist approval.',
@@ -9,6 +9,7 @@
     # controllers/main.py - previously satisfied only transitively.
     'depends': ['base', 'mail', 'product', 'account', 'point_of_sale',
                 'phone_validation'],
+    'post_init_hook': '_post_init_hook',
     'data': [
         'security/spa_security.xml',
         'security/ir.model.access.csv',

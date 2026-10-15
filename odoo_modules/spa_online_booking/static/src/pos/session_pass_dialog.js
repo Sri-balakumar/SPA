@@ -1,5 +1,6 @@
 import { Component, useState } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
+import { ageFromDob } from "@spa_online_booking/pos/phone_country";
 
 // In-POS "Redeem Session" dialog: search a customer -> show their active
 // session passes (prepaid packages) -> tap "Use a Session" to redeem one.
@@ -21,7 +22,29 @@ export class SessionPassDialog extends Component {
             busy: 0, // id of the pass currently being redeemed
             error: "",
             flash: "",
+            // Who is taking the customer, per pass row: { passId: userId }.
+            // NUMBERS, not the strings a <select> hands back — the template
+            // marks the chosen option with `=== user.id`, and OWL has no
+            // `String` in its template scope to convert the other way.
+            assignee: {},
+            staff: [],
+            canAssign: false,
         });
+        this.loadStaff();
+    }
+
+    // The assignable staff, and whether this user may assign at all. Same call
+    // the Orders screen uses, so one server-side rule governs both.
+    async loadStaff() {
+        // Shared with the Orders screen and the payment gate, so all three
+        // agree about the policy and only one round trip is made.
+        const info = await this.env.services.pos.spaLoadAssignStaff();
+        this.state.staff = (info && info.staff) || [];
+        this.state.canAssign = !!(info && info.can_assign);
+    }
+
+    onPickAssignee(passId, ev) {
+        this.state.assignee[passId] = parseInt(ev.target.value, 10) || 0;
     }
 
     get logoUrl() {
@@ -71,22 +94,14 @@ export class SessionPassDialog extends Component {
         await this.loadPasses();
     }
 
-    // Age in whole years from a "YYYY-MM-DD" date string.
+    // Age in whole years from a "YYYY-MM-DD" date string. The counting lives in
+    // spa_validation.js, so the age here is the one the booking page and the
+    // Book Therapy screen show - this used to do its own `new Date(dob)`, which
+    // reads a bare date as UTC midnight and is a day out for anyone east of
+    // London in the early hours.
     fmtAge(dob) {
-        if (!dob) {
-            return "";
-        }
-        const d = new Date(dob);
-        if (isNaN(d.getTime())) {
-            return "";
-        }
-        const now = new Date();
-        let age = now.getFullYear() - d.getFullYear();
-        const m = now.getMonth() - d.getMonth();
-        if (m < 0 || (m === 0 && now.getDate() < d.getDate())) {
-            age--;
-        }
-        return age >= 0 && age < 130 ? String(age) : "";
+        const age = ageFromDob(dob);
+        return age === null || age < 0 ? "" : String(age);
     }
     capGender(g) {
         return g ? g.charAt(0).toUpperCase() + g.slice(1) : "";
@@ -125,7 +140,12 @@ export class SessionPassDialog extends Component {
         try {
             // Send the session to reception for approval (Orders -> Sessions ->
             // Pending). It's counted only when marked Done, like the tablet.
-            const res = await this.orm.call("spa.session.pass", "pos_redeem_session", [[pass.id]]);
+            // The assignee rides along so that Done — which refuses an
+            // unassigned session — is ready to press when the customer leaves.
+            const res = await this.orm.call("spa.session.pass", "pos_redeem_session", [
+                [pass.id],
+                this.state.assignee[pass.id] || false,
+            ]);
             if (res && res.error === "no_sessions_left") {
                 this.state.error = "No sessions left on this package.";
             } else if (res && res.error) {

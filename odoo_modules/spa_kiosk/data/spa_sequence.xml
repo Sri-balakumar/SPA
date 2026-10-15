@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- noupdate: without it every `-u spa_kiosk` rewrites the prefix and
+         padding of a sequence that is already numbering live bookings. -->
+    <data noupdate="1">
     <record id="seq_spa_booking" model="ir.sequence">
         <field name="name">Spa Booking Token</field>
         <field name="code">spa.booking</field>
         <field name="prefix">SPA-</field>
         <field name="padding">4</field>
     </record>
+    </data>
 </odoo>

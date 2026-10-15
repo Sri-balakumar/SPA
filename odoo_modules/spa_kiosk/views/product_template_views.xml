@@ -8,6 +8,11 @@
             <xpath expr="//notebook" position="inside">
                 <page string="Questions" name="spa_questions"
                       groups="spa_kiosk.group_spa_manager">
+                    <group>
+                        <group>
+                            <field name="spa_duration"/>
+                        </group>
+                    </group>
                     <div class="text-muted mb-2">
                         These are the questions the customer is actually asked for
                         this service. They are managed on the therapy, not here.

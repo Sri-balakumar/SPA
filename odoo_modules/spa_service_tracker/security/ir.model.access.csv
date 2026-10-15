@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_spa_service_session_receptionist,spa.service.session receptionist,model_spa_service_session,spa_kiosk.group_spa_receptionist,1,0,0,0
+access_spa_service_session_pos_manager,spa.service.session pos manager,model_spa_service_session,point_of_sale.group_pos_manager,1,0,0,0

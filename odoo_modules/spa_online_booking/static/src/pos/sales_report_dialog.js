@@ -1,5 +1,6 @@
 import { Component, useState } from "@odoo/owl";
 import { Dialog } from "@web/core/dialog/dialog";
+import { usePos } from "@point_of_sale/app/hooks/pos_hook";
 
 const { DateTime } = luxon;
 
@@ -11,8 +12,24 @@ export class SalesReportDialog extends Component {
     static props = ["close", "configId?"];
 
     setup() {
-        const today = DateTime.now().toFormat("yyyy-MM-dd");
+        this.pos = usePos();
+        const today = this.now().toFormat("yyyy-MM-dd");
         this.state = useState({ from: today, to: today });
+    }
+
+    // "Now" on the COMPANY's clock, from its country (res_company
+    // .spa_display_tz). Without it, "Today" pressed at 11 PM in Muscat asks for
+    // the next day's report, because the browser running the till is in India.
+    // Falls back to the browser zone when the field is missing (a POS that
+    // loaded before it existed keeps the old company copy in IndexedDB).
+    now() {
+        const tz = this.pos?.config?.company_id?.spa_display_tz;
+        const n = DateTime.now();
+        if (!tz) {
+            return n;
+        }
+        const zoned = n.setZone(tz);
+        return zoned.isValid ? zoned : n;
     }
 
     open(from, to, title) {
@@ -25,27 +42,27 @@ export class SalesReportDialog extends Component {
     }
 
     today() {
-        const d = DateTime.now().toFormat("yyyy-MM-dd");
+        const d = this.now().toFormat("yyyy-MM-dd");
         this.open(d, d, "DAILY SALE REPORT");
     }
     yesterday() {
-        const d = DateTime.now().minus({ days: 1 }).toFormat("yyyy-MM-dd");
+        const d = this.now().minus({ days: 1 }).toFormat("yyyy-MM-dd");
         this.open(d, d, "DAILY SALE REPORT");
     }
     thisWeek() {
-        const n = DateTime.now();
+        const n = this.now();
         this.open(n.startOf("week").toFormat("yyyy-MM-dd"), n.endOf("week").toFormat("yyyy-MM-dd"), "WEEKLY SALE REPORT");
     }
     lastWeek() {
-        const n = DateTime.now().minus({ weeks: 1 });
+        const n = this.now().minus({ weeks: 1 });
         this.open(n.startOf("week").toFormat("yyyy-MM-dd"), n.endOf("week").toFormat("yyyy-MM-dd"), "WEEKLY SALE REPORT");
     }
     thisMonth() {
-        const n = DateTime.now();
+        const n = this.now();
         this.open(n.startOf("month").toFormat("yyyy-MM-dd"), n.endOf("month").toFormat("yyyy-MM-dd"), "MONTHLY SALE REPORT");
     }
     lastMonth() {
-        const n = DateTime.now().minus({ months: 1 });
+        const n = this.now().minus({ months: 1 });
         this.open(n.startOf("month").toFormat("yyyy-MM-dd"), n.endOf("month").toFormat("yyyy-MM-dd"), "MONTHLY SALE REPORT");
     }
     custom() {

@@ -26,6 +26,27 @@
             <xpath expr="//filter[@name='status']" position="after">
                 <filter string="Spa Channel" name="spa_channel"
                         domain="[]" context="{'group_by': 'spa_channel'}"/>
+                <!-- Find the orders nobody has been put against yet.
+                     Deliberately a filter and not a constraint: assigning is a
+                     reception habit, not a gate on taking money. -->
+                <filter string="Unassigned Sessions" name="spa_unassigned"
+                        domain="[('lines.spa_therapist_id', '=', False)]"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Who performed each session, on the back-office order form. `groups` on
+         a view field node is presentation only - it never touches ORM access -
+         so this hides the column from a cashier while pos.order.line.write()
+         stays the thing that actually refuses the change. -->
+    <record id="view_pos_order_form_spa_assignee" model="ir.ui.view">
+        <field name="name">pos.order.form.spa.assignee</field>
+        <field name="model">pos.order</field>
+        <field name="inherit_id" ref="point_of_sale.view_pos_pos_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='lines']/list/field[@name='qty']" position="after">
+                <field name="spa_therapist_id" optional="show"
+                       groups="spa_kiosk.group_spa_receptionist,base.group_system"/>
             </xpath>
         </field>
     </record>

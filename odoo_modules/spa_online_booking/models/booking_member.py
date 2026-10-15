@@ -3,6 +3,7 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
+from .date_of_birth import check_date_of_birth
 from .package_price import spa_headcount
 
 
@@ -71,12 +72,21 @@ class SpaBookingMember(models.Model):
 
     @api.depends('date_of_birth')
     def _compute_age(self):
-        today = fields.Date.context_today(self)
+        # The salon's day, not the reader's - res_company._spa_today.
+        today = self.env.company._spa_today()
         for member in self:
             if member.date_of_birth and member.date_of_birth <= today:
                 member.age = relativedelta(today, member.date_of_birth).years
             else:
                 member.age = 0
+
+    @api.constrains('date_of_birth')
+    def _check_date_of_birth(self):
+        # Person 2 of a family booking gets the same check as person 1 - the
+        # per-person form is exactly where a stray year goes unnoticed.
+        for member in self:
+            if member.date_of_birth:
+                check_date_of_birth(member.date_of_birth, self.env)
 
     @api.constrains('booking_id', 'sequence')
     def _check_booking_headcount(self):

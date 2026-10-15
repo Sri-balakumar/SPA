@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- PACKAGES: the per-ORDER answer. One row per package bought, showing how
+         many sessions it holds, how many have been taken and how many are
+         still owed. The Sessions report next door has one row per session and
+         so can never say "this order has 9, three are used" - summing a
+         pack's totals across its own session rows would multiply them. -->
+    <record id="view_spa_pass_tracker_list" model="ir.ui.view">
+        <field name="name">spa.session.pass.tracker.list</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <list string="Packages" create="false" edit="false" delete="false"
+                  sample="1" decoration-muted="state == 'completed'">
+                <field name="purchase_date"/>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="pos_order_id" string="Order"/>
+                <field name="spa_assignee_names" string="Assignees"/>
+                <field name="channel" optional="hide"/>
+                <field name="sessions_total" sum="Total"/>
+                <field name="sessions_used" sum="Taken"/>
+                <field name="sessions_left" sum="Remaining" decoration-bf="1"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'active'"
+                       decoration-muted="state == 'completed'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- DETAIL for one package: who bought it, how much of it is used, which
+         order paid for it, and every visit taken off it with the person who
+         gave each. Read-only — this is the reporting view of a pass; editing
+         still happens on spa_online_booking's own Session Passes form. -->
+    <record id="view_spa_pass_tracker_form" model="ir.ui.view">
+        <field name="name">spa.session.pass.tracker.form</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <form string="Package" create="false" edit="false" delete="false">
+                <header>
+                    <button name="action_print_pass_invoice" type="object"
+                            string="Print Invoice" class="btn-primary"
+                            icon="fa-file-pdf-o"
+                            invisible="not tracker_invoice_id"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="active,completed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                        <h3><field name="product_tmpl_id" readonly="1"/></h3>
+                    </div>
+                    <group>
+                        <group string="Package">
+                            <field name="sessions_total" readonly="1"/>
+                            <field name="sessions_used" readonly="1"/>
+                            <field name="sessions_left" readonly="1"/>
+                            <field name="spa_assignee_names" string="Assignees"
+                                   readonly="1"/>
+                            <field name="channel" readonly="1"/>
+                            <field name="purchase_date" readonly="1"/>
+                        </group>
+                        <group string="Customer">
+                            <field name="partner_id" readonly="1"/>
+                            <field name="tracker_customer_id" readonly="1"/>
+                            <field name="tracker_phone" readonly="1"/>
+                            <field name="tracker_whatsapp" readonly="1"/>
+                            <field name="tracker_email" readonly="1"/>
+                            <field name="tracker_dob" readonly="1"/>
+                            <field name="tracker_gender" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Order &amp; Invoice">
+                        <field name="pos_order_id" readonly="1"/>
+                        <field name="tracker_invoice_id" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Sessions Taken" name="uses">
+                            <field name="use_ids" readonly="1">
+                                <list create="false" delete="false">
+                                    <field name="date"/>
+                                    <field name="spa_therapist_id" string="Assignee"/>
+                                    <field name="user_id" string="Recorded By"/>
+                                    <field name="note"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Appointments" name="bookings">
+                            <field name="booking_ids" readonly="1">
+                                <list create="false" delete="false">
+                                    <field name="name"/>
+                                    <field name="slot_datetime"/>
+                                    <field name="spa_therapist_id" string="Assignee"/>
+                                    <field name="state"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_spa_pass_tracker_pivot" model="ir.ui.view">
+        <field name="name">spa.session.pass.tracker.pivot</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <pivot string="Packages" sample="1">
+                <field name="partner_id" type="row"/>
+                <field name="sessions_total" type="measure"/>
+                <field name="sessions_used" type="measure"/>
+                <field name="sessions_left" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_spa_pass_tracker_search" model="ir.ui.view">
+        <field name="name">spa.session.pass.tracker.search</field>
+        <field name="model">spa.session.pass</field>
+        <field name="arch" type="xml">
+            <search string="Packages">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_tmpl_id"/>
+                <field name="pos_order_id" string="Order"/>
+                <filter name="f_active" string="Active"
+                        domain="[('state', '=', 'active')]"/>
+                <filter name="f_completed" string="Fully Used"
+                        domain="[('state', '=', 'completed')]"/>
+                <separator/>
+                <filter name="f_untouched" string="Nothing Taken Yet"
+                        domain="[('sessions_used', '=', 0)]"/>
+                <separator/>
+                <!-- Same dynamic filter as the Sessions report: today, month,
+                     quarter, year, or any custom range with comparison. -->
+                <filter name="f_date" string="Purchase Date" date="purchase_date"/>
+                <group>
+                    <filter name="g_customer" string="Customer"
+                            context="{'group_by': 'partner_id'}"/>
+                    <filter name="g_package" string="Package"
+                            context="{'group_by': 'product_tmpl_id'}"/>
+                    <filter name="g_order" string="Order"
+                            context="{'group_by': 'pos_order_id'}"/>
+                    <filter name="g_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="g_channel" string="Channel"
+                            context="{'group_by': 'channel'}"/>
+                    <filter name="g_month" string="Purchase Month"
+                            context="{'group_by': 'purchase_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_spa_pass_tracker" model="ir.actions.act_window">
+        <field name="name">Packages — Sessions Taken</field>
+        <field name="res_model">spa.session.pass</field>
+        <field name="view_mode">list,pivot,form</field>
+        <field name="search_view_id" ref="view_spa_pass_tracker_search"/>
+        <!-- Bound EXPLICITLY. spa_online_booking already ships a list view for
+             spa.session.pass at the same default priority (16), so an action
+             that only says view_mode="list" gets whichever has the lower id -
+             which is theirs, without the Assignees or Order columns. This is
+             why the report first opened looking like the Session Passes list. -->
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'list',  'view_id': ref('view_spa_pass_tracker_list')}),
+            (0, 0, {'view_mode': 'pivot', 'view_id': ref('view_spa_pass_tracker_pivot')}),
+            (0, 0, {'view_mode': 'form',  'view_id': ref('view_spa_pass_tracker_form')})]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No packages yet</p>
+            <p>Every multi-session package a customer has bought, with how many
+               sessions it holds, how many have been taken and how many are
+               still owed. Open one to see each visit and who gave it.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_spa_pass_tracker"
+              name="Packages — Sessions Taken"
+              parent="menu_spa_service_tracker_root"
+              action="action_spa_pass_tracker"
+              sequence="30"/>
+
+</odoo>

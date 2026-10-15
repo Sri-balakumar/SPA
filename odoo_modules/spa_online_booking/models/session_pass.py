@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from odoo import api, fields, models
+from odoo import _, api, fields, models
 
 
 class SpaSessionPass(models.Model):
@@ -37,10 +37,34 @@ class SpaSessionPass(models.Model):
     booking_ids = fields.One2many(
         'spa.booking', 'session_pass_id', string='Scheduled Sessions')
 
+    # Everyone who has given a session off this pass, plus whoever its
+    # scheduled sessions are booked with. Not stored: it is read by the POS
+    # Customer Details list through searchRead, which computes it on the fly,
+    # and storing it would need depends on two whole one2manys.
+    spa_assignee_names = fields.Char(
+        string='Assignees', compute='_compute_assignee_names',
+        help="Staff who have given, or are booked to give, the sessions on "
+             "this pass.")
+
     @api.depends('sessions_total', 'sessions_used')
     def _compute_left(self):
         for rec in self:
             rec.sessions_left = max((rec.sessions_total or 0) - (rec.sessions_used or 0), 0)
+
+    @api.depends('use_ids.spa_therapist_id', 'booking_ids.spa_therapist_id')
+    def _compute_assignee_names(self):
+        for rec in self:
+            # dict.fromkeys, not a set: reception reads this list and the order
+            # it was worked in is more useful than an arbitrary one.
+            names = list(dict.fromkeys(
+                [name for name in rec.use_ids.mapped('spa_therapist_id.name') if name]
+                + [name for name in rec.booking_ids.mapped('spa_therapist_id.name') if name]
+            ))
+            # "None" rather than an empty cell: a blank in a report reads as
+            # "not loaded" or "not applicable", when what it actually means is
+            # that nobody has been put against a single session on this pack -
+            # which is precisely what the report is for.
+            rec.spa_assignee_names = ', '.join(names) or _("None")
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -50,9 +74,14 @@ class SpaSessionPass(models.Model):
                     'spa.session.pass') or 'PASS'
         return super().create(vals_list)
 
-    def action_use_session(self, note=False):
+    def action_use_session(self, note=False, assignee_id=False):
         """Redeem one session (a visit). Logs it and completes the pass when
-        the balance reaches zero."""
+        the balance reaches zero.
+
+        `assignee_id` is the member of staff who gave the session. Optional:
+        the back-office "Use a Session" button passes nothing, and a session
+        is never refused for want of an assignee.
+        """
         for rec in self:
             if rec.sessions_left <= 0:
                 continue
@@ -60,6 +89,7 @@ class SpaSessionPass(models.Model):
             self.env['spa.session.pass.use'].create({
                 'pass_id': rec.id,
                 'note': note or '',
+                'spa_therapist_id': assignee_id or False,
             })
             if rec.sessions_left <= 0:
                 rec.state = 'completed'
@@ -108,8 +138,13 @@ class SpaSessionPass(models.Model):
             'slot': fields.Datetime.to_string(slot_dt),
         }
 
-    def pos_redeem_session(self):
+    def pos_redeem_session(self, assignee_id=False):
         """POS 'Redeem' — send a prepaid session to reception for approval.
+
+        `assignee_id` is the member of staff taking the customer, chosen in the
+        Redeem dialog. It rides onto the pending booking, so the Sessions tab
+        shows it already filled in and "Session Done" - which refuses an
+        unassigned session - can be pressed straight away.
 
         Instead of counting the session immediately, this creates a PENDING
         booking linked to this pass (and to the pass's OWN customer), so it
@@ -123,9 +158,12 @@ class SpaSessionPass(models.Model):
             return {'error': 'no_sessions_left'}
         partner = pass_rec.partner_id
         tmpl = pass_rec.product_tmpl_id
-        # "Now" as local wall-clock (slot_datetime is stored naive/local).
-        now = fields.Datetime.context_timestamp(
-            pass_rec, fields.Datetime.now()).replace(tzinfo=None)
+        # "Now" as local wall-clock (slot_datetime is stored naive/local),
+        # on the COMPANY's clock rather than the reader's: a receptionist in
+        # India redeeming a session for an Oman client must not stamp IST wall
+        # clock into the column every other appointment fills with Muscat time.
+        company = pass_rec.company_id or pass_rec.env.company
+        now = company._spa_localize(fields.Datetime.now()).replace(tzinfo=None)
         vals = {
             'partner_id': partner.id,
             'partner_name': partner.name,
@@ -137,6 +175,11 @@ class SpaSessionPass(models.Model):
             'session_pass_id': pass_rec.id,
             'company_id': pass_rec.company_id.id,
         }
+        # Only reception and the administrator may name the person. Same rule
+        # the order lines and the Approve button are held to.
+        from .spa_assignee import spa_can_assign
+        if assignee_id and spa_can_assign(self.env):
+            vals['spa_therapist_id'] = assignee_id
         if tmpl:
             vals['product_ids'] = [(6, 0, tmpl.ids)]
             vals['product_id'] = tmpl.id
@@ -150,12 +193,18 @@ class SpaSessionPass(models.Model):
 
     # ---- POS "Customer Details": per-service Q&A + full report ----------
     def _spa_fmt_dt(self, dt, from_utc=True):
-        """Datetime -> '08 Mar 2026, 9:30 AM' in the user's timezone. Pass
-        from_utc=False for slot_datetime, stored as local wall clock."""
+        """Datetime -> '08 Mar 2026, 9:30 AM' on the COMPANY's clock - the
+        client's country, not the reader's, so one order reads the same from
+        Muscat and from Chennai. Pass from_utc=False for slot_datetime, which
+        is already stored as the client's local wall clock.
+
+        This is the single formatter behind every date on POS -> Customer
+        Details, so it is the one place the whole dialog is fixed.
+        """
         if not dt:
             return ''
         if from_utc:
-            dt = fields.Datetime.context_timestamp(self, dt)
+            dt = self.env.company._spa_localize(dt)
         return '%s, %s' % (dt.strftime('%d %b %Y'),
                            dt.strftime('%I:%M %p').lstrip('0'))
 
@@ -420,6 +469,7 @@ class SpaSessionPass(models.Model):
                 'total': line.price_subtotal_incl or 0.0,
                 'state_label': 'Paid' if due <= 0 else 'Payment due',
                 'is_paid': due <= 0,
+                'assignee': line.spa_therapist_id.name or '',
             }))
 
         # bookings that never became a receipt - the visit is still owed
@@ -447,6 +497,7 @@ class SpaSessionPass(models.Model):
                 'total': booking.price or 0.0,
                 'state_label': labels.get(booking.state, booking.state),
                 'is_paid': booking.state == 'paid',
+                'assignee': booking.spa_therapist_id.name or '',
             }))
 
         rows.sort(key=lambda r: r[0], reverse=True)
@@ -517,6 +568,8 @@ class SpaSessionPass(models.Model):
                     'status_label': 'Completed',
                     'date': ghost._spa_fmt_dt(order.date_order),
                     'note': order.pos_reference or order.name or '',
+                    # The line IS the session here, so its assignee is the one.
+                    'assignee': (line.spa_therapist_id.name or '') if line else '',
                     'by': '',
                     'value': (line.price_subtotal_incl or 0.0) if line
                              else data['amount_total'],
@@ -546,6 +599,9 @@ class SpaSessionPass(models.Model):
                     'date': (ghost._spa_fmt_dt(booking.slot_datetime, from_utc=False)
                              if booking else ''),
                     'note': booking.name if booking else '',
+                    # Booked but not billed: the booking is the only record.
+                    'assignee': (booking.spa_therapist_id.name
+                                 if booking else ''),
                     'by': '',
                     'value': price,
                 }],
@@ -621,6 +677,12 @@ class SpaSessionPass(models.Model):
                     'status_label': 'Completed',
                     'date': rec._spa_fmt_dt(use.date),
                     'note': use.note or '',
+                    # `by` is whoever was logged in when the session was
+                    # counted - reception, normally. `assignee` is who gave it.
+                    # Fall back to `by` for the rows recorded before assignees
+                    # existed, so an old pass still names somebody.
+                    'assignee': (use.spa_therapist_id.name
+                                 or use.user_id.name or ''),
                     'by': use.user_id.name or '',
                     'value': per_session,
                 })
@@ -634,6 +696,9 @@ class SpaSessionPass(models.Model):
                     'date': (rec._spa_fmt_dt(booking.slot_datetime, from_utc=False)
                              if booking else ''),
                     'note': booking.name if booking else '',
+                    # A scheduled session already knows who it is booked with.
+                    'assignee': (booking.spa_therapist_id.name
+                                 if booking else ''),
                     'by': '',
                     'value': per_session,
                 })

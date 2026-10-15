@@ -3,11 +3,16 @@ import { usePos } from "@point_of_sale/app/hooks/pos_hook";
 import { debounce } from "@web/core/utils/timing";
 import { SpaSignatureField, newSigState } from "@spa_online_booking/pos/spa_signature";
 import {
-    COUNTRIES,
     DEFAULT_DIAL_CODE,
     joinPhone,
     splitPhone,
+    phoneError,
+    emailError,
+    dobError,
+    todayIso,
+    resolveMessage,
 } from "@spa_online_booking/pos/phone_country";
+import { PhoneField } from "@spa_online_booking/pos/phone_field";
 
 // Full-screen (inline) therapy booking, shown in the ProductScreen when the
 // order is empty. Same flow as the Book Therapy dialog — Select Therapy ->
@@ -15,13 +20,12 @@ import {
 // (after which the normal cart/Payment shows, because the order isn't empty).
 export class TherapyScreen extends Component {
     static template = "spa_online_booking.TherapyScreen";
-    static components = { SpaSignatureField };
+    static components = { SpaSignatureField, PhoneField };
     static props = {};
 
     setup() {
         this.pos = usePos();
         this.orm = this.env.services.orm;
-        this.countries = COUNTRIES;
         this.state = useState({
             screen: "select",
             pkgView: "grid",
@@ -53,7 +57,9 @@ export class TherapyScreen extends Component {
             memberPhone: "",
             // Which Individual / Family tab is showing. Reset when a therapy is
             // opened, so a new one never inherits a family size from the last.
-            memberType: "individual",
+            // Set from the payload once it loads (see openTherapy); there
+            // is no base key to read before then.
+            memberType: null,
             memberTypes: [],
             packageNote: "",
             questions: [],
@@ -72,8 +78,11 @@ export class TherapyScreen extends Component {
             custWhatsapp: "",
             custWaSame: true,
             custEmail: "",
-            ccOpen: false,
-            waCcOpen: false,
+            // One message per field, keyed by field name ("phone", "dob", ...).
+            // Painted under the field it belongs to and refreshed as staff type,
+            // so a wrong number is called out where it was entered rather than
+            // as a single line above the buttons once Continue is pressed.
+            fieldErrors: {},
             // Customer lookup by phone number. custPartnerId null = we will
             // create a new contact; custNewMode = staff explicitly chose to add
             // ANOTHER person on a number that already belongs to someone.
@@ -129,7 +138,12 @@ export class TherapyScreen extends Component {
         }
         const priced = new Set();
         for (const p of th.packages || []) {
-            for (const key of Object.keys(p.prices || { individual: 0 })) {
+            // No `|| { individual: 0 }` fallback here: `{}` is truthy, so it
+            // never fired, and it read as protection that was not there. The
+            // server guarantees the sales price is always in `prices` - under
+            // the base member type's code, or under 'individual' when the
+            // database has no member types at all.
+            for (const key of Object.keys(p.prices || {})) {
                 priced.add(key);
             }
         }
@@ -259,13 +273,15 @@ export class TherapyScreen extends Component {
         this.state.therapyId = id;
         this.state.packageId = null;
         this.state.addonIds = [];
-        // Start on the first tab this therapy actually has - defaulting blindly
-        // to "individual" would show an empty list for a family-only therapy.
-        this.state.memberType = "individual";
+        // Start on the base tab, or the first this therapy actually has -
+        // defaulting blindly to the base would show an empty list for a
+        // family-only therapy.
         const available = this.memberTypes;
-        if (available.length && !available.some((m) => m.key === "individual")) {
-            this.state.memberType = available[0].key;
-        }
+        const base = this.baseMemberKey;
+        this.state.memberType =
+            available.some((m) => m.key === base) || !available.length
+                ? base
+                : available[0].key;
     }
     // Radio-select a package (website style); a Continue button then advances.
     pick(id) {
@@ -277,11 +293,25 @@ export class TherapyScreen extends Component {
         this.state.packageId = id;
     }
     // ---- the people on this booking ----
-    // How many people the chosen package covers. Mirrors spa_headcount() on
-    // the server; the server re-checks, so a wrong number here cannot book a
-    // family for the wrong count - it is refused.
+    // The chosen type's record, as sent by /api/spa/therapies.
+    // The base (single-person) type's key, from the server. Not the string
+    // "individual": that is a CODE the spa can change, and hard-coding it
+    // here is the same mistake the headcount map was.
+    get baseMemberKey() {
+        const base = (this.state.memberTypes || []).find((m) => m.is_individual);
+        return base ? base.key : null;
+    }
+    get memberTypeInfo() {
+        return (this.state.memberTypes || []).find(
+            (m) => m.key === this.state.memberType
+        );
+    }
+    // How many people the chosen package covers. Read from the server, NOT
+    // a map in here: it used to be {family_2: 2, family_3: 3, family_4: 4},
+    // which had to be edited - in this file AND in the booking page - every
+    // time a member type was added. The server re-checks either way.
     get headcount() {
-        return { family_2: 2, family_3: 3, family_4: 4 }[this.state.memberType] || 1;
+        return this.memberTypeInfo?.headcount || 1;
     }
     get isFamily() {
         return this.headcount > 1;
@@ -331,6 +361,9 @@ export class TherapyScreen extends Component {
     _loadPerson(index) {
         const person = this.state.members[index] || this._blankPerson();
         this.state.memberIndex = index;
+        // Person 2 opens on a clean form - inheriting person 1's complaints
+        // would mark fields they have not been given a chance to fill in.
+        this._clearFieldErrors();
         this.state.custName = person.name || "";
         this.state.custDob = person.dob || "";
         this.state.custGender = person.gender || "";
@@ -400,23 +433,119 @@ export class TherapyScreen extends Component {
         }
         this.state.screen = "questions";
     }
-    // True when we know who this booking is for. Sets the error itself so both
-    // callers say the same thing.
+    // ---- details validation -------------------------------------------
+    // The fields this person has to get right, in the order they appear on
+    // screen - so "the first thing wrong" is also the topmost thing wrong.
+    //
+    // Only the lead is asked for numbers: they are the booking's contact and
+    // the one the order is billed to. Requiring one from every person would
+    // make it impossible to book for a child.
+    get _detailFields() {
+        if (!this.isLeadPerson) {
+            // Their plain phone box stays optional, but the email they DO give
+            // still has to be an address we can send anything to.
+            return ["name", "dob", "gender", "email"];
+        }
+        return ["phone", "name", "dob", "gender", "whatsapp", "email"];
+    }
+
+    // The latest date the date-of-birth picker may offer. Bound to the input's
+    // `max`, so the future is not merely rejected - it cannot be picked.
+    get maxDob() {
+        return todayIso();
+    }
+
+    // What is wrong with one field right now, as a sentence, or "" if nothing.
+    // Pure: it reads state and returns text, so both the live handlers and
+    // customerOk() can call it without side effects.
+    _fieldError(field) {
+        switch (field) {
+            case "phone":
+                return resolveMessage(
+                    phoneError(this.state.custDialCode, this.state.custMobile),
+                    this.state.custDialCode
+                );
+            case "whatsapp":
+                // Nothing to check while the box is ticked: the number is the
+                // phone number, and that has already been validated above.
+                if (this.state.custWaSame) {
+                    return "";
+                }
+                {
+                    const code = phoneError(
+                        this.state.custWaDialCode,
+                        this.state.custWhatsapp
+                    );
+                    // An empty box here has its own wording: the fix is either
+                    // to type a number or to tick the box, and "enter the
+                    // customer's phone number" says neither.
+                    return resolveMessage(
+                        code === "err_phone_required" ? "err_alt_number_required" : code,
+                        this.state.custWaDialCode
+                    );
+                }
+            case "name":
+                if ((this.state.custName || "").trim()) {
+                    return "";
+                }
+                return this.isFamily
+                    ? `Please enter the name of ${this.personLabel.toLowerCase()}.`
+                    : "Please enter the customer's name.";
+            case "dob":
+                return resolveMessage(dobError(this.state.custDob));
+            case "gender":
+                return this.state.custGender ? "" : resolveMessage("err_gender_required");
+            case "email":
+                // Optional - blank passes. Anything typed has to be a real
+                // address, or the customer silently loses their confirmation.
+                return resolveMessage(emailError(this.state.custEmail));
+            default:
+                return "";
+        }
+    }
+
+    // Re-check one field and repaint its message. Wired to the inputs so the
+    // complaint appears while the number is being typed.
+    checkField(field) {
+        const message = this._fieldError(field);
+        if (message) {
+            this.state.fieldErrors[field] = message;
+        } else {
+            delete this.state.fieldErrors[field];
+        }
+        // The summary line is only ever the CURRENT first problem; leaving the
+        // old one there contradicts the field that has just gone green.
+        if (this.state.error) {
+            const remaining = this._detailFields.find((f) => this.state.fieldErrors[f]);
+            this.state.error = remaining ? this.state.fieldErrors[remaining] : "";
+        }
+    }
+
+    // Ticking / unticking "same as phone number" changes which numbers exist,
+    // so both messages have to be re-derived.
+    onWaSameToggle() {
+        this.checkField("whatsapp");
+        this.checkField("phone");
+    }
+
+    _clearFieldErrors() {
+        this.state.fieldErrors = {};
+    }
+
+    // True when we know who this booking is for, and every detail we hold is
+    // usable. Sets the errors itself so both callers say the same thing.
     customerOk() {
-        // Only the lead needs a number: they are the booking's contact and the
-        // one the order is billed to. Requiring one from every person would
-        // make it impossible to book for a child.
-        if (this.isLeadPerson && !this.fullMobile) {
-            this.state.error = "Please enter the customer's phone number.";
-            return false;
+        this._clearFieldErrors();
+        let first = "";
+        for (const field of this._detailFields) {
+            const message = this._fieldError(field);
+            if (message) {
+                this.state.fieldErrors[field] = message;
+                first = first || message;
+            }
         }
-        if (!(this.state.custName || "").trim()) {
-            this.state.error = this.isFamily
-                ? `Please enter the name of ${this.personLabel.toLowerCase()}.`
-                : "Please enter the customer's name.";
-            return false;
-        }
-        return true;
+        this.state.error = first;
+        return !first;
     }
     // The therapy's disclaimer, or null when it has none - which is what makes
     // the step disappear rather than show an empty page. It rides along on
@@ -575,27 +704,26 @@ export class TherapyScreen extends Component {
     get fullWhatsapp() {
         return joinPhone(this.state.custWaDialCode, this.state.custWhatsapp);
     }
-    get selectedCountry() {
-        return (
-            this.countries.find((c) => c.code === this.state.custDialCode) ||
-            this.countries[0]
-        );
-    }
-    get selectedWaCountry() {
-        return (
-            this.countries.find((c) => c.code === this.state.custWaDialCode) ||
-            this.countries[0]
-        );
-    }
     selectCountry(code) {
         this.state.custDialCode = code;
-        this.state.ccOpen = false;
         // The country is part of the number, so the lookup has to run again.
         this.onPhoneInput();
     }
     selectWaCountry(code) {
         this.state.custWaDialCode = code;
-        this.state.waCcOpen = false;
+        // The country decides how many digits are expected, so switching it
+        // makes a number that was fine a moment ago wrong (and vice versa).
+        this.checkField("whatsapp");
+    }
+    // PhoneField hands the typed digits back rather than writing to state
+    // itself, so the screen stays the one place that owns the number.
+    setMobile(value) {
+        this.state.custMobile = value;
+        this.onPhoneInput();
+    }
+    setWhatsapp(value) {
+        this.state.custWhatsapp = value;
+        this.checkField("whatsapp");
     }
 
     // ---- customer lookup by phone -------------------------------------
@@ -647,11 +775,20 @@ export class TherapyScreen extends Component {
             this.state.custEmail = "";
             this.state.custWhatsapp = "";
             this.state.custWaSame = true;
+            // Those boxes are empty again because WE emptied them, not because
+            // staff left them blank - complaining about fields nobody has
+            // touched yet is noise.
+            for (const field of ["name", "dob", "gender", "email", "whatsapp"]) {
+                delete this.state.fieldErrors[field];
+            }
         }
         this.state.custPartnerId = null;
         this.state.custMatches = [];
         this.state.custLookupDone = false;
         this.state.custNewMode = false;
+        // Same call for a keystroke and for a country change - selectCountry()
+        // routes through here - so the length message tracks both.
+        this.checkField("phone");
         this.lookupCustomer();
     }
 
@@ -725,8 +862,34 @@ export class TherapyScreen extends Component {
         this.state.custWhatsapp = wa.local;
         this.state.custWaSame =
             !c.whatsapp || this.phoneTail(c.whatsapp) === this.phoneTail(c.phone);
+        // A contact saved before these rules existed can carry a malformed
+        // email or a nonsense date of birth. Flag those the moment they land on
+        // screen so reception fixes them here, but stay quiet about what the
+        // contact simply does not have yet - Continue will ask for that.
+        this._clearFieldErrors();
+        this._checkFilledOnly();
         // The signature is NOT touched here: it was given for this service a
         // moment ago, on the questions step, before we knew who this was.
+    }
+
+    // Validate only the fields that actually hold something, so loading a
+    // half-filled contact does not open with a wall of "required" messages.
+    _checkFilledOnly() {
+        const filled = {
+            name: this.state.custName,
+            dob: this.state.custDob,
+            gender: this.state.custGender,
+            email: this.state.custEmail,
+            whatsapp: this.state.custWaSame ? "" : this.state.custWhatsapp,
+        };
+        // `phone` is absent from the map on purpose: onPhoneInput has just
+        // validated it, and it is the one field we did not fill from the
+        // contact.
+        for (const field of this._detailFields) {
+            if (String(filled[field] || "").trim()) {
+                this.checkField(field);
+            }
+        }
     }
 
     get selectedCustomer() {
@@ -747,6 +910,12 @@ export class TherapyScreen extends Component {
         this.state.custEmail = "";
         this.state.custWhatsapp = "";
         this.state.custWaSame = true;
+        // A blank form for a new person: nothing has been typed yet, so there
+        // is nothing to complain about. The phone error (if any) stands - that
+        // number is the one thing we kept.
+        for (const field of ["name", "dob", "gender", "email", "whatsapp"]) {
+            delete this.state.fieldErrors[field];
+        }
     }
 
     chooseExistingInstead() {
@@ -807,7 +976,7 @@ export class TherapyScreen extends Component {
             members: [],
             memberIndex: 0,
             memberPhone: "",
-            memberType: "individual",
+            memberType: this.baseMemberKey,
             questions: [],
             questionsFor: null,
             answers: {},
@@ -820,8 +989,7 @@ export class TherapyScreen extends Component {
             custWhatsapp: "",
             custWaSame: true,
             custEmail: "",
-            ccOpen: false,
-            waCcOpen: false,
+            fieldErrors: {},
             custPartnerId: null,
             custMatches: [],
             custLookupBusy: false,
@@ -842,6 +1010,16 @@ export class TherapyScreen extends Component {
     async _addChosenAddons() {
         for (const addon of this.chosenAddons) {
             try {
+                // Same cache hazard as the package: the server force-loads
+                // add-ons at session start, which does nothing for one created
+                // since. Fetch it rather than throw on an undefined template.
+                if (!(await this._ensureProductLoaded(addon.id))) {
+                    console.error(
+                        "Therapy booking: add-on not available in this register",
+                        addon
+                    );
+                    continue;
+                }
                 // skipSpaQuestions because an add-on is an ordinary product -
                 // it has no therapy, so it has no questionnaire of its own.
                 await this.pos.addLineToCurrentOrder(
@@ -860,6 +1038,34 @@ export class TherapyScreen extends Component {
     closeBooking() {
         this.reset();
         this.pos.showTherapyBooking = false;
+    }
+
+    // Make sure the POS actually holds this product before a line is built from it.
+    //
+    // This wizard's catalogue comes from /api/spa/therapies, which is always
+    // current, while the POS product store is whatever it cached when the
+    // session opened. A package or add-on created since then is offered here but
+    // missing there, and core then dies on `productTemplate.taxes_id` because
+    // models["product.template"].get(id) returned undefined - a raw TypeError
+    // with nothing a cashier can act on.
+    //
+    // loadNewProducts() is core's own mechanism for pulling products into a
+    // running session (it brings pricelists and attributes along too), so fetch
+    // the missing one rather than fail on it.
+    async _ensureProductLoaded(tmplId) {
+        if (!tmplId) {
+            return false;
+        }
+        if (this.pos.models["product.template"].get(tmplId)) {
+            return true;
+        }
+        try {
+            await this.pos.loadNewProducts([["id", "=", tmplId]]);
+        } catch (e) {
+            console.error("Therapy booking: could not load product", tmplId, e);
+            return false;
+        }
+        return !!this.pos.models["product.template"].get(tmplId);
     }
 
     // Create or reuse the contact for the LEAD BOOKER and return its id, or
@@ -973,48 +1179,43 @@ export class TherapyScreen extends Component {
         order.spa_members_json = JSON.stringify(people);
     }
 
-    async _saveSignature(line, templateId, partnerId) {
-        const signed = this.state.members.filter((p) => p.signature);
-        if (!signed.length) {
+    // Park the signatures on the order; the server creates them once the line
+    // has a real id (see pos_order._spa_store_signatures_payload).
+    //
+    // This used to call orm.create() directly with `pos_order_line_id: line.id`.
+    // At this point the line is unsynced, so its `id` is a client-side UUID, and
+    // Postgres rejected the whole insert - "invalid input syntax for type
+    // integer". That is why every older signature row has a null line id. The
+    // line's `uuid` DOES survive the sync, so that is what is sent instead.
+    _saveSignature(order, line) {
+        if (!order || !line || !("spa_signatures_json" in order)) {
             return;
         }
-        try {
-            const ids = await this.orm.create(
-                "spa.service.signature",
-                this.state.members
-                    .map((person, index) => ({ person, index }))
-                    .filter(({ person }) => person.signature)
-                    .map(({ person, index }) => ({
-                        // Only the lead has a contact at this point; the rest
-                        // are attached to the booking, and the snapshot fields
-                        // below are what identify them on the waiver.
-                        partner_id: index === 0 ? partnerId || false : false,
-                        product_tmpl_id: templateId,
-                        pos_order_line_id: line.id,
-                        signature: person.signature,
-                        terms_accepted: !!person.terms,
-                        // The Client Information shown on the waiver, stored as
-                        // it stood when it was signed - see the model for why
-                        // it is not just read back off the contact.
-                        client_name: person.name || "",
-                        client_phone: person.phone || "",
-                        client_email: person.email || "",
-                        // The waiver wording as shown on the disclaimer step the
-                        // customer just read. Stored so a later edit to the
-                        // therapy cannot rewrite what they agreed to.
-                        disclaimer_title: (this.disclaimer && this.disclaimer.title) || "",
-                        disclaimer_body: (this.disclaimer && this.disclaimer.body) || "",
-                    }))
-            );
-            const list = Array.isArray(ids) ? ids : [ids];
-            line.spa_signature_ref = list[0];
-        } catch (e) {
-            // Same rule as the customer: don't swallow it. The package is on
-            // the order but nothing was signed for it, and staff must know.
-            console.warn("Therapy booking: could not save the signature", e);
-            this.state.error =
-                "The package was added, but the signature could not be saved.";
+        const entries = this.state.members
+            .map((person, index) => ({ person, index }))
+            .filter(({ person }) => person.signature)
+            .map(({ person, index }) => ({
+                line_uuid: line.uuid,
+                // Only the lead has a contact; the snapshot fields below are
+                // what identify everyone else on the waiver.
+                is_lead: index === 0,
+                signature: person.signature,
+                terms_accepted: !!person.terms,
+                // The Client Information as it stood when it was signed - see
+                // the model for why it is not read back off the contact.
+                client_name: person.name || "",
+                client_phone: person.phone || "",
+                client_email: person.email || "",
+                // The waiver wording as shown on the disclaimer step the
+                // customer just read. Stored so a later edit to the therapy
+                // cannot rewrite what they agreed to.
+                disclaimer_title: (this.disclaimer && this.disclaimer.title) || "",
+                disclaimer_body: (this.disclaimer && this.disclaimer.body) || "",
+            }));
+        if (!entries.length) {
+            return;
         }
+        order.spa_signatures_json = JSON.stringify(entries);
     }
 
     // A POS order has ONE customer. Reuse the open order only when it is empty
@@ -1103,8 +1304,15 @@ export class TherapyScreen extends Component {
             // (see point_of_sale pos_store.handlePriceUnit).
             const chosenPrice = this.pkg ? this.priceFor(this.pkg) : null;
             const lineVals = { product_tmpl_id: templateId };
-            if (chosenPrice !== null && this.state.memberType !== "individual") {
+            if (chosenPrice !== null && !this.memberTypeInfo?.is_individual) {
                 lineVals.price_unit = chosenPrice;
+            }
+            if (!(await this._ensureProductLoaded(templateId))) {
+                this.state.error =
+                    "This package is not available in this register yet. " +
+                    "Close and reopen the POS, then try again.";
+                this.state.busy = false;
+                return;
             }
             const line = await this.pos.addLineToCurrentOrder(
                 lineVals,
@@ -1139,7 +1347,7 @@ export class TherapyScreen extends Component {
                     (m) => m.key === this.state.memberType
                 );
                 line.full_product_name =
-                    chosen && this.state.memberType !== "individual"
+                    chosen && !chosen.is_individual
                         ? `${base} - ${chosen.label}`
                         : base;
             }
@@ -1153,20 +1361,32 @@ export class TherapyScreen extends Component {
                 }
             }
 
-            if (line && note) {
-                line.setNote(JSON.stringify([{ text: note, colorIndex: 0 }]));
-            }
-            if (line) {
-                const answers = this.buildAnswerNote();
-                if (answers) {
-                    line.setCustomerNote(answers);
+            // Bookkeeping, not selling. The package is on the order by now, so
+            // none of this is allowed to abort the sale - a throw here used to
+            // surface as "Could not add this package to the order" AFTER the
+            // customer had already been created, so every retry left another
+            // duplicate contact behind.
+            try {
+                if (line && note) {
+                    line.setNote(JSON.stringify([{ text: note, colorIndex: 0 }]));
                 }
-                await this._saveSignature(line, templateId, partnerId);
+                if (line) {
+                    const answers = this.buildAnswerNote();
+                    if (answers) {
+                        line.setCustomerNote(answers);
+                    }
+                    this._saveSignature(order, line);
+                }
+                if (order && "spa_channel" in order) {
+                    order.spa_channel = "web";
+                }
+                this._saveMembers(order);
+            } catch (e) {
+                console.error("Therapy booking: could not record the details", e);
+                this.state.error =
+                    "The package was added, but its details could not be recorded: " +
+                    (e && e.message ? e.message : e);
             }
-            if (order && "spa_channel" in order) {
-                order.spa_channel = "web";
-            }
-            this._saveMembers(order);
             // The extras ticked on the package screen, added after the package
             // so they sit under it on the receipt. Awaited before reset(),
             // which clears the very list this reads from.
@@ -1174,11 +1394,13 @@ export class TherapyScreen extends Component {
             this.reset();
             this.pos.showTherapyBooking = false;
         } catch (e) {
-            // Log it: the message shown to staff is deliberately plain, but
-            // discarding `e` left nothing to diagnose from. Same rule
-            // _saveSignature already follows a few lines up.
+            // Show the real error, not just a generic sentence: without it the
+            // only copy of the exception was in the browser console, which is
+            // no use when the person hitting it is at the till.
             console.error("Therapy booking: could not add the package", e);
-            this.state.error = "Could not add this package to the order.";
+            this.state.error =
+                "Could not add this package to the order: " +
+                (e && e.message ? e.message : e);
             this.state.busy = false;
         }
     }

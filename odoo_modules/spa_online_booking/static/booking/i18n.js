@@ -134,6 +134,24 @@ window.i18n = (() => {
       err_phone_invalid: 'Please enter a valid phone number, including the country code.',
       err_submit_failed: 'We could not submit your booking. Please check your details and try again.',
       err_already_booked: 'You already have a booking for this date. Please contact the spa to change it.',
+
+      // Per-field messages on the details screen. The keys are the codes
+      // spa_validation.js returns - the same file the POS validates with, so a
+      // rule only ever has to be written once. {hint} becomes "10 digits" and
+      // {country} the country name of whichever code is selected.
+      err_phone_required: 'Please enter your WhatsApp number.',
+      err_phone_length: 'Enter {hint} digits for {country}.',
+      err_phone_prefix: 'A mobile number for {country} starts with {prefixes}.',
+      err_phone_exchange: 'After the area code, the next three digits must also start with 2-9.',
+      err_phone_not_mobile: 'That looks like a landline. Please give a mobile number we can reach you on WhatsApp.',
+      err_alt_number_required: 'Please enter your mobile number, or tick the box above.',
+      err_name_required: 'Please enter your full name.',
+      err_email_invalid: 'Enter a valid email address, like name@example.com.',
+      err_dob_required: 'Please enter your date of birth.',
+      err_dob_invalid: 'That date of birth is not a real date.',
+      err_dob_future: 'Your date of birth cannot be in the future.',
+      err_dob_too_old: 'Please check the year of birth.',
+      err_gender_required: 'Please select a gender.',
     },
     ar: {
       page_title: 'احجز زيارتك',
@@ -255,6 +273,21 @@ window.i18n = (() => {
       err_phone_invalid: 'يرجى إدخال رقم هاتف صالح مع رمز الدولة.',
       err_submit_failed: 'تعذّر إرسال حجزك. يرجى التحقق من بياناتك والمحاولة مرة أخرى.',
       err_already_booked: 'لديك حجز بالفعل في هذا التاريخ. يرجى التواصل مع المركز لتغييره.',
+
+      // رسائل التحقق لكل حقل - نفس مفاتيح spa_validation.js
+      err_phone_required: 'يرجى إدخال رقم واتساب.',
+      err_phone_length: 'يرجى إدخال {hint} أرقام لـ {country}.',
+      err_phone_prefix: 'رقم الجوال في {country} يبدأ بـ {prefixes}.',
+      err_phone_exchange: 'بعد رمز المنطقة، يجب أن تبدأ الأرقام الثلاثة التالية أيضًا بـ 2-9.',
+      err_phone_not_mobile: 'يبدو أن هذا رقم أرضي. يرجى إدخال رقم جوال يمكننا التواصل معك عليه عبر واتساب.',
+      err_alt_number_required: 'يرجى إدخال رقم جوالك، أو تحديد المربع أعلاه.',
+      err_name_required: 'يرجى إدخال الاسم الكامل.',
+      err_email_invalid: 'يرجى إدخال بريد إلكتروني صالح، مثل name@example.com.',
+      err_dob_required: 'يرجى إدخال تاريخ الميلاد.',
+      err_dob_invalid: 'تاريخ الميلاد هذا غير صحيح.',
+      err_dob_future: 'لا يمكن أن يكون تاريخ الميلاد في المستقبل.',
+      err_dob_too_old: 'يرجى التحقق من سنة الميلاد.',
+      err_gender_required: 'يرجى اختيار الجنس.',
     },
   };
 

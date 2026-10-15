@@ -177,6 +177,7 @@
           <input type="tel" id="fieldWhatsapp" autocomplete="tel" placeholder="9123 4567" required>
           <div class="pc__menu" role="listbox" hidden></div>
         </div>
+        <p class="field__err" id="errWhatsapp" hidden></p>
       </div>
 
       <!-- who this number belongs to. A number is often shared by a whole
@@ -195,10 +196,14 @@
       <label class="field">
         <span data-i18n="field_name">Full name</span>
         <input type="text" id="fieldName" autocomplete="name" required>
+        <p class="field__err" id="errName" hidden></p>
       </label>
       <label class="field">
         <span data-i18n="field_dob">Date of birth</span>
+        <!-- `max` is set from today's date at start-up, so the picker cannot
+             even offer a future day; the JS check catches a typed one. -->
         <input type="date" id="fieldDob" autocomplete="bday">
+        <p class="field__err" id="errDob" hidden></p>
       </label>
       <div class="field-row">
         <label class="field">
@@ -213,6 +218,7 @@
             <option value="female" data-i18n="gender_female">Female</option>
             <option value="other" data-i18n="gender_other">Other</option>
           </select>
+          <p class="field__err" id="errGender" hidden></p>
         </label>
       </div>
       <label class="checkbox-field js-lead-only">
@@ -229,6 +235,7 @@
           <input type="tel" id="fieldPhone" autocomplete="tel" placeholder="9123 4567" required>
           <div class="pc__menu" role="listbox" hidden></div>
         </div>
+        <p class="field__err" id="errPhone" hidden></p>
       </div>
       <!-- One plain optional number for persons 2+. Deliberately its own
            field: #fieldPhone belongs to the lead and the booking is contacted
@@ -241,6 +248,7 @@
         <span data-i18n="field_email">Email</span>
         <input type="email" id="fieldEmail" autocomplete="email"
                data-i18n-ph="email_ph" placeholder="name@example.com — optional">
+        <p class="field__err" id="errEmail" hidden></p>
       </label>
 
       <button type="button" class="btn btn--primary btn--block js-next" data-i18n="btn_continue">Continue</button>
@@ -287,6 +295,9 @@
 
 </div>
 
+<!-- The shared rules first: script.js builds the country pickers at parse time
+     and needs SpaValidate.COUNTRIES to already exist. -->
+<script src="/spa_online_booking/static/booking/spa_validation.js?v=__SPA_ASSET_V__"></script>
 <script src="/spa_online_booking/static/booking/i18n.js?v=__SPA_ASSET_V__"></script>
 <script src="/spa_online_booking/static/booking/script.js?v=__SPA_ASSET_V__"></script>
 </body>

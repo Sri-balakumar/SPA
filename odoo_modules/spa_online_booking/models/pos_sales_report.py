@@ -33,7 +33,12 @@ class PosConfigSalesReport(models.Model):
         (paid / done / invoiced) are counted; negative-total orders are summed
         into the Refund figure."""
         env = self.env
-        tz = pytz.timezone(env.context.get('tz') or env.user.tz or 'UTC')
+        config = env['pos.config'].browse(config_id).exists() if config_id else None
+        company = (config.company_id if config else False) or env.company
+        # The company's zone, not the reader's: an 11 PM Muscat sale has to be
+        # grouped - and printed - on the day it was actually made, not pushed
+        # onto the next one because the person running the report is in India.
+        tz = company._spa_display_tz()
         d_from = datetime.strptime(date_from, '%Y-%m-%d').date()
         d_to = datetime.strptime(date_to, '%Y-%m-%d').date()
         utc_start = tz.localize(datetime.combine(d_from, time.min)).astimezone(
@@ -41,7 +46,6 @@ class PosConfigSalesReport(models.Model):
         utc_end = tz.localize(datetime.combine(d_to, time.max)).astimezone(
             pytz.UTC).replace(tzinfo=None)
 
-        config = env['pos.config'].browse(config_id).exists() if config_id else None
         domain = [
             ('date_order', '>=', fields.Datetime.to_string(utc_start)),
             ('date_order', '<=', fields.Datetime.to_string(utc_end)),
@@ -53,7 +57,7 @@ class PosConfigSalesReport(models.Model):
 
         days = {}
         for o in orders:
-            local = fields.Datetime.context_timestamp(o, o.date_order)
+            local = company._spa_localize(o.date_order)
             key = local.strftime('%Y-%m-%d')
             d = days.setdefault(key, {
                 'orders': 0, 'products': {}, 'payments': {},
@@ -67,9 +71,16 @@ class PosConfigSalesReport(models.Model):
                 d['refund'] += -o.amount_total
             for line in o.lines:
                 prod = line.product_id
-                p = d['products'].setdefault(prod.id, {
+                # Keyed by product AND assignee, so a therapy given by two
+                # people on the same day reports as two rows. Keying by product
+                # alone would fold them together and the Assignee column could
+                # only ever name whichever line was read first.
+                assignee = line.spa_therapist_id
+                key_p = (prod.id, assignee.id or 0)
+                p = d['products'].setdefault(key_p, {
                     'name': line.full_product_name or prod.display_name,
                     'barcode': prod.barcode or prod.default_code or '',
+                    'assignee': assignee.name or '',
                     'qty': 0.0, 'unit': line.price_unit, 'subtotal': 0.0,
                 })
                 p['qty'] += line.qty
@@ -88,6 +99,7 @@ class PosConfigSalesReport(models.Model):
                 'orders': d['orders'],
                 'products': [{
                     'name': p['name'], 'barcode': p['barcode'],
+                    'assignee': p['assignee'],
                     'qty': p['qty'], 'unit': p['unit'], 'subtotal': p['subtotal'],
                 } for p in d['products'].values()],
                 'payments': [{'method': k, 'amount': v} for k, v in d['payments'].items()],
@@ -95,7 +107,6 @@ class PosConfigSalesReport(models.Model):
                 'discount': d['discount'], 'total': d['total'],
             })
 
-        company = (config.company_id if config else False) or env.company
         summary = {
             'orders': sum(x['orders'] for x in day_list),
             'total_sales': sum(x['total'] for x in day_list),
@@ -109,8 +120,8 @@ class PosConfigSalesReport(models.Model):
             'period_from': d_from.strftime('%d/%m/%Y'),
             'period_to': d_to.strftime('%d/%m/%Y'),
             'pos_name': config.name if config else 'All POS',
-            'generated': fields.Datetime.context_timestamp(
-                env.user, fields.Datetime.now()).strftime('%d/%m/%Y %H:%M:%S'),
+            'generated': company._spa_localize(
+                fields.Datetime.now()).strftime('%d/%m/%Y %H:%M:%S'),
             'currency': company.currency_id.symbol or '',
             'summary': summary,
             'days': day_list,

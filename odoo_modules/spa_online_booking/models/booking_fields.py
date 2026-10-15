@@ -1,7 +1,8 @@
 from odoo import api, fields, models
 from odoo.exceptions import ValidationError
 
-from .package_price import SPA_MEMBER_TYPES
+from .date_of_birth import check_date_of_birth
+
 
 
 class SpaBookingOnlineFields(models.Model):
@@ -17,6 +18,21 @@ class SpaBookingOnlineFields(models.Model):
     # customers - and no way to rate-limit them.
     client_ip = fields.Char(string='Submitted From', readonly=True, index=True, copy=False)
     slot_datetime = fields.Datetime(string='Requested Slot')
+    # Where the appointment was BEFORE the last reschedule, so Remove on the POS
+    # order card can put it back. Empty means there is nothing to go back to and
+    # Remove cancels the appointment instead.
+    #
+    # Stored rather than derived: slot_datetime is not tracked, so there are no
+    # mail.tracking.value rows to read, and the only other record of the old date
+    # is the reschedule chatter line - which is translated, HTML and formatted to
+    # the minute on one side and the second on the other. Fine for the one-off
+    # backfill in migrations/19.0.11.8.0, wrong for a button. The undo also needs
+    # this value cheaply for its slot-collision check.
+    spa_prev_slot_datetime = fields.Datetime(
+        string='Previous Appointment', copy=False, readonly=True,
+        help="Where this appointment was before the last reschedule. Remove on "
+             "the POS order card puts it back here. Empty means there is "
+             "nothing to go back to, and Remove cancels the appointment.")
 
     # Personal details captured on the booking form (POS / website / tablet),
     # carried onto the customer contact when the booking is loaded.
@@ -78,8 +94,10 @@ class SpaBookingOnlineFields(models.Model):
     # Total price = sum of the selected services' list prices, read-only.
     # Which family size this booking was made for. Drives the price below, and
     # tells reception how many people to expect.
-    spa_member_type = fields.Selection(
-        SPA_MEMBER_TYPES, string='Member Type', default='individual')
+    spa_member_type = fields.Many2one(
+        'spa.member.type', string='Member Type',
+        ondelete='restrict', index=True,
+        default=lambda self: self.env['spa.member.type']._spa_base_type())
 
     # Optional extras chosen with the package. DELIBERATELY NOT in product_ids:
     # slot occupancy is matched with ('product_ids', 'in', ids) in
@@ -105,7 +123,7 @@ class SpaBookingOnlineFields(models.Model):
                  'spa_addon_ids', 'spa_addon_ids.list_price')
     def _compute_price(self):
         for rec in self:
-            member_type = rec.spa_member_type or 'individual'
+            member_type = rec.spa_member_type
             products = rec.product_ids or rec.product_id
             total = 0.0
             for product in products:
@@ -118,6 +136,17 @@ class SpaBookingOnlineFields(models.Model):
             # so a family booking pays for the extra once, not once per person.
             total += sum(rec.spa_addon_ids.mapped('list_price'))
             rec.price = total
+
+    @api.constrains('date_of_birth')
+    def _check_date_of_birth(self):
+        # The controllers check this too, and say so more politely - but the
+        # POS writes bookings straight through the ORM and never touches them.
+        # This is the one check every path goes through, so a birthday in 2029
+        # cannot reach the database from the till, the tablet, an import or a
+        # shell session either.
+        for rec in self:
+            if rec.date_of_birth:
+                check_date_of_birth(rec.date_of_birth, self.env)
 
     @api.constrains('product_ids', 'product_id')
     def _check_services(self):

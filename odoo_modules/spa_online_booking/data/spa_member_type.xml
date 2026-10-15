@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        NOT LOADED. This file is no longer in the manifest's data list - the
+        module seeds nothing on install any more.
+
+        It is kept because these four types are the fastest way to get member
+        pricing working again: Point of Sale > Configuration > Member Types,
+        or add this file back to the manifest for one upgrade and remove it.
+
+        Package prices require a member type (spa.package.price.member_type is
+        required, ondelete='restrict'), so until at least one non-individual
+        type exists no package pricing can be entered and prices fall back to
+        the product's list price.
+    -->
+    <!-- The four types that used to be a hard-coded Python list. Their CODES
+         are the strings already stored on every existing package price, order
+         line and booking, so seeding them under the same codes is what lets
+         the migration map old rows onto these records.
+
+         noupdate="1": once shipped these belong to the spa. Renaming
+         "Family 4" or changing what it covers must survive the next module
+         upgrade rather than being reset. -->
+    <data noupdate="1">
+
+        <record id="spa_member_type_individual" model="spa.member.type">
+            <field name="name">Individual</field>
+            <field name="code">individual</field>
+            <field name="people">1</field>
+            <!-- The base type: priced from the product's own Sales Price, so
+                 it never appears in a package's Family Prices table. -->
+            <field name="is_individual" eval="True"/>
+            <field name="sequence">1</field>
+        </record>
+
+        <record id="spa_member_type_family_2" model="spa.member.type">
+            <field name="name">Family 2</field>
+            <field name="code">family_2</field>
+            <field name="people">2</field>
+            <field name="sequence">2</field>
+        </record>
+
+        <record id="spa_member_type_family_3" model="spa.member.type">
+            <field name="name">Family 3</field>
+            <field name="code">family_3</field>
+            <field name="people">3</field>
+            <field name="sequence">3</field>
+        </record>
+
+        <record id="spa_member_type_family_4" model="spa.member.type">
+            <field name="name">Family 4</field>
+            <field name="code">family_4</field>
+            <field name="people">4</field>
+            <field name="sequence">4</field>
+        </record>
+
+    </data>
+</odoo>

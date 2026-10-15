@@ -1,5 +1,7 @@
 from odoo import api, fields, models
 
+from .date_of_birth import check_date_of_birth
+
 
 class ResPartner(models.Model):
     """Expose a customer's therapy session passes on their contact, so the
@@ -51,6 +53,16 @@ class ResPartner(models.Model):
         partners = super().create(vals_list)
         partners._spa_ensure_customer_id()
         return partners
+
+    @api.constrains('date_of_birth')
+    def _check_spa_date_of_birth(self):
+        # The contact is where the date of birth actually LANDS: the POS details
+        # step writes res.partner straight through the ORM, so without this the
+        # till can still store a birthday in 2029 no matter what the booking
+        # says. Only checked when one is set - most contacts have none.
+        for partner in self:
+            if partner.date_of_birth:
+                check_date_of_birth(partner.date_of_birth, self.env)
 
     spa_session_pass_ids = fields.One2many(
         'spa.session.pass', 'partner_id', string='Session Passes')

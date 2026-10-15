@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Lifted verbatim from send_link_dialog.xml so every class the POS
+         stylesheet already targets (sl-phone / sl-cc / sl-number / tp-bad)
+         keeps working untouched. The error line stays with the caller: each
+         screen wraps its fields differently and an extra div here would change
+         three layouts at once. -->
+    <t t-name="spa_online_booking.PhoneField">
+        <div class="sl-phone">
+            <div class="sl-cc" t-on-click="() => state.ccOpen = !state.ccOpen">
+                <span class="sl-flag" t-esc="selectedCountry.flag"/>
+                <span t-esc="selectedCountry.code"/>
+                <i class="fa fa-chevron-down sl-cc-chev"/>
+            </div>
+            <input type="tel" t-att-placeholder="placeholder"
+                   t-att-class="inputClass"
+                   t-att-value="props.value"
+                   t-on-input="onInput"
+                   t-on-keyup="onKeyup"/>
+            <div t-if="state.ccOpen" class="sl-cc-menu">
+                <div t-foreach="countries" t-as="c" t-key="c.code"
+                     class="sl-cc-opt" t-on-click="() => this.pick(c.code)">
+                    <span class="sl-flag" t-esc="c.flag"/>
+                    <span t-esc="c.name"/>
+                    <span class="sl-cc-code" t-esc="c.code"/>
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

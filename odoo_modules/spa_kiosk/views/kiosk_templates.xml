@@ -31,6 +31,9 @@
                         .btn { display: block; width: 100%; margin-top: 26px; padding: 18px;
                                font-size: 20px; font-weight: 700; color: #fff;
                                background: #1f6f5c; border: 0; border-radius: 12px; }
+                        .phone-row { display: flex; gap: 8px; }
+                        .phone-row select { width: auto; flex: 0 0 auto; font-size: 18px; }
+                        .err { margin: 6px 0 0; color: #b3261e; font-weight: 600; }
                         .back { display: inline-block; margin-bottom: 10px; color: #1f6f5c; }
                         .token { font-size: 42px; font-weight: 800; color: #1f6f5c;
                                  text-align: center; margin: 24px 0; }
@@ -77,12 +80,26 @@
                 <input type="hidden" name="service_id" t-att-value="service.id"/>
                 <input type="hidden" name="src" t-att-value="src"/>
 
+                <!-- Panel one: who they are and the questions. When the therapy
+                     has a disclaimer this becomes a page of its own, ended by
+                     Continue; with no disclaimer the form stays the single page
+                     it has always been and this div is just a wrapper. -->
+                <div id="kioskStep1">
+
                 <label>Your name *</label>
                 <input type="text" name="customer_name" required="required"/>
 
-                <label>Mobile number (with country code) *</label>
-                <input type="tel" name="mobile" required="required"
-                       placeholder="+968 9XXXXXXX"/>
+                <label>Mobile number *</label>
+                <!-- The country comes from the picker once the rules load. The
+                     picker starts hidden, so with no rules the field is the
+                     single box it has always been and the number is typed in
+                     full - see the script under the form. -->
+                <div class="phone-row">
+                    <select id="kioskDial" style="display: none"/>
+                    <input type="tel" name="mobile" id="kioskMobile" required="required"
+                           placeholder="+968 9XXXXXXX"/>
+                </div>
+                <p class="err" id="kioskMobileErr" style="display: none"/>
 
                 <!-- Dynamic questions of the selected service -->
                 <t t-foreach="questions" t-as="question">
@@ -137,19 +154,199 @@
                     </t>
                 </t>
 
-                <label>How would you like to pay? *</label>
-                <label class="opt">
-                    <input type="radio" name="payment_mode" value="offline"
-                           checked="checked"/>
-                    At the counter (cash / card)
-                </label>
-                <label class="opt">
-                    <input type="radio" name="payment_mode" value="online"/>
-                    Online (payment link on WhatsApp)
-                </label>
+                <!-- Continue only exists when there is a second page to go to. -->
+                <button class="btn" type="button" t-if="disclaimer"
+                        onclick="spaKioskNext()">Continue</button>
+                </div><!-- /kioskStep1 -->
 
-                <button class="btn" type="submit">Submit</button>
+                <!-- Panel two: the therapy's disclaimer, read after the
+                     questions, then how they want to pay. Both panels live in
+                     ONE form, so every answer still arrives in a single POST -
+                     no second route, no hidden-field plumbing, no second CSRF
+                     hop. -->
+                <div id="kioskStep2" t-if="disclaimer" style="display: none;">
+                    <h2 t-out="disclaimer['title']"/>
+                    <!-- The body is rich text from the Odoo editor, handed over
+                         as Markup by _spa_disclaimer_payload so t-out renders
+                         it rather than showing the tags. Safe because the field
+                         is sanitize=True. -->
+                    <div class="kiosk-disclaimer" t-out="disclaimer['body']"/>
+
+                    <!-- The waiver's "Client Information" blanks, copied from
+                         panel one by spaKioskNext rather than asked twice. -->
+                    <div class="kiosk-clientinfo">
+                        <h3>Client Information</h3>
+                        <div><span>Full Name</span> <b id="ciName">—</b></div>
+                        <div><span>Contact Number</span> <b id="ciMobile">—</b></div>
+                    </div>
+
+                    <label class="opt">
+                        <input type="checkbox" name="terms_accepted" value="1"
+                               required="required"/>
+                        I have read and agree to the above.
+                    </label>
+
+                    <label>How would you like to pay? *</label>
+                    <label class="opt">
+                        <input type="radio" name="payment_mode" value="offline"
+                               checked="checked"/>
+                        At the counter (cash / card)
+                    </label>
+                    <label class="opt">
+                        <input type="radio" name="payment_mode" value="online"/>
+                        Online (payment link on WhatsApp)
+                    </label>
+
+                    <button class="btn" type="submit">Submit</button>
+                    <button class="btn btn--ghost" type="button"
+                            onclick="spaKioskBack()">Back</button>
+                </div>
+
+                <!-- No disclaimer: pay and submit stay on the one page. -->
+                <t t-if="not disclaimer">
+                    <label>How would you like to pay? *</label>
+                    <label class="opt">
+                        <input type="radio" name="payment_mode" value="offline"
+                               checked="checked"/>
+                        At the counter (cash / card)
+                    </label>
+                    <label class="opt">
+                        <input type="radio" name="payment_mode" value="online"/>
+                        Online (payment link on WhatsApp)
+                    </label>
+
+                    <button class="btn" type="submit">Submit</button>
+                </t>
             </form>
+
+            <!-- The phone rules live in spa_online_booking (the booking page and
+                 the POS load the very same file), and that module depends on
+                 THIS one, not the other way round. So it is pulled in by URL and
+                 every use below is guarded: if it is not installed the script
+                 404s, window.SpaValidate stays undefined, and the form behaves
+                 exactly as it did before rather than breaking the kiosk. -->
+            <script src="/spa_online_booking/static/booking/spa_validation.js"></script>
+            <script>
+                // Deliberately outside the t-if below: a service with no
+                // disclaimer renders no other script at all, and half the
+                // services going unvalidated is how this was missed.
+                (function () {
+                    var V = window.SpaValidate;
+                    var dialEl = document.getElementById('kioskDial');
+                    var mobEl = document.getElementById('kioskMobile');
+                    var errEl = document.getElementById('kioskMobileErr');
+                    if (!V || !dialEl || !mobEl || !errEl) {
+                        return;
+                    }
+                    V.COUNTRIES.forEach(function (c) {
+                        var opt = document.createElement('option');
+                        opt.value = c.code;
+                        opt.textContent = c.flag + ' ' + c.code;
+                        dialEl.appendChild(opt);
+                    });
+                    dialEl.value = V.DEFAULT_DIAL_CODE;
+                    dialEl.style.display = '';
+
+                    function paintPlaceholder() {
+                        mobEl.placeholder = V.phoneExample(dialEl.value) || '';
+                    }
+                    function showError(message) {
+                        errEl.textContent = message || '';
+                        errEl.style.display = message ? '' : 'none';
+                    }
+                    paintPlaceholder();
+
+                    // What actually gets posted. Someone who types the country
+                    // code anyway must not end up with the picker's code stuck
+                    // on the front of it, so a value already starting with +
+                    // is taken as complete.
+                    window.spaKioskFullNumber = function () {
+                        var raw = (mobEl.value || '').trim();
+                        if (raw.charAt(0) === '+') {
+                            return raw.replace(/[^\d+]/g, '');
+                        }
+                        return V.joinPhone(dialEl.value, raw);
+                    };
+                    // true when the number is usable; paints the reason if not.
+                    window.spaKioskCheckMobile = function () {
+                        var code = V.fullPhoneError(window.spaKioskFullNumber());
+                        showError(code ? V.resolve(code, dialEl.value) : '');
+                        return !code;
+                    };
+
+                    dialEl.addEventListener('change', function () {
+                        paintPlaceholder();
+                        // The country decides the length and the opening
+                        // digits, so re-judge what is already typed - but only
+                        // once something has been said, or switching country
+                        // on an empty box would complain.
+                        if (mobEl.value.trim()) {
+                            window.spaKioskCheckMobile();
+                        }
+                    });
+                    mobEl.addEventListener('input', function () {
+                        // Only correct a complaint already on screen. Judging
+                        // every keystroke would put an error under a number
+                        // that is merely half-typed.
+                        if (errEl.style.display !== 'none') {
+                            window.spaKioskCheckMobile();
+                        }
+                    });
+                    mobEl.form.addEventListener('submit', function (ev) {
+                        if (!window.spaKioskCheckMobile()) {
+                            ev.preventDefault();
+                            mobEl.focus();
+                            return;
+                        }
+                        // Post E.164, so the contact this creates is the same
+                        // one the booking page and the till would have found.
+                        mobEl.value = window.spaKioskFullNumber();
+                    });
+                })();
+            </script>
+            <script t-if="disclaimer">
+                // Panel one is validated field by field rather than with
+                // form.checkValidity(): that would also test the not-yet-ticked
+                // agree box on panel two and refuse to move on. Panel one is
+                // hidden, never removed, so its answers still post.
+                function spaKioskNext() {
+                    var step1 = document.getElementById('kioskStep1');
+                    var fields = step1.querySelectorAll('input, select, textarea');
+                    for (var i = 0; i &lt; fields.length; i++) {
+                        if (!fields[i].checkValidity()) {
+                            fields[i].reportValidity();
+                            return;
+                        }
+                    }
+                    // Carry the details onto the waiver instead of asking for
+                    // them a second time - two copies of the same fact are two
+                    // chances for them to disagree. Back re-runs this, so an
+                    // edit on panel one is picked up.
+                    var nameEl = step1.querySelector('[name="customer_name"]');
+                    var mobEl = step1.querySelector('[name="mobile"]');
+                    // checkValidity above only knows the box is not empty. What
+                    // a mobile number for the chosen country actually looks like
+                    // is our rule, and it has to be settled BEFORE the waiver -
+                    // going back to fix it after signing means signing again.
+                    if (window.spaKioskCheckMobile &amp;&amp; !window.spaKioskCheckMobile()) {
+                        mobEl.focus();
+                        return;
+                    }
+                    document.getElementById('ciName').textContent =
+                        (nameEl &amp;&amp; nameEl.value.trim()) || '—';
+                    document.getElementById('ciMobile').textContent =
+                        (window.spaKioskFullNumber ? window.spaKioskFullNumber() : '') ||
+                        (mobEl &amp;&amp; mobEl.value.trim()) || '—';
+                    step1.style.display = 'none';
+                    document.getElementById('kioskStep2').style.display = '';
+                    window.scrollTo(0, 0);
+                }
+                function spaKioskBack() {
+                    document.getElementById('kioskStep2').style.display = 'none';
+                    document.getElementById('kioskStep1').style.display = '';
+                    window.scrollTo(0, 0);
+                }
+            </script>
         </t>
     </template>
 

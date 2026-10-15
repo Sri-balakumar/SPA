@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="spa_member_type_view_list" model="ir.ui.view">
+        <field name="name">spa.member.type.list</field>
+        <field name="model">spa.member.type</field>
+        <field name="arch" type="xml">
+            <list string="Member Types" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="people"/>
+                <field name="is_individual" widget="boolean_toggle"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="spa_member_type_view_form" model="ir.ui.view">
+        <field name="name">spa.member.type.form</field>
+        <field name="model">spa.member.type</field>
+        <field name="arch" type="xml">
+            <form string="Member Type">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Family 5, Couple"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="people"/>
+                            <field name="code" placeholder="e.g. family_5"/>
+                        </group>
+                        <group>
+                            <field name="sequence"/>
+                            <field name="is_individual"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                    </group>
+                    <p class="text-muted">
+                        <b>People</b> is not just a label — it decides how many people's
+                        details are collected when this type is booked, how many the
+                        booking is required to name, and what the invoice prints as
+                        <b>Members Included</b>. Set it to the real number.
+                        <br/>
+                        <b>Code</b> is the key the booking page and the tablet app use.
+                        Renaming the type above is safe; changing the code is not, because
+                        packages and past orders are stored against it.
+                        <br/>
+                        <b>Base (Individual) type</b> marks the single-person option, whose
+                        price is the product's own Sales Price rather than a row in Family
+                        Prices. Only one type can be the base.
+                        <br/>
+                        <b>Archive rather than delete</b> a type you stop selling: bookings
+                        already made against it would otherwise lose their headcount and
+                        could no longer be saved.
+                    </p>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="spa_member_type_action" model="ir.actions.act_window">
+        <field name="name">Member Types</field>
+        <field name="res_model">spa.member.type</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Add a member type</p>
+            <p>
+                Individual, Family 2, Couple — whatever this spa sells. Each one
+                carries how many people it covers, which drives the booking
+                screens, the invoice and the headcount check.
+            </p>
+        </field>
+    </record>
+
+    <menuitem id="menu_spa_member_type"
+              name="Member Types"
+              action="spa_member_type_action"
+              parent="point_of_sale.pos_menu_products_configuration"
+              sequence="5"/>
+
+</odoo>

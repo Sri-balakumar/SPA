@@ -8,32 +8,36 @@ patch(PosStore.prototype, {
     setup() {
         super.setup(...arguments);
         this.showTherapyBooking = false;
-        // Brand logo shown in the POS. Pulled dynamically from the Dynamic
-        // Invoice Template config ("Invoice Template Settings" -> Invoice Logo)
-        // so it's configurable there, with fallbacks to the company logo, then
-        // the bundled image. Starts on the bundled image; updates once fetched.
-        this.brandLogoUrl = "/spa_online_booking/static/img/stretchandgo_logo.png";
-        this._loadBrandLogo();
     },
 
-    async _loadBrandLogo() {
-        try {
-            const companyId = this.config?.company_id?.id;
-            const domain = companyId ? [["company_id", "=", companyId]] : [];
-            const rows = await this.env.services.orm.searchRead(
-                "invoice.template.config",
-                domain,
-                ["id", "company_logo"],
-                { limit: 1 }
-            );
-            if (rows.length && rows[0].company_logo) {
-                this.brandLogoUrl = `/web/image/invoice.template.config/${rows[0].id}/company_logo`;
-            } else if (companyId) {
-                this.brandLogoUrl = `/web/image/res.company/${companyId}/logo`;
-            }
-        } catch {
-            // invoice.template.config missing / no access -> keep the fallback.
+    /**
+     * The brand image shown on the POS screen while the order is empty.
+     *
+     * The whole decision - Dynamic Invoice Template logo, else the company
+     * logo, else nothing - is made on the server and arrives as one string on
+     * the company record (res_company.spa_brand_logo_url). Empty means there is
+     * nothing to show, and the template's t-if then renders no <img>.
+     *
+     * It was tried the other way round, and could not be made to work here:
+     * /web/image answers an empty field with HTTP 200 and Odoo's grey camera,
+     * so the browser cannot tell an empty logo from a real one - which is
+     * exactly the placeholder that kept appearing on the till.
+     */
+    get brandLogoUrl() {
+        const company = this.config?.company_id;
+        if (!company?.id) {
+            return "";
         }
+        // A POS that loaded before this field existed keeps its old copy of the
+        // company in IndexedDB, which Ctrl+F5 does not clear - so the field can
+        // be missing entirely rather than empty. Missing is not the same as
+        // "no logo": fall back to the company logo, which is what the navbar
+        // shows from the same record. Only an explicit empty string, computed
+        // on the server, means there is genuinely nothing to show.
+        if (company.spa_brand_logo_url === undefined) {
+            return `/web/image/res.company/${company.id}/logo`;
+        }
+        return company.spa_brand_logo_url || "";
     },
 });
 

@@ -3,6 +3,7 @@ from datetime import datetime, time
 import pytz
 
 from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 
 class SpaBookingPos(models.Model):
@@ -147,18 +148,28 @@ class SpaBookingPos(models.Model):
         self.write({'state': 'in_service'})
 
     # ---- prepaid pass redemption -------------------------------------
-    def _redeem_pass_if_prepaid(self):
+    def _redeem_pass_if_prepaid(self, assignee_id=False):
         """If this booking is a prepaid session (drawn from a package pass),
         count one session against the pass — once. Called when the booking is
         marked completed/paid, so reception just finishes the appointment and
-        the pass decrements automatically."""
+        the pass decrements automatically.
+
+        `assignee_id` records who gave the session on the usage row. It is only
+        ever passed from the POS Sessions tab, which is the one place the
+        person is known at redemption time."""
         for booking in self:
             pass_rec = booking.session_pass_id
             if not pass_rec or booking.session_redeemed:
                 continue
             if pass_rec.sessions_left > 0:
+                # Fall back to whoever the booking was given to at Approve.
+                # Without this a session finished through the back-office
+                # buttons (action_complete / action_mark_paid), which pass no
+                # assignee, would lose the person reception already chose.
+                who = assignee_id or booking.spa_therapist_id.id or False
                 pass_rec.sudo().action_use_session(
-                    note=_('%s (prepaid session)') % (booking.name or ''))
+                    note=_('%s (prepaid session)') % (booking.name or ''),
+                    assignee_id=who)
             booking.session_redeemed = True
 
     def action_complete(self):
@@ -171,13 +182,29 @@ class SpaBookingPos(models.Model):
         self.sudo()._redeem_pass_if_prepaid()
         return res
 
-    def action_session_done(self):
+    def action_session_done(self, assignee_id=False):
         """A prepaid session is finished: mark it completed (which counts the
-        session against its pass) without a charge/Load step."""
+        session against its pass) without a charge/Load step.
+
+        Refuses an unassigned session when Settings -> Spa Online Booking ->
+        Session Assignee -> "Assignee mandatory" is on. The check matters most
+        here: this button is a point of no return, counting a session off the
+        pass and leaving a spa.session.pass.use row that is the ONLY record of
+        who gave it. Elsewhere the person can still be filled in afterwards.
+        """
+        from .spa_assignee import spa_assign_required
+        if spa_assign_required(self.env):
+            for booking in self:
+                if not (assignee_id or booking.spa_therapist_id):
+                    raise UserError(_(
+                        "Choose who is taking this session before marking it "
+                        "done. The session is counted off the customer's "
+                        "package now, and this is the only place the member of "
+                        "staff is recorded."))
         for booking in self:
             if booking.state not in ('completed', 'paid'):
                 booking.write({'state': 'completed'})
-        self.sudo()._redeem_pass_if_prepaid()
+        self.sudo()._redeem_pass_if_prepaid(assignee_id=assignee_id)
 
     @api.model
     def get_pos_sessions(self, date_str=None):
@@ -199,14 +226,15 @@ class SpaBookingPos(models.Model):
 
         # Sessions redeemed on the target local day (the picked date, else
         # today): use.date is stored in UTC, so convert that day to UTC bounds.
-        today = fields.Date.context_today(self)
+        company = self.env.company
+        today = company._spa_today()
         if date_str:
             try:
                 today = fields.Date.to_date(date_str)
             except (ValueError, TypeError):
-                today = fields.Date.context_today(self)
-        tz = pytz.timezone(
-            self.env.context.get('tz') or self.env.user.tz or 'UTC')
+                today = company._spa_today()
+        # The company's zone, not the reader's - res_company._spa_display_tz.
+        tz = company._spa_display_tz()
         utc_start = fields.Datetime.to_string(
             tz.localize(datetime.combine(today, time.min))
             .astimezone(pytz.UTC).replace(tzinfo=None))
@@ -219,7 +247,7 @@ class SpaBookingPos(models.Model):
         taken_data = []
         for use in uses:
             pass_rec = use.pass_id
-            local_dt = fields.Datetime.context_timestamp(use, use.date) if use.date else None
+            local_dt = company._spa_localize(use.date) if use.date else None
             taken_data.append({
                 'id': use.id,
                 'customer': pass_rec.partner_id.name or '',
@@ -227,6 +255,9 @@ class SpaBookingPos(models.Model):
                 'time': local_dt.strftime('%I:%M %p').lstrip('0') if local_dt else '',
                 'sessions_left': pass_rec.sessions_left,
                 'sessions_total': pass_rec.sessions_total,
+                # Who gave it. A counted session leaves no order line behind,
+                # so this row is the only record of the assignee.
+                'assignee': use.spa_therapist_id.name or '',
             })
         return {'pending': pending_data, 'taken': taken_data}
 
@@ -268,7 +299,8 @@ class SpaBookingPos(models.Model):
         else:
             slot = ''
             if self.create_date:
-                local = fields.Datetime.context_timestamp(self, self.create_date)
+                local = (self.company_id or self.env.company)._spa_localize(
+                    self.create_date)
                 date_str = local.strftime('%Y-%m-%d')
             else:
                 date_str = ''
@@ -305,6 +337,10 @@ class SpaBookingPos(models.Model):
             'answer_rows': self._pos_answers_rows(),
             # prepaid = a next session drawn from a package pass: don't charge.
             'prepaid': bool(self.session_pass_id),
+            # Who this appointment is given to. The id preselects the card's
+            # picker, the name is what the card prints once it is set.
+            'assignee_id': self.spa_therapist_id.id or 0,
+            'assignee': self.spa_therapist_id.name or '',
         }
 
     @api.model
@@ -330,13 +366,14 @@ class SpaBookingPos(models.Model):
         """All bookings whose appointment is today, across every channel, for
         the POS "Today" tab: scheduled slots falling today, plus same-day
         walk-ins / manual bookings that have no slot. Ordered by time."""
-        today = fields.Date.context_today(self)
+        company = self.env.company
+        today = company._spa_today()
         # Naive local-clock bounds for slot_datetime (stored as local wall clock).
         local_start = fields.Datetime.to_string(datetime.combine(today, time.min))
         local_end = fields.Datetime.to_string(datetime.combine(today, time.max))
         # UTC bounds of the local day for create_date (stored in real UTC).
-        tz = pytz.timezone(
-            self.env.context.get('tz') or self.env.user.tz or 'UTC')
+        # Company zone, so "today" is the salon's day and not the reader's.
+        tz = company._spa_display_tz()
         utc_start = fields.Datetime.to_string(
             tz.localize(datetime.combine(today, time.min))
             .astimezone(pytz.UTC).replace(tzinfo=None))
@@ -351,10 +388,16 @@ class SpaBookingPos(models.Model):
         ], order='slot_datetime, create_date')
         return [b._pos_booking_data() for b in bookings]
 
-    def pos_booking_action(self, action):
+    def pos_booking_action(self, action, assignee_id=False):
         """Run a booking status transition from the POS. sudo() because POS
         users only have read access to spa.booking. Reuses the same methods as
-        the back-office form buttons."""
+        the back-office form buttons.
+
+        `assignee_id` is the member of staff the appointment is given to. It is
+        recorded on the booking for EVERY transition that carries one - the
+        commonest being Approve, where reception decides who is taking the
+        customer - and 'session_done' additionally stamps it on the usage row,
+        which is a prepaid session's only record of the person."""
         self.ensure_one()
         methods = {
             'approve': 'action_approve',         # pending    -> approved
@@ -368,7 +411,24 @@ class SpaBookingPos(models.Model):
         if not method:
             return False
         booking = self.sudo()
-        getattr(booking, method)()
+        # Only reception and the administrator name the person who gave a
+        # session; a cashier pressing Approve still approves it, just without
+        # an assignee. Same rule the order lines are held to.
+        #
+        # Imported here, not at the top: this file is imported before
+        # spa_assignee in models/__init__.py, and a module-level import would
+        # pull that in ahead of session_pass, whose model it extends.
+        from .spa_assignee import spa_can_assign
+        assignee_id = assignee_id if spa_can_assign(self.env) else False
+        # Recorded BEFORE the transition runs, so a redemption triggered by it
+        # (session_done, complete, paid) already sees the person on the
+        # booking and can copy them onto the usage row.
+        if assignee_id and booking.spa_therapist_id.id != assignee_id:
+            booking.spa_therapist_id = assignee_id
+        if action == 'session_done':
+            booking.action_session_done(assignee_id=assignee_id)
+        else:
+            getattr(booking, method)()
         return booking.state
 
     def pos_set_slot(self, slot_str):
@@ -511,4 +571,18 @@ class SpaBookingPos(models.Model):
             'addon_tmpl_ids': booking.spa_addon_ids.ids,
             'answers': booking._pos_answers_summary(),
             'channel': booking.spa_channel,
+            # ticket_tabs.js already does
+            #   if (info.slot_datetime) { order.spa_slot_datetime = ... }
+            # but this never sent it, so an appointment booked online vanished
+            # from the order the moment it was loaded at the counter - and left
+            # the order with no previous date for a later reschedule to move
+            # away from.
+            #
+            # Sent as the naive "%Y-%m-%d %H:%M:%S" wall clock the POS expects:
+            # spaOrderDay() slices the first 10 characters of this string and
+            # compares them with the date picker, so a luxon-converted value
+            # would shift an evening appointment by a day.
+            'slot_datetime': (
+                booking.slot_datetime.strftime('%Y-%m-%d %H:%M:%S')
+                if booking.slot_datetime else False),
         }

@@ -6,6 +6,8 @@ import uuid
 from datetime import timedelta
 from urllib.parse import quote, urlsplit
 
+from markupsafe import escape
+
 from odoo import api, fields, models
 
 _logger = logging.getLogger(__name__)
@@ -23,7 +25,11 @@ BOOKING_PAGE_PATH = '/spa/book'
 # `server_wide_modules`; this entry goes through `/odoo/<subpath>`, which every
 # Odoo serves, and is handed on from there (controllers/booking_entry.py). One
 # link format that works on a dedicated server and on a shared one alike.
-BOOKING_ENTRY_PATH = '/odoo/spa-book'
+# '/scoped_app/' rather than '/odoo/': core registers both on the same handler
+# with the same `subpath`, so both reach controllers/booking_entry.py - and this
+# one keeps the vendor's name out of a link the customer reads, which the
+# white-label branding needs. Links already sent through /odoo/spa-book still work.
+BOOKING_ENTRY_PATH = '/scoped_app/spa-book'
 
 
 def _wa_me():
@@ -77,10 +83,19 @@ class SpaBookingSession(models.Model):
     whatsapp_share_url = fields.Char(
         string='WhatsApp Share Link', compute='_compute_booking_url')
 
-    # Odoo 19 removed `_sql_constraints` (it is logged and silently dropped,
-    # see odoo/orm/model_classes.py) - so the UNIQUE index never existed.
-    _token_unique = models.Constraint(
-        'UNIQUE(token)', 'Booking session token must be unique.')
+    # Both spellings, because Odoo 19 changed which one works partway through
+    # its life: newer builds ignore `_sql_constraints` (they log "no longer
+    # supported" and drop it, so the index is never created), older ones have
+    # no `models.Constraint` at all and raise AttributeError on import - which
+    # takes the whole module down, not just the constraint. Asking the running
+    # build which it has is the only form that installs on both.
+    if hasattr(models, 'Constraint'):
+        _token_unique = models.Constraint(
+            'UNIQUE(token)', 'Booking session token must be unique.')
+    else:
+        _sql_constraints = [
+            ('token_unique', 'UNIQUE(token)',
+             'Booking session token must be unique.')]
 
     @api.depends('token', 'whatsapp_number')
     def _compute_booking_url(self):
@@ -89,22 +104,24 @@ class SpaBookingSession(models.Model):
                 rec.booking_url = False
                 rec.whatsapp_share_url = False
                 continue
-            # LOCAL DEVIATION, and it is the rollback this code's own comment
-            # prescribes. Upstream sends the short <base>/spa/book?token=...
-            # form, which requires `dbfilter` to pin one database. THIS server
-            # has an empty dbfilter and six databases, so the short form gives
-            # the customer a database picker instead of a booking page.
+            # <base>/odoo/spa-book?db=<db>&token=...
             #
-            # So: back to the BOOKING_ENTRY_PATH form, which is what 19.0.4.0.0
-            # generated here and what every link already sent uses. It resolves
-            # ?db= through ensure_db() in controllers/booking_entry.py and hands
-            # the customer on, with no login and nothing to configure.
+            # The short <base>/spa/book?token=... form lived here while
+            # odoo.conf pinned `dbfilter` to one database. That pin is gone for
+            # good: this server hosts a dozen client databases behind one host
+            # name, so pinning it would take the other eleven offline. Without
+            # it a session-less request cannot resolve a database on its own and
+            # the short link drops the customer on the database selector - which
+            # is exactly what it did over the Cloudflare tunnel.
             #
-            # Switch back to the short form only together with pinning
-            # `dbfilter = ^SPA$` in odoo.conf - one without the other breaks it.
+            # Carrying ?db= through BOOKING_ENTRY_PATH is what survives that,
+            # and it also survives this module being dropped from
+            # `server_wide_modules` - which /spa/book?db= alone does NOT, since
+            # Odoo builds its no-database routing map from those modules only.
+            # See controllers/booking_entry.py for the hand-off.
             url = '%s%s?db=%s&token=%s' % (
                 rec.get_base_url(), BOOKING_ENTRY_PATH,
-                rec.env.cr.dbname, rec.token)
+                quote(rec.env.cr.dbname), rec.token)
             rec.booking_url = url
             # wa.me needs the number as digits only (no '+', spaces or dashes).
             digits = ''.join(c for c in (rec.whatsapp_number or '') if c.isdigit())
@@ -149,6 +166,104 @@ class SpaBookingSession(models.Model):
         greeting = 'Hi %s, ' % name if name else ''
         return '%sbook your sessions at Stretch and Go here: %s' % (greeting, link)
 
+    def _email_message_body(self, url=None, name=None):
+        """The booking link as an email: (subject, body_html, body_text).
+
+        Kept beside _wa_message_body so the two channels say the same thing,
+        and so whoever wires the transport up has the wording ready rather than
+        inventing a second one. Deliberately plain HTML - this module has no
+        mail.template records and adding one would put the text somewhere the
+        WhatsApp copy is not.
+        """
+        self.ensure_one()
+        link = url or self.booking_url or ''
+        name = (name if name is not None else self.customer_name or '').strip()
+        greeting = 'Hi %s,' % name if name else 'Hello,'
+        subject = "Book your sessions at Stretch and Go"
+        body_text = '%s\n\nBook your sessions at Stretch and Go here:\n%s' % (
+            greeting, link)
+        body_html = (
+            '<p>%s</p>'
+            '<p>Book your sessions at Stretch and Go here:</p>'
+            '<p><a href="%s">%s</a></p>'
+        ) % (escape(greeting), escape(link), escape(link))
+        return subject, body_html, body_text
+
+    def action_send_email_now(self, to_email=None, to_name=None,
+                              session_id=None):
+        """Send the booking link by email. Returns {'sent': bool, 'error': str}.
+
+        Never raises, mirroring action_send_whatsapp_now: a failed send must not
+        roll back the booking session or block the cashier, so the caller gets a
+        flag and falls back to Copy Link.
+
+        Sent on the gateway rather than through an ir.mail_server so that email
+        lands under the same opt-out list, blocked words and caps as the
+        WhatsApp message. A customer who asked this vendor to stop should not
+        have to ask again on the other channel, which is exactly what happens
+        when the two run through separate systems. It also means the vendor's
+        mail credentials stay on the gateway - this database never sees them.
+        """
+        self.ensure_one()
+        email = (to_email or '').strip()
+        if not email:
+            return {'sent': False, 'error': "No email address to send to."}
+        # A link built on localhost is as useless in an inbox as in a WhatsApp
+        # message: the customer's browser resolves it to their own machine.
+        unreachable = self._wa_unreachable_base_url()
+        if unreachable:
+            return {'sent': False, 'error': unreachable}
+        # Nothing to send with at all, as opposed to a session that is merely
+        # switched off. Worth saying apart: ticking a checkbox cannot fix a
+        # module that was never installed, and that is the advice below.
+        if 'whatsapp.session' not in self.env:
+            return {
+                'sent': False,
+                'error': "No mail gateway is installed on this database - "
+                         "copy the link and send it yourself.",
+            }
+        session = self._get_wa_session(session_id)
+        if not session:
+            return {
+                'sent': False,
+                'error': "No gateway session is available to send email. Open "
+                         "WhatsApp > Sessions and check the connection.",
+            }
+        # send_email() belongs to whatsapp_gateway. Another WhatsApp module can
+        # satisfy _get_wa_session() without carrying an email channel at all.
+        if not hasattr(session, 'send_email'):
+            return {
+                'sent': False,
+                'error': "This gateway session cannot send email - copy the "
+                         "link and send it yourself.",
+            }
+        if not session.use_email:
+            return {
+                'sent': False,
+                'error': "Email is switched off for this gateway session - "
+                         "tick Email on WhatsApp > Sessions, then try again.",
+            }
+        subject, body_html, body_text = self._email_message_body(name=to_name)
+        try:
+            sent = session.send_email(
+                email, subject, body_html=body_html, body_text=body_text)
+        except Exception as e:
+            _logger.warning(
+                "Spa booking link: email send to %s failed: %s", email, e)
+            return {'sent': False, 'error': str(e)}
+        if not sent:
+            # send_email() returns False rather than raising when one of the
+            # gateway's own rules stopped it - an opt-out, a blocked word, the
+            # daily cap. The gateway has already logged which one; a
+            # receptionist only needs to know not to keep pressing the button.
+            return {
+                'sent': False,
+                'error': "The gateway did not send to %s - the address may "
+                         "have opted out, or a sending limit was reached."
+                         % email,
+            }
+        return {'sent': True, 'error': ''}
+
     @api.model
     def _get_wa_session(self, session_id=None):
         """The whatsapp.session used to send booking links.
@@ -166,7 +281,13 @@ class SpaBookingSession(models.Model):
 
         sudo() because a POS or receptionist user has only read access to
         whatsapp.session.
+
+        Returns False when no WhatsApp module is installed. Callers already
+        handle "no session" - that is the same state as one that is merely
+        disconnected - so there is nothing extra for them to learn.
         """
+        if 'whatsapp.session' not in self.env:
+            return False
         Session = self.env['whatsapp.session'].sudo()
         if session_id:
             try:
@@ -177,10 +298,9 @@ class SpaBookingSession(models.Model):
                 return chosen
         configured = self.env['ir.config_parameter'].sudo().get_param(
             'spa_online_booking.whatsapp_session_id')
-        # LOCAL DEVIATION: get_connected_session() is a whatsapp_gateway method.
-        # The whatsapp_neonize build installed here does not have it, and an
-        # AttributeError would land on staff pressing Send Link. Falls back to
-        # the same order of preference by hand: the configured session, else
+        # get_connected_session() belongs to whatsapp_gateway, not to every
+        # WhatsApp module. Where it is missing, do the same job with the fields
+        # they all carry: the configured session if it is still there, else
         # whichever is connected, else the first active one.
         if hasattr(Session, 'get_connected_session'):
             return Session.get_connected_session(configured)
@@ -191,9 +311,9 @@ class SpaBookingSession(models.Model):
             except (TypeError, ValueError):
                 chosen = Session.browse()
             if chosen:
-                return chosen
-        return sessions.filtered(
-            lambda s: s.status == 'connected')[:1] or sessions[:1]
+                return chosen[0]
+        return (sessions.filtered(lambda s: s.status == 'connected')[:1]
+                or sessions[:1])
 
     @api.model
     def pos_wa_sessions(self, wake=False):
@@ -203,19 +323,25 @@ class SpaBookingSession(models.Model):
         and there is no longer anything to wake. Kept rather than removed so an
         older POS bundle in a browser cache does not fail on an unexpected
         argument.
+
+        No WhatsApp module means no senders to offer. The dialog handles an
+        empty list already - it shows the booking link and Copy Link, which is
+        what staff need most of the time anyway.
         """
+        if 'whatsapp.session' not in self.env:
+            return {
+                'sessions': [],
+                'default_id': False,
+                'any_connected': False,
+                'can_wake': False,
+            }
         Session = self.env['whatsapp.session'].sudo()
         sessions = Session.search([('active', '=', True)])
         # Asks the gateway and writes the answer back, so the flags below are
-        # live rather than however stale the column happened to be.
-        #
-        # LOCAL DEVIATION: _refresh_state() is a whatsapp_gateway method and the
-        # neonize build installed here does not have it. Skipped rather than
-        # reimplemented: the rows below read session.status either way, so the
-        # dialog still lists every sender and still says which is connected -
-        # just from the stored column rather than a fresh check. Exactly what
-        # this method was added to improve on, so the panel is the place to look
-        # if a status looks wrong.
+        # live rather than however stale the column happened to be. Gateway-only
+        # again: without it the rows below still read session.status, so the
+        # dialog lists every sender and still says which is connected - just
+        # from whatever the column last recorded.
         if hasattr(sessions, '_refresh_state'):
             sessions._refresh_state()
 
@@ -299,6 +425,15 @@ class SpaBookingSession(models.Model):
         unreachable = self._wa_unreachable_base_url()
         if unreachable:
             return {'sent': False, 'error': unreachable}
+        # Nothing to send with at all, as opposed to a session that is merely
+        # disconnected. Worth saying apart: scanning a QR code cannot fix a
+        # module that was never installed, and that is the advice below.
+        if 'whatsapp.session' not in self.env:
+            return {
+                'sent': False,
+                'error': "No WhatsApp module is installed on this database - "
+                         "copy the link and send it yourself.",
+            }
         session = self._get_wa_session(session_id)
         if not session:
             return {
@@ -399,28 +534,52 @@ class SpaBookingSession(models.Model):
         """Create a booking session from the POS "Send Link" button, send the
         link on our WhatsApp session, and report back whether it went out.
 
-        `vals` is a dict {whatsapp_number, customer_name, partner_id}; a bare
-        string is still accepted for backwards compatibility. sudo() so a plain
-        POS user can create the session.
+        `vals` is a dict {whatsapp_number, email, customer_name, partner_id}; a
+        bare string is still accepted for backwards compatibility. sudo() so a
+        plain POS user can create the session.
+
+        The customer may be reachable on a number, on an address, or on both,
+        and NEITHER is required on its own - only that there is one of them.
+        Each channel is attempted independently and reported separately, so a
+        link that goes out on WhatsApp but not by email says exactly that.
         """
         if isinstance(vals, str):
             vals = {'whatsapp_number': vals}
         vals = vals or {}
         number = (vals.get('whatsapp_number') or '').strip()
-        if not number:
+        email = (vals.get('email') or '').strip()
+        if not number and not email:
             return False
         # ONE shared link for the whole spa - we send the same URL to everybody
         # instead of minting a new one per customer. Each send is still
         # recorded as a whatsapp.message row, so the audit trail survives.
         session = self._get_shared_session()
         name = (vals.get('customer_name') or '').strip()
-        sent = session.action_send_whatsapp_now(
-            vals.get('session_id'), to_number=number, to_name=name)
+        # Only the channels actually asked for are attempted: an empty box is a
+        # channel the customer did not give us, not one that failed.
+        wa = {'sent': False, 'error': ''}
+        if number:
+            wa = session.action_send_whatsapp_now(
+                vals.get('session_id'), to_number=number, to_name=name)
+        mail = {'sent': False, 'error': ''}
+        if email:
+            mail = session.action_send_email_now(
+                to_email=email, to_name=name,
+                session_id=vals.get('session_id'))
         return {
             'token': session.token,
             'booking_url': session.booking_url,
-            'whatsapp_share_url': session._wa_share_url_for(number, name),
+            'whatsapp_share_url':
+                session._wa_share_url_for(number, name) if number else False,
             'whatsapp_number': number,
-            'sent': sent['sent'],
-            'send_error': sent['error'],
+            'email': email,
+            'whatsapp_sent': wa['sent'],
+            'whatsapp_error': wa['error'],
+            'email_sent': mail['sent'],
+            'email_error': mail['error'],
+            # The original key names, kept as aliases of the WhatsApp result so
+            # a POS still running a cached older bundle keeps reporting sends
+            # correctly instead of always showing "did not accept".
+            'sent': wa['sent'],
+            'send_error': wa['error'],
         }

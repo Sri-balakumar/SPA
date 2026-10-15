@@ -37,6 +37,22 @@
                                 </div>
                             </div>
                         </setting>
+                        <setting string="Starter data"
+                                 help="Earlier versions created four sample therapies and sixteen packages on install. This removes them, and can untick categories that were flagged as therapies by the old default. Anything sold, booked or priced is kept and listed.">
+                            <div class="content-group">
+                                <div class="mt16">
+                                    <button name="%(spa_online_booking.action_spa_starter_cleanup)d"
+                                            type="action" string="Remove Starter Data"
+                                            class="btn-secondary"/>
+                                </div>
+                            </div>
+                        </setting>
+                    </block>
+                    <block title="Session Assignee" name="spa_assignee_block">
+                        <setting string="Assignee mandatory"
+                                 help="Require a member of staff on every session. When ON, an order cannot be paid and a prepaid session cannot be marked done until each session names who is giving it. When OFF, the assignee is still recorded everywhere it is set — on the order card, at Approve and in Redeem — and shows on the invoice and the sales report, but nothing is blocked. Only Spa Reception and the administrator can assign either way.">
+                            <field name="spa_assign_required"/>
+                        </setting>
                     </block>
                     <block title="WhatsApp Delivery" name="spa_whatsapp_block">
                         <setting string="WhatsApp Session"

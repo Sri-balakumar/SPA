@@ -384,6 +384,17 @@ html[dir="rtl"] .tcard__chev { transform: scaleX(-1); }
 }
 .sig__hint { font-size: .82rem; color: var(--ink-soft); margin: 6px 0 0; }
 .sig__err { font-size: .85rem; color: var(--danger); margin: 6px 0 0; }
+
+/* Per-field validation message on the details step - same shape as .sig__err
+   above, which was the page's only inline error until now. It goes directly
+   under the input it is about so the complaint and the fix are in one place,
+   rather than in the banner at the top of the page. */
+.field__err { font-size: .85rem; color: var(--danger); margin: 6px 0 0; }
+/* The box reads as wrong too, for anyone scanning rather than reading. Applied
+   to the .pc wrapper for the phone fields, since there the border is on the
+   wrapper and not on the input. */
+.field input.is-bad, .field select.is-bad, .pc.is-bad { border-color: var(--danger); }
+.field input.is-bad:focus, .field select.is-bad:focus { outline-color: var(--danger); }
 .sig__tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .sig__onfile {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px;

@@ -1,7 +1,5 @@
 from odoo import api, fields, models
 
-from .package_price import SPA_MEMBER_TYPES
-
 
 class SpaServiceSignature(models.Model):
     """The consent signature a customer gives for ONE service they buy.
@@ -63,21 +61,28 @@ class SpaServiceSignature(models.Model):
 class PosOrderLine(models.Model):
     _inherit = 'pos.order.line'
 
-    # Which family size this line was sold at. Without it a Family 3 line
+    # Which member type this line was sold at. Without it a Family 3 line
     # priced 216 looks identical to an individual one discounted to 216, and
     # neither the receipt nor any report could tell them apart.
-    spa_member_type = fields.Selection(
-        SPA_MEMBER_TYPES, string='Member Type', default='individual')
+    spa_member_type = fields.Many2one(
+        'spa.member.type', string='Member Type',
+        ondelete='restrict', index=True,
+        default=lambda self: self.env['spa.member.type']._spa_base_type())
 
     def _spa_member_label(self):
-        """The member type as it should read on paperwork, or ''."""
+        """The member type as it should read on paperwork, or ''.
+
+        Blank for the base type: "Go Ease - Individual" reads like a variant
+        nobody asked for.
+        """
         self.ensure_one()
-        if not self.spa_member_type or self.spa_member_type == 'individual':
+        member_type = self.spa_member_type
+        if not member_type or member_type.is_individual:
             return ''
-        return dict(SPA_MEMBER_TYPES).get(self.spa_member_type, '')
+        return member_type.name or ''
 
     def _spa_apply_member_name(self):
-        """Put the family size into `full_product_name`.
+        """Put the member type into `full_product_name`.
 
         That one field is the name on the printed receipt
         (`getFullProductName()`) AND the description on the invoice line
@@ -86,17 +91,14 @@ class PosOrderLine(models.Model):
         a receipt reading "Go Ease (Single Session)" beside a Family 2 price
         looks like a mistake, or worse, like the wrong amount was charged.
 
-        Idempotent: the suffix is stripped before being re-applied, so saving
-        a line twice cannot produce "… - Family 2 - Family 2".
+        REBUILT from the product name rather than stripping the old suffix off
+        whatever is there. Stripping meant knowing every label that had ever
+        existed, so renaming "Family 2" to "Couple" turned an old line into
+        "Go Ease - Family 2 - Couple" the next time it was saved. Rebuilding is
+        idempotent AND rename-safe.
         """
         for line in self:
-            base = line.full_product_name or line.product_id.display_name or ''
-            # Drop any suffix we previously added, whichever type it was.
-            for _key, label in SPA_MEMBER_TYPES:
-                suffix = ' - %s' % label
-                if base.endswith(suffix):
-                    base = base[: -len(suffix)]
-                    break
+            base = line.product_id.display_name or line.full_product_name or ''
             label = line._spa_member_label()
             new_name = '%s - %s' % (base, label) if label else base
             if new_name != line.full_product_name:
