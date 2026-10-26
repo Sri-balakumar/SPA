@@ -11,7 +11,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import { useLang } from '../../LanguageContext';
-import { toDigits } from '../../dateFmt';
+import { toDigits, formatDob } from '../../dateFmt';
 
 function PackageCard({ pkg, onPress }) {
   const { t, lang } = useLang();
@@ -64,6 +64,7 @@ export default function AccountScreen({ form, onSelect, onEdit, onBack, onHome }
             <View style={{ flex: 1 }}>
               <Text style={[s.hello, rtl && s.rtlTxt]}>{t('hello')}، {(m.name || 'Guest').split(' ')[0]} 👋</Text>
               {!!m.phone && <Text style={s.phone}>{m.phone}</Text>}
+              {!!m.dob && <Text style={[s.phone, rtl && s.rtlTxt]}>{t('dob')}: {formatDob(m.dob, lang)}</Text>}
             </View>
             <TouchableOpacity style={s.edit} activeOpacity={0.85} onPress={onEdit}>
               <Ionicons name="create-outline" size={15} color="#fff" />

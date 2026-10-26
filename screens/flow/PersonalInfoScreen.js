@@ -25,6 +25,7 @@ import PersonBanner from '../../components/PersonBanner';
 import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
+import { parseDobDate, formatDob, toDigits } from '../../dateFmt';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fmt = (d) => `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
@@ -57,16 +58,14 @@ function normGender(g) {
 // Build the DOB display text + ISO + age from whatever the backend sends.
 function parseDob(dob, age) {
   let dobText = '', dobISO = '', a = age || '';
-  if (dob) {
-    const d = new Date(dob);
-    if (!isNaN(d.getTime())) {
-      dobText = fmt(d); dobISO = iso(d);
-      if (!a) a = ageFrom(d);
-    } else {
-      dobText = String(dob);   // already a display string like "12 Feb 1990"
-    }
+  const d = parseDobDate(dob);
+  if (d) {
+    dobText = fmt(d); dobISO = iso(d);
+    if (!a) a = ageFrom(d);
+  } else if (dob) {
+    dobText = String(dob);   // already a display string like "12 Feb 1990"
   }
-  return { dobText, dobISO, age: a };
+  return { dobText, dobISO, age: a, date: d };
 }
 
 export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) {
@@ -138,7 +137,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
     const waRaw = c.whatsapp || c.phone;
     const waNum = localNumber(waRaw, cc);
     const same = !waRaw || waNum === phoneNum;
-    const { dobText, dobISO, age } = parseDob(c.dob, c.age);
+    const { dobText, dobISO, age, date } = parseDob(c.dob, c.age);
+    setDobDate(date);                                     // picker opens on their birthday
     set({
       fullName: c.name || '',
       dob: dobText,
@@ -296,7 +296,16 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
             {customers.map((c, i) => (
               <TouchableOpacity key={c.id ?? i} style={s.pCard} activeOpacity={0.9} onPress={() => selectProfile(c)}>
                 <View style={s.avatar}><Ionicons name="person" size={22} color={COLORS.purple} /></View>
-                <Text style={[s.pName, { flex: 1 }, rtl && s.rtl]}>{c.name}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.pName, rtl && s.rtl]}>{c.name}</Text>
+                  {/* DOB tells apart family members who share one number. */}
+                  {!!c.dob && (
+                    <Text style={[s.pSub, rtl && s.rtl]}>
+                      {formatDob(c.dob, lang)}
+                      {c.age !== '' && c.age != null ? ` · ${toDigits(c.age, lang)} ${t('years')}` : ''}
+                    </Text>
+                  )}
+                </View>
                 <Ionicons name="chevron-forward" size={20} color="#C9B9E0" />
               </TouchableOpacity>
             ))}
@@ -488,6 +497,7 @@ const s = StyleSheet.create({
   },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.lavenderSoft, alignItems: 'center', justifyContent: 'center' },
   pName: { fontSize: 16, fontWeight: '900', color: COLORS.purpleDeep },
+  pSub: { fontSize: 13, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
   newOutline: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff',
     borderRadius: 14, paddingVertical: 15, marginTop: 6, borderWidth: 1.5, borderColor: '#DCCBF0',

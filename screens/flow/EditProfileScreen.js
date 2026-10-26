@@ -13,6 +13,7 @@ import BrandHeader from '../../components/BrandHeader';
 import CodePicker from '../../components/CodePicker';
 import { phoneRule, digitsOnly } from '../../data/phoneRules';
 import { useLang } from '../../LanguageContext';
+import { formatDob } from '../../dateFmt';
 
 const GENDERS = ['Female', 'Male', 'Other'];
 
@@ -26,7 +27,8 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
   const m = form.selectedCustomer || {};
 
   const [fullName, setFullName] = useState(m.name || '');
-  const [dob, setDob] = useState(m.dob || '');
+  // English digits: it's a typed field, and "12 May 1992" is the hint shown.
+  const [dob, setDob] = useState(formatDob(m.dob, 'en'));
   const [age, setAge] = useState(String(m.age || ''));
   const [gender, setGender] = useState(m.gender || 'Female');
   const [cc, setCc] = useState(form.countryCode || '+968');
@@ -48,7 +50,7 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
     set({
       fullName, dob, age, gender, countryCode: cc, phone: phone.trim(),
       whatsapp: waSame ? phone.trim() : wa.trim(), whatsappSame: waSame,
-      selectedCustomer: { ...m, name: fullName, phone: mobile, whatsapp, age, gender },
+      selectedCustomer: { ...m, name: fullName, phone: mobile, whatsapp, age, gender, dob },
     });
     onBack();
   }

@@ -96,6 +96,27 @@ export function money(value, lang) {
   return position === 'after' ? `${text} ${symbol}` : `${symbol} ${text}`;
 }
 
+// Date of birth from the backend ("YYYY-MM-DD") → a LOCAL Date, or null.
+// new Date("1997-07-30") is UTC midnight, which shows the day before in any
+// timezone west of UTC - so the plain ISO form is split by hand.
+export function parseDobDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v).trim());
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// "30 Jul 1997" / "٣٠ يوليو ١٩٩٧". Anything unparseable is shown as it came
+// (the demo profiles already carry display text), and empty stays empty.
+export function formatDob(v, lang) {
+  if (!v) return '';
+  const d = parseDobDate(v);
+  if (!d) return String(v);
+  const mo = (lang === 'ar' ? AR_MONTHS : EN_MONTHS)[d.getMonth()];
+  return toDigits(`${d.getDate()} ${mo} ${d.getFullYear()}`, lang);
+}
+
 export function formatDateTime(date, lang) {
   const ar = lang === 'ar';
   const d = date.getDate();

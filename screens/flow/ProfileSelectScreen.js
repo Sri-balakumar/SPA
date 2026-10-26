@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import { useLang } from '../../LanguageContext';
-import { toDigits } from '../../dateFmt';
+import { toDigits, formatDob } from '../../dateFmt';
 
 function activeCount(c) {
   return (c.packages || []).filter((p) => (p.sessions_left || 0) > 0).length;
@@ -41,6 +41,12 @@ export default function ProfileSelectScreen({ form, onSelect, onBack, onHome }) 
                 <View style={s.avatar}><Ionicons name="person" size={24} color={COLORS.purple} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.name, rtl && s.rtlTxt]}>{c.name}</Text>
+                  {!!c.dob && (
+                    <Text style={[s.dob, rtl && s.rtlTxt]}>
+                      {formatDob(c.dob, lang)}
+                      {c.age !== '' && c.age != null ? ` · ${toDigits(c.age, lang)} ${t('years')}` : ''}
+                    </Text>
+                  )}
                   <Text style={[s.count, rtl && s.rtlTxt, n === 0 && { color: COLORS.muted }]}>{label}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={22} color="#C9B9E0" />
@@ -67,6 +73,7 @@ const s = StyleSheet.create({
   },
   avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.lavenderSoft, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: 16.5, fontWeight: '900', color: COLORS.purpleDeep },
+  dob: { fontSize: 13, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
   count: { fontSize: 13, color: COLORS.green, fontWeight: '700', marginTop: 3 },
   empty: { textAlign: 'center', color: COLORS.muted, marginTop: 24, fontSize: 14 },
   demo: { fontSize: 10, fontWeight: '800', color: COLORS.muted, letterSpacing: 0.4, marginTop: 8, textAlign: 'center' },
