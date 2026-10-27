@@ -89,7 +89,11 @@ const STR = {
   disclaimerTitle: { en: 'Disclaimer', ar: 'إخلاء المسؤولية' },
   disclaimerSub: { en: 'Please read and accept to continue', ar: 'يرجى القراءة والموافقة للمتابعة' },
   clientInfo: { en: 'Client Information', ar: 'معلومات العميل' },
-  agreeToThis: { en: 'I have read and accept the above.', ar: 'لقد قرأت وأوافق على ما ورد أعلاه.' },
+  // Same wording as the POS disclaimer step.
+  agreeToThis: { en: 'I agree to the terms and conditions and confirm the details above are correct.', ar: 'أوافق على الشروط والأحكام وأؤكد صحة البيانات أعلاه.' },
+  uploadSign: { en: 'Upload image', ar: 'رفع صورة' },
+  signHintUpload: { en: 'Sign inside the box, or upload a picture of the signature.', ar: 'وقّع داخل المربع، أو ارفع صورة للتوقيع.' },
+  signTooLarge: { en: 'That picture is too large. Please choose a smaller one (max 2 MB).', ar: 'الصورة كبيرة جداً. يرجى اختيار صورة أصغر (2 ميغابايت كحد أقصى).' },
 
   // member types / family bookings
   memberType: { en: 'Who is this for?', ar: 'لمن هذا الحجز؟' },

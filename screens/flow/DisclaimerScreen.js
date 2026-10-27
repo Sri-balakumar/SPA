@@ -101,8 +101,12 @@ export default function DisclaimerScreen({ form, set, next, onBack, onHome }) {
             <SignaturePad
               label={t('signature')}
               required
-              hint={t('signHint')}
+              hint={disclaimer.allowUpload ? t('signHintUpload') : t('signHint')}
               clearLabel={t('clearSign')}
+              // Per therapy in Odoo, the same switch the POS signature field uses.
+              allowUpload={!!disclaimer.allowUpload}
+              uploadLabel={t('uploadSign')}
+              onTooLarge={() => showAlert(t('signature'), t('signTooLarge'))}
               onChange={(sig) => set({ signature: sig })}
               rtl={rtl}
             />
