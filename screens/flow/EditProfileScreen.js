@@ -92,7 +92,7 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           <Text style={[s.label, rtl && s.rtlTxt]}>{t('dob')} *</Text>
           <TouchableOpacity style={s.inputRow} activeOpacity={0.8} onPress={() => setShowPicker(true)}>
             <Text style={[s.inputFlex, !dob && { color: '#B4A9C4' }]}>{dob || t('dobPh')}</Text>
-            <Ionicons name="calendar-outline" size={20} color={COLORS.purple} />
+            <Text style={s.calIcon}>📅</Text>
           </TouchableOpacity>
           {showPicker && (
             <DateTimePicker
@@ -183,6 +183,7 @@ const s = StyleSheet.create({
   input: { backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14, height: 50, fontSize: 15, color: COLORS.ink },
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 12, paddingHorizontal: 14, height: 50 },
   readonly: { backgroundColor: '#F0EAF7' },
+  calIcon: { fontSize: 16, paddingLeft: 6 },    // same as the New-customer form
   fieldError: { borderColor: COLORS.red },
   errTxt: { fontSize: 12.5, color: COLORS.red, marginTop: 6, marginLeft: 2 },
   inputFlex: { flex: 1, fontSize: 15, color: COLORS.ink },
