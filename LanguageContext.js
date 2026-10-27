@@ -99,6 +99,14 @@ const STR = {
   leadPersonNote: { en: 'Books and pays for the session.', ar: 'يحجز ويدفع مقابل الجلسة.' },
   memberPersonNote: { en: 'Phone and email are optional for this person.', ar: 'الهاتف والبريد الإلكتروني اختياريان لهذا الشخص.' },
   copyAnswers: { en: 'Same answers as Person 1', ar: 'نفس إجابات الشخص 1' },
+  healthyNoChanges: { en: 'Healthy - no changes', ar: 'بصحة جيدة - لا تغييرات' },
+  lastUpdated: { en: 'Last updated', ar: 'آخر تحديث' },
+  healthOnFile: { en: 'Health answers on file', ar: 'الإجابات الصحية محفوظة' },
+  // Same wording as the POS questions box.
+  healthSkipNote: { en: 'The answers on file will be used. Untick the box if anything has changed.', ar: 'سيتم استخدام الإجابات المحفوظة. أزل العلامة من المربع إذا تغيّر أي شيء.' },
+  healthChanged: { en: 'Health changed - update answers', ar: 'تغيّرت الحالة الصحية - حدّث الإجابات' },
+  healthNewQuestion: { en: 'A new question has been added since the last visit - please answer it.', ar: 'تمت إضافة سؤال جديد منذ آخر زيارة - يرجى الإجابة عليه.' },
+  by: { en: 'by', ar: 'بواسطة' },
   memberPhone: { en: 'Phone Number (optional)', ar: 'رقم الهاتف (اختياري)' },
   peopleLabel: { en: 'People', ar: 'الأشخاص' },
 

@@ -10,6 +10,7 @@
 //   POST /api/spa/tab/passes  {phone}  → existing customer's remaining packages
 //   POST /api/spa/tab/redeem  {phone,pass_id} → check in for today
 import { getBaseUrl, getDb } from './connection';
+import { odooCallKw } from './odoo';
 import { setCurrency } from './dateFmt';
 
 // Set to true ONLY to demo the "Select Your Profile" flow without a live server.
@@ -225,6 +226,10 @@ export async function submitBooking(form) {
     // disclaimer screen; stays false for a therapy with no waiver, where no
     // consent is asked for and claiming otherwise would be worse than false.
     terms_accepted: !!form.terms,
+    // Ticked "Healthy - no changes": the server copies the answers on file. They
+    // are sent as well, so the booking still carries them if the server does
+    // not act on health_ok. Unticked, the answers sent become the new ones on file.
+    health_ok: !!form.healthOk,
     answers,
     // Optional extras, ids only. Filtered against the chosen package so an id
     // left over from an earlier selection is never sent - and the server
@@ -234,7 +239,42 @@ export async function submitBooking(form) {
       (id) => (form.package?.addons || []).some((a) => a.id === id)),
     api_key: TAB_API_KEY,
   };
-  return restPost('/api/spa/tab/submit', body);     // { success, booking_ref, id }
+  // The matched contact. The server ignores it unless that contact owns `mobile`.
+  if (form.existingCustomerId) body.partner_id = form.existingCustomerId;
+  return restPost('/api/spa/tab/submit', body);     // { success, booking_ref, id, health_reused }
+}
+
+// Health answers already on file for the matched customer, so a returning
+// customer can skip the questions ("Healthy - no changes").
+//   → { enabled, customers:[ {id, on_file, last_updated, by, answers:{qid:value}, missing_required:[]} ] }
+// Returns null on ANY failure: the caller then just asks the questions, which is
+// always safe.
+export async function loadHealthOnFile(form, questionIds = []) {
+  // 1) The POS's own way: res.partner.spa_health_status over the staff login
+  //    the tablet already holds. The REST route /api/spa/tab/health below is
+  //    declared without auth='public'/csrf=False on the server, so it answers
+  //    every tablet call with a login redirect or a CSRF 400.
+  if (form.existingCustomerId) {
+    try {
+      const st = await odooCallKw('res.partner', 'spa_health_status',
+        [form.existingCustomerId, questionIds]);
+      if (st && typeof st === 'object') {
+        return {
+          enabled: true,
+          customers: [{ ...st, id: form.existingCustomerId, last_updated: st.last_updated || st.date || '' }],
+        };
+      }
+    } catch (e) { /* not available to this login - try the REST route */ }
+  }
+  // 2) The documented tablet route, for when the server fixes it.
+  const phone = `+${`${form.countryCode || ''}${form.phone || ''}`.replace(/\D/g, '')}`;
+  try {
+    return await restPost('/api/spa/tab/health', {
+      phone, service_ids: [form.serviceId], api_key: TAB_API_KEY,
+    });
+  } catch (e) {
+    return null;
+  }
 }
 
 // ---------- Existing customer (passes / redeem) ----------

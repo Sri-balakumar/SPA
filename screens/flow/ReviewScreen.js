@@ -77,7 +77,7 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
           <Row label={t('whatsapp')} value={form.whatsapp} />
           <Row label={t('dob')} value={form.dob} />
           <Row label={t('specialReq')} value={form.specialRequests} />
-          <Row label={t('qAnswered')} value={answered ? `${answered}` : ''} />
+          <Row label={t('qAnswered')} value={form.healthOk ? t('healthOnFile') : (answered ? `${answered}` : '')} />
           {chosen.length ? (
             <Row label={t('addonsLabel')} value={chosen.map((a) => a.name).join(', ')} />
           ) : null}

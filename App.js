@@ -41,6 +41,9 @@ const EMPTY_FORM = {
   fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', countryIso: 'OM', phone: '', whatsapp: '', whatsappSame: true,
   email: '', signature: '',
   answers: [],
+  // Returning customer left "Healthy - no changes" ticked: the questions were
+  // skipped and the server copies their answers on file onto the booking.
+  healthOk: false,
   // The chosen therapy's waiver, loaded with its questions on the Health screen:
   // { title, body, allowUpload } or null. null means the therapy has none, and
   // the disclaimer step is skipped rather than shown empty.

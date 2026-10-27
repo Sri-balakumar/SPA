@@ -14,8 +14,23 @@ import StepHeader from '../../components/StepHeader';
 import Dropdown from '../../components/Dropdown';
 import Button from '../../components/Button';
 import PersonBanner from '../../components/PersonBanner';
-import { loadQuestions } from '../../spaApi';
+import { loadQuestions, loadHealthOnFile } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
+
+// Answers keyed by question id → the screen's answer state. A multi_choice
+// answer travels as "a, b", so it is split back into a list or its options
+// render unticked.
+function toAnswerState(questions, byId) {
+  const out = {};
+  (questions || []).forEach((q) => {
+    const v = byId[q.id];
+    if (v == null || v === '') return;
+    out[q.id] = q.type === 'multi_choice'
+      ? String(v).split(',').map((x) => x.trim()).filter(Boolean)
+      : v;
+  });
+  return out;
+}
 
 // Group the (already ordered) questions into sections and number them 1.. per
 // section — render a heading whenever heading_id changes (0 = no section).
@@ -36,11 +51,36 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
   const [questions, setQuestions] = useState(null);
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState({});   // { [qid]: string | string[] }
+  // "Healthy - no changes", as on the POS: shown when Odoo has the reuse switch on
+  // and this customer has answers on file. Ticked by default.
+  const [onFile, setOnFile] = useState(null);   // { lastUpdated, by, missing } when the box is shown
+  const [healthy, setHealthy] = useState(false);
+  // Ticked and every required question answered on file: nothing to ask. A
+  // question added since the last visit still has to be answered.
+  const useOnFile = !!(onFile && healthy && !onFile.missing);
+
+  // Only a matched returning customer booking for themselves. On a family
+  // booking the submit carries the person on screen, not the matched contact,
+  // so reusing that contact's answers could land them on someone else.
+  const eligible = (form.memberIndex || 0) === 0
+    && (form.memberType || 'individual') === 'individual'
+    && !!form.existingCustomerId;
 
   async function fetch() {
     setError('');
     try {
+      // Questions first: the answers on file are checked against their ids.
       const { questions: qs, disclaimer } = await loadQuestions(form.serviceId, lang);
+      const health = eligible ? await loadHealthOnFile(form, qs.map((q) => q.id)) : null;
+      const me = (health?.customers || []).find((c) => c.id === form.existingCustomerId);
+      if (me && me.answers) setAnswers(toAnswerState(qs, me.answers));   // pre-filled if unticked
+      const shown = !!(health?.enabled && me?.on_file);
+      setOnFile(shown ? {
+        lastUpdated: me.last_updated || me.date || '',
+        by: me.by || '',
+        missing: (me.missing_required || []).length,
+      } : null);
+      setHealthy(shown);
       setQuestions(qs);
       // Carried on the form so App.js can decide whether the disclaimer screen
       // exists at all. It has to be known before Next is pressed here, which is
@@ -69,17 +109,7 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
     const src = (lead && lead.answers) || [];
     const byId = {};
     src.forEach((a) => { if (a && a.questionId != null) byId[a.questionId] = a.value; });
-    // proceed() flattens a multi_choice answer to "a, b" on the way out, so it
-    // has to be split back into a list here or its options render unticked.
-    const next = {};
-    (questions || []).forEach((q) => {
-      const v = byId[q.id];
-      if (v == null || v === '') return;
-      next[q.id] = q.type === 'multi_choice'
-        ? String(v).split(',').map((x) => x.trim()).filter(Boolean)
-        : v;
-    });
-    setAnswers(next);
+    setAnswers(toAnswerState(questions, byId));
   }
   function toggleMulti(qid, opt) {
     setAnswers((a) => {
@@ -89,6 +119,17 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
   }
 
   function proceed() {
+    // Ticked: nothing to check, the server copies the answers on file. healthOk
+    // is set on every Next so it can never be left over from someone else.
+    const out = questions.map((q) => ({
+      questionId: q.id,
+      value: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : (answers[q.id] || ''),
+    }));
+    // The answers on file were pre-filled into `answers`, so they ride along.
+    if (useOnFile) {
+      set({ answers: out, healthOk: true });
+      return next();
+    }
     for (const q of questions) {
       const v = answers[q.id];
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0);
@@ -96,11 +137,7 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
     }
     // Consent is checked on the disclaimer screen now, against the wording the
     // customer was actually shown.
-    const out = questions.map((q) => ({
-      questionId: q.id,
-      value: Array.isArray(answers[q.id]) ? answers[q.id].join(', ') : (answers[q.id] || ''),
-    }));
-    set({ answers: out });
+    set({ answers: out, healthOk: false });
     next();
   }
 
@@ -117,6 +154,34 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
             <PersonBanner form={form} />
+
+            {onFile ? (
+              <View style={s.healthWrap}>
+                <TouchableOpacity style={[s.healthCard, healthy ? s.healthCardOn : s.healthCardOff]} activeOpacity={0.85}
+                  onPress={() => setHealthy((h) => !h)}>
+                  <View style={s.healthRow}>
+                    <View style={[s.box, healthy ? s.boxGreen : s.boxOrange]}>{healthy && <Text style={s.tick}>✓</Text>}</View>
+                    <Text style={[s.healthTxt, !healthy && s.healthTxtOff]}>
+                      {healthy ? t('healthyNoChanges') : t('healthChanged')}
+                    </Text>
+                  </View>
+                  {!!onFile.lastUpdated && (
+                    <Text style={s.healthDate}>
+                      {t('lastUpdated')}: <Text style={s.healthDateB}>{onFile.lastUpdated}</Text>
+                      {onFile.by ? ` ${t('by')} ${onFile.by}` : ''}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            ) : null}
+
+            {onFile && healthy && onFile.missing ? (
+              <Text style={[s.warn, rtl && s.rtl]}>{t('healthNewQuestion')}</Text>
+            ) : null}
+
+            {useOnFile ? (
+              <Text style={[s.none, rtl && s.rtl]}>{t('healthSkipNote')}</Text>
+            ) : (<>
 
             {/* Ten questions for a family of four is forty answers at a busy
                 counter; without this the family flow is unusable. Everything
@@ -177,6 +242,7 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
                 </View>
               </View>
             ))}
+            </>)}
 
             {/* No consent block here. The tick and the signature moved to the
                 disclaimer screen, so they are given on the page carrying the
@@ -233,6 +299,23 @@ const s = StyleSheet.create({
     paddingVertical: 8, paddingHorizontal: 16, marginBottom: 16,
   },
   copyTxt: { color: COLORS.purple, fontWeight: '800', fontSize: 13 },
+  // "Healthy - no changes", top right
+  healthWrap: { alignItems: 'flex-end', marginBottom: 14 },
+  healthCard: {
+    borderWidth: 1.5, borderColor: COLORS.line, borderRadius: 14, backgroundColor: '#fff',
+    paddingVertical: 10, paddingHorizontal: 14,
+  },
+  // Same colours as the POS box: green = no changes, orange = changed.
+  healthCardOn: { borderColor: '#198754', backgroundColor: '#f0faf4' },
+  healthCardOff: { borderColor: '#fd7e14', backgroundColor: '#fff7ef' },
+  boxGreen: { backgroundColor: '#198754', borderColor: '#198754' },
+  boxOrange: { borderColor: '#fd7e14' },
+  healthRow: { flexDirection: 'row', alignItems: 'center' },
+  healthTxt: { fontSize: 14.5, fontWeight: '800', color: '#198754' },
+  healthTxtOff: { color: '#fd7e14' },
+  healthDate: { fontSize: 12, color: COLORS.muted, marginTop: 4, marginLeft: 32 },
+  healthDateB: { fontWeight: '800', color: COLORS.ink },
+  warn: { color: '#b35a00', fontSize: 13.5, fontWeight: '700', marginBottom: 14 },
   // The consent and signature styles moved to DisclaimerScreen with the
   // controls they belonged to.
 });
