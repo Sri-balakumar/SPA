@@ -93,9 +93,10 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   const badPhone = !!form.phone && !formRule.isValid(form.phone);
   const badWa = !!form.whatsapp && !formRule.isValid(form.whatsapp);
 
-  // Email must be a Gmail address: something before the @, then @gmail.com.
-  const GMAIL_RE = /^[^\s@]+@gmail\.com$/i;
-  const emailOk = GMAIL_RE.test((form.email || '').trim());
+  // Email is optional, as on the web booking page; anything typed must be a real
+  // address. Same rule as EMAIL_RE in spa_validation.js and _parse_email on the server.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/;
+  const emailOk = EMAIL_RE.test((form.email || '').trim());
   const badEmail = !!form.email && !emailOk;   // red line only once they've typed
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -203,12 +204,9 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       if (!form.phone.trim()) return showAlert(t('missing'), t('enterPhone'));
       if (badPhone || badWa) return showAlert(t('missing'), t('phoneInvalid'));
       if (!form.whatsapp.trim()) return showAlert(t('missing'), t('enterWhatsapp'));
-      // Email is required and must be a Gmail address.
-      if (!emailOk) return showAlert(t('invalidEmail'), t('gmailOnly'));
-    } else if (form.email && !emailOk) {
-      // Optional for a member, but still has to be a real address if given.
-      return showAlert(t('invalidEmail'), t('gmailOnly'));
     }
+    // Optional for everyone, but still has to be a real address if given.
+    if (badEmail) return showAlert(t('invalidEmail'), t('emailInvalidMsg'));
     // Belt & braces: the picker's maximumDate already blocks future dates, but
     // guard the stored value too in case it ever arrives from elsewhere.
     if (form.dobISO && new Date(form.dobISO) > new Date())
@@ -415,17 +413,14 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
             </>
           )}
 
-          {/* Email — required of the lead (the booking confirmation goes there),
-              optional for everyone else. */}
-          <Text style={s.label}>
-            {t('email')} {isLead ? <Text style={s.req}>*</Text> : null}
-          </Text>
+          {/* Email — optional for everyone, as on the web booking page. */}
+          <Text style={s.label}>{t('email')}</Text>
           <View style={[s.field, badEmail && s.fieldError]}>
-            <TextInput style={s.input} placeholder="name@gmail.com" placeholderTextColor="#B4A9C4"
+            <TextInput style={s.input} placeholder="name@example.com" placeholderTextColor="#B4A9C4"
               keyboardType="email-address" autoCapitalize="none" autoCorrect={false}
               value={form.email} onChangeText={(v) => set({ email: v.trim() })} />
           </View>
-          {badEmail && <Text style={s.errTxt}>{t('gmailOnly')}</Text>}
+          {badEmail && <Text style={s.errTxt}>{t('emailInvalidMsg')}</Text>}
 
           <Button title={t('next')} onPress={proceed} style={{ marginTop: 18 }} />
         </ScrollView>

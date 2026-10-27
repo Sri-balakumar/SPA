@@ -289,12 +289,20 @@ export async function findMembership(phone, lang = 'en') {
   const clean = `+${String(phone || '').replace(/\D/g, '')}`;
   try {
     const data = await restPost('/api/spa/tab/passes', { phone: clean, lang, api_key: TAB_API_KEY });
-    // New shape: a list of people who share this number.
-    if (Array.isArray(data.customers) && data.customers.length) {
-      return { demo: false, customers: data.customers.map((c) => shapeCustomer(c, phone)) };
+    // New shape: a list of people who share this number. The server's fallback
+    // match is loose (the last 8 digits anywhere in a stored number, country code
+    // ignored), so +968 70106160 also returned +91 7010616092. Keep only the
+    // people whose number really is the one typed.
+    const typed = clean.replace(/\D/g, '');
+    const people = (Array.isArray(data.customers) ? data.customers : [])
+      .filter((c) => samePhone(c.phone, typed) || samePhone(c.whatsapp, typed));
+    if (people.length) {
+      return { demo: false, customers: people.map((c) => shapeCustomer(c, phone)) };
     }
     // Old shape: one customer + a flat passes list → wrap as a single person.
-    if (data.found && Array.isArray(data.passes)) {
+    // Only for a server that sends no `customers` at all: a new server repeats
+    // its first match here, which is exactly the person filtered out above.
+    if (!Array.isArray(data.customers) && data.found && Array.isArray(data.passes)) {
       const c = data.customer || {};
       return { demo: false, customers: [shapeCustomer({ id: c.id, name: c.name, passes: data.passes }, phone)] };
     }
@@ -308,6 +316,17 @@ export async function findMembership(phone, lang = 'en') {
     }
     return null;
   }
+}
+
+// Is a stored number the same as the typed one - country code AND number?
+// Contacts are saved in E.164 ("+968 7010 6160"), so compare the full digits;
+// "00" is the only other international prefix allowed. A number that merely
+// contains the typed digits, or the same number under another country code,
+// is a different person.
+function samePhone(stored, typed) {
+  const d = String(stored || '').replace(/\D/g, '');
+  if (!d || !typed) return false;
+  return d === typed || d === `00${typed}`;
 }
 
 // Normalise one customer + their passes into the shape the screens use.
