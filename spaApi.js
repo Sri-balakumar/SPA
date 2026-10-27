@@ -10,7 +10,7 @@
 //   POST /api/spa/tab/passes  {phone}  → existing customer's remaining packages
 //   POST /api/spa/tab/redeem  {phone,pass_id} → check in for today
 import { getBaseUrl, getDb } from './connection';
-import { odooCallKw } from './odoo';
+import { odooCallKw, fetchWithTimeout } from './odoo';
 import { setCurrency } from './dateFmt';
 
 // Set to true ONLY to demo the "Select Your Profile" flow without a live server.
@@ -55,7 +55,7 @@ async function ensureDbSession() {
   const key = `${getBaseUrl()}|${db}`;
   if (!db || _boundKey === key) return;
   try {
-    await fetch(`${base()}/spa/book?db=${encodeURIComponent(db)}`);
+    await fetchWithTimeout(`${base()}/spa/book?db=${encodeURIComponent(db)}`, {}, 15000);
     _boundKey = key;
   } catch (e) { /* fall through — the login session cookie may already cover it */ }
 }
@@ -63,8 +63,8 @@ async function ensureDbSession() {
 async function restGet(path) {
   await ensureDbSession();
   let res;
-  try { res = await fetch(base() + path); }
-  catch (e) { throw new Error('Cannot reach the server. Check the connection.'); }
+  try { res = await fetchWithTimeout(base() + path); }
+  catch (e) { throw new Error(e.timeout ? e.message : 'Cannot reach the server. Check the connection.'); }
   return readJson(res);
 }
 
@@ -72,12 +72,12 @@ async function restPost(path, body) {
   await ensureDbSession();
   let res;
   try {
-    res = await fetch(base() + path, {
+    res = await fetchWithTimeout(base() + path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body || {}),
     });
-  } catch (e) { throw new Error('Cannot reach the server. Check the connection.'); }
+  } catch (e) { throw new Error(e.timeout ? e.message : 'Cannot reach the server. Check the connection.'); }
   return readJson(res);
 }
 
@@ -94,7 +94,9 @@ export function mediaUrl(path) {
 export async function loadImageDataUri(path) {
   if (!path) return null;
   try {
-    const res = await fetch(base() + path);
+    // Short limit: a picture that is slow to come is dropped, not waited for -
+    // the list it belongs to is held until every image has answered.
+    const res = await fetchWithTimeout(base() + path, {}, 15000);
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise((resolve) => {

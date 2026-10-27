@@ -14,8 +14,29 @@
 // ============================================================
 import { getBaseUrl, getDb, setBaseUrl, swapScheme } from './connection';
 
+// fetch() has no time limit of its own: when the server stalls, the request -
+// and the splash screen or spinner waiting on it - hangs for ever. Give up after
+// `ms` and throw instead, so the screen can show an error and offer a retry.
+export const SLOW_SERVER_MSG = 'The server is taking too long to answer. Please try again.';
+export async function fetchWithTimeout(url, options = {}, ms = 30000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } catch (e) {
+    if (ctrl.signal.aborted) {
+      const err = new Error(SLOW_SERVER_MSG);
+      err.timeout = true;
+      throw err;
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function post(base, path, params) {
-  return fetch(`${base}${path}`, {
+  return fetchWithTimeout(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -31,6 +52,9 @@ async function jsonrpc(path, params) {
   try {
     res = await post(base, path, params);
   } catch (e) {
+    // A slow server is not a wrong scheme - retrying on the other one would
+    // only double the wait.
+    if (e.timeout) throw e;
     // A THROW here is a transport failure - DNS, refused connection, or a TLS
     // handshake against a server that only speaks plain http. It is not an HTTP
     // error: a 404 or 500 resolves normally and is handled further down.
