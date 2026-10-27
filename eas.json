@@ -4,12 +4,14 @@
   },
   "build": {
     "preview": {
+      "credentialsSource": "local",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "credentialsSource": "local",
       "android": {
         "buildType": "apk"
       }

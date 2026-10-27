@@ -38,3 +38,9 @@ yarn-error.*
 # env / secrets
 .env
 .env*.local
+
+# Signing key, kept on this PC so every Expo account builds with the same one
+# (see eas.json credentialsSource: local). Never commit these.
+credentials.json
+credentials/
+*.keystore

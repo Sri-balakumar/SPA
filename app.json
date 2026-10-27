@@ -2,9 +2,9 @@
   "expo": {
     "name": "NEXGENN SPA",
     "slug": "spa",
-    "owner": "donav",
+    "owner": "wikike",
     "scheme": "spa",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffffff",
@@ -22,6 +22,7 @@
     },
     "android": {
       "package": "com.alphalize.spa",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
@@ -53,7 +54,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "433516d3-7eaf-4191-9282-c22a5d6f9f48"
+        "projectId": "260f65b8-001d-496f-8a5a-2ce3f6ba4516"
       }
     }
   }
