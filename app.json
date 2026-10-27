@@ -2,7 +2,7 @@
   "expo": {
     "name": "NEXGENN SPA",
     "slug": "spa",
-    "owner": "wikike",
+    "owner": "kawijis",
     "scheme": "spa",
     "version": "1.0.1",
     "orientation": "default",
@@ -54,7 +54,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "260f65b8-001d-496f-8a5a-2ce3f6ba4516"
+        "projectId": "182dd655-b3f6-421a-85db-e80c83e4b7a4"
       }
     }
   }

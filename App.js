@@ -44,6 +44,9 @@ const EMPTY_FORM = {
   // Returning customer left "Healthy - no changes" ticked: the questions were
   // skipped and the server copies their answers on file onto the booking.
   healthOk: false,
+  // The answers given this time, to save as the customer's new answers on file
+  // after submit (set only when the questions were answered, not skipped).
+  healthMap: null,
   // The chosen therapy's waiver, loaded with its questions on the Health screen:
   // { title, body, allowUpload } or null. null means the therapy has none, and
   // the disclaimer step is skipped rather than shown empty.

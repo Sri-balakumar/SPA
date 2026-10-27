@@ -127,7 +127,7 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
     }));
     // The answers on file were pre-filled into `answers`, so they ride along.
     if (useOnFile) {
-      set({ answers: out, healthOk: true });
+      set({ answers: out, healthOk: true, healthMap: null });
       return next();
     }
     for (const q of questions) {
@@ -137,7 +137,17 @@ export default function HealthScreen({ form, set, next, onBack, onHome }) {
     }
     // Consent is checked on the disclaimer screen now, against the wording the
     // customer was actually shown.
-    set({ answers: out, healthOk: false });
+    //
+    // healthMap: the same answers in the shape the customer's answers on file
+    // are stored in ({question id: value}, multi-choice as a list - the POS's
+    // answerMap). Saved onto the profile after submit, so the next visit
+    // pre-fills these and not the old ones.
+    const healthMap = {};
+    questions.forEach((q) => {
+      const v = answers[q.id];
+      if (Array.isArray(v) ? v.length : (v != null && v !== '')) healthMap[q.id] = v;
+    });
+    set({ answers: out, healthOk: false, healthMap });
     next();
   }
 

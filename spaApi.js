@@ -246,6 +246,22 @@ export async function submitBooking(form) {
   return restPost('/api/spa/tab/submit', body);     // { success, booking_ref, id, health_reused }
 }
 
+// Make these answers the customer's answers on file - the call the POS makes
+// after a booking (res.partner.spa_health_save). /api/spa/tab/submit stores the
+// answers on the booking only, so without this the next visit pre-filled the
+// old ones. `map` is {question id: value}, multi-choice as a list. Never throws:
+// the booking has already gone in, and a failed save must not undo that.
+export async function saveHealthOnFile(partnerId, map, signature) {
+  if (!partnerId || !map || !Object.keys(map).length) return false;
+  try {
+    await odooCallKw('res.partner', 'spa_health_save', [partnerId, map, signature || false]);
+    return true;
+  } catch (e) {
+    console.log('[HEALTH] could not save the answers on file', e.message);
+    return false;
+  }
+}
+
 // Health answers already on file for the matched customer, so a returning
 // customer can skip the questions ("Healthy - no changes").
 //   → { enabled, customers:[ {id, on_file, last_updated, by, answers:{qid:value}, missing_required:[]} ] }

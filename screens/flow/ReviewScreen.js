@@ -8,7 +8,7 @@ import { COLORS, SHADOW } from '../../theme';
 import AppAlert from '../../components/AppAlert';
 import StepHeader from '../../components/StepHeader';
 import Button from '../../components/Button';
-import { submitBooking } from '../../spaApi';
+import { submitBooking, saveHealthOnFile } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { money } from '../../dateFmt';
 
@@ -37,6 +37,11 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
       }));
       const res = await submitBooking(form);        // { success, booking_ref, id }
       console.log('[SUBMIT] ok →', JSON.stringify(res));
+      // Answers given this time (not the on-file ones reused) become the
+      // customer's answers on file, as the POS does after a booking.
+      if (!form.healthOk && form.existingCustomerId && form.healthMap) {
+        await saveHealthOnFile(form.existingCustomerId, form.healthMap, form.signature);
+      }
       set({ bookingToken: res?.booking_ref || '' });
       next();
     } catch (e) {
