@@ -79,7 +79,7 @@ function PackageLines({ packages, t, lang, style }) {
   ));
 }
 
-export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) {
+export default function PersonalInfoScreen({ form, set, next, onBack, onHome, onUseExisting }) {
   const { t, lang } = useLang();
   const rtl = lang === 'ar';
   const { width } = useWindowDimensions();
@@ -112,6 +112,9 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [customers, setCustomers] = useState([]);
+  // The picked returning customer, when they still have sessions on a package -
+  // so the form can offer to use it instead of buying another.
+  const [activeCustomer, setActiveCustomer] = useState(null);
 
   const [showPicker, setShowPicker] = useState(false);
   const [dobDate, setDobDate] = useState(null);
@@ -169,6 +172,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       whatsappSame: same,
       existingCustomerId: c.id || null,
     });
+    setActiveCustomer((c.packages || []).length ? c : null);
     setPrevMode('profiles');
     setMode('form');
   }
@@ -183,6 +187,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       phone: lookupNum.trim(), whatsapp: lookupNum.trim(),
       whatsappSame: true, existingCustomerId: null,
     });
+    setActiveCustomer(null);
     setPrevMode(mode);                                    // remember lookup vs profiles for Back
     setNotFound(false);
     setMode('form');
@@ -339,6 +344,24 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <PersonBanner form={form} />
+
+          {/* Already has sessions left on a package: say so before they buy
+              another, and offer to use it. Continuing to buy stays possible. */}
+          {isLead && activeCustomer ? (
+            <View style={s.pkgNotice}>
+              <View style={s.pkgNoticeHead}>
+                <Ionicons name="information-circle" size={20} color={COLORS.purple} />
+                <Text style={[s.pkgNoticeTitle, rtl && s.rtl]}>{t('hasActivePackage')}</Text>
+              </View>
+              <PackageLines packages={activeCustomer.packages} t={t} lang={lang} style={[s.pkgNoticeLine, rtl && s.rtl]} />
+              {onUseExisting ? (
+                <TouchableOpacity style={s.pkgNoticeBtn} activeOpacity={0.85} onPress={() => onUseExisting(activeCustomer)}>
+                  <Text style={s.pkgNoticeBtnTxt}>{t('useThisPackage')}</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : null}
 
           {/* Full Name */}
           <Text style={s.label}>{t('fullName')} <Text style={s.req}>*</Text></Text>
@@ -507,6 +530,19 @@ const s = StyleSheet.create({
   pSub: { fontSize: 13, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
   pPkg: { fontSize: 12.5, color: COLORS.purple, fontWeight: '700', marginTop: 3 },
 
+  // "already has a package" notice on the details form
+  pkgNotice: {
+    backgroundColor: COLORS.lavenderSoft, borderWidth: 1.5, borderColor: COLORS.purple,
+    borderRadius: 14, padding: 14, marginBottom: 16,
+  },
+  pkgNoticeHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  pkgNoticeTitle: { flex: 1, fontSize: 14, fontWeight: '800', color: COLORS.purpleDeep },
+  pkgNoticeLine: { fontSize: 13.5, color: COLORS.ink, fontWeight: '600', marginTop: 2, marginLeft: 28 },
+  pkgNoticeBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: COLORS.purple,
+    borderRadius: 999, paddingVertical: 9, paddingHorizontal: 16, marginTop: 10, marginLeft: 28,
+  },
+  pkgNoticeBtnTxt: { color: '#fff', fontSize: 13.5, fontWeight: '800' },
   newOutline: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff',
     borderRadius: 14, paddingVertical: 15, marginTop: 6, borderWidth: 1.5, borderColor: '#DCCBF0',

@@ -296,6 +296,12 @@ function CustomerFlow() {
         next={() => setStep('health')}
         onBack={backFromPersonal}
         onHome={onHome}
+        // The customer already has a package with sessions left and wants to
+        // use it: hand over to the Existing flow's screens for that person.
+        onUseExisting={(c) => {
+          set({ membership: { customers: [c] }, selectedCustomer: c });
+          setStep('account');
+        }}
       />
     );
   }
