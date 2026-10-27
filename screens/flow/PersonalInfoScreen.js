@@ -68,6 +68,17 @@ function parseDob(dob, age) {
   return { dobText, dobISO, age: a, date: d };
 }
 
+// One line per active package: "Go Flex (8+1) · 6 of 9 sessions left".
+function PackageLines({ packages, t, lang, style }) {
+  return (packages || []).map((p) => (
+    <Text key={p.pass_id ?? p.id} style={style}>
+      {p.service_name} · {t('sessionsLeftOf', {
+        left: toDigits(p.sessions_left, lang), total: toDigits(p.sessions_total, lang),
+      })}
+    </Text>
+  ));
+}
+
 export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) {
   const { t, lang } = useLang();
   const rtl = lang === 'ar';
@@ -303,6 +314,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome }) 
                       {c.age !== '' && c.age != null ? ` · ${toDigits(c.age, lang)} ${t('years')}` : ''}
                     </Text>
                   )}
+                  <PackageLines packages={c.packages} t={t} lang={lang} style={[s.pPkg, rtl && s.rtl]} />
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#C9B9E0" />
               </TouchableOpacity>
@@ -493,6 +505,8 @@ const s = StyleSheet.create({
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: COLORS.lavenderSoft, alignItems: 'center', justifyContent: 'center' },
   pName: { fontSize: 16, fontWeight: '900', color: COLORS.purpleDeep },
   pSub: { fontSize: 13, color: COLORS.muted, fontWeight: '600', marginTop: 2 },
+  pPkg: { fontSize: 12.5, color: COLORS.purple, fontWeight: '700', marginTop: 3 },
+
   newOutline: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff',
     borderRadius: 14, paddingVertical: 15, marginTop: 6, borderWidth: 1.5, borderColor: '#DCCBF0',
