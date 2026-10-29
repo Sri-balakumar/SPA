@@ -21,13 +21,23 @@
                                 <h2 class="tbk-h">Select Therapy</h2>
                                 <p class="text-muted mb-0">Choose a therapy to view its packages.</p>
                             </div>
+                            <div class="tbk-sort">
+                                <label for="tbkTherapySort">Sort by</label>
+                                <select id="tbkTherapySort" class="form-select" t-model="state.sortKey">
+                                    <t t-foreach="sortOptions" t-as="o" t-key="o.key">
+                                        <option t-att-value="o.key">
+                                            <t t-esc="o.label"/><t t-if="o.key === state.defaultSort"> (Default)</t>
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
                             <button class="tbk-close" t-on-click="() => this.closeBooking()" aria-label="Close">
                                 <i class="fa fa-times"/>
                             </button>
                         </div>
 
                         <div class="tbk-therapies">
-                            <t t-foreach="state.therapies" t-as="th" t-key="th.id">
+                            <t t-foreach="sortedTherapies" t-as="th" t-key="th.id">
                                 <button class="tbk-tcard" t-attf-style="--c: {{ therapyStyle(th).color }};"
                                         t-on-click="() => this.openTherapy(th.id)">
                                     <span class="tbk-tcard__media"
@@ -84,7 +94,19 @@
                             </div>
                         </t>
 
-                        <h5 class="tp-section">Available Packages</h5>
+                        <div class="tp-pkg-head">
+                            <h5 class="tp-section">Available Packages</h5>
+                            <div class="tbk-sort">
+                                <label for="tbkPackageSort">Sort by</label>
+                                <select id="tbkPackageSort" class="form-select" t-model="state.pkgSortKey">
+                                    <t t-foreach="pkgSortOptions" t-as="o" t-key="o.key">
+                                        <option t-att-value="o.key">
+                                            <t t-esc="o.label"/><t t-if="o.key === state.defaultPkgSort"> (Default)</t>
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
+                        </div>
                         <div class="tp-plist">
                             <t t-if="!visiblePackages.length">
                                 <!--

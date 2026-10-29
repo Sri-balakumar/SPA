@@ -971,6 +971,31 @@ class SpaBookingApiController(http.Controller):
                     "priced for any member type, so all of them will be hidden. "
                     "Check spa.member.type has a record with is_individual set.",
                     cat.name, len(pkg_data))
+        # Settings > Default service order, so every screen opens in it before
+        # its own "Sort by" is touched. Same four orders as the screens: key,
+        # direction, tie-breaker. list.sort is stable, so full ties keep the
+        # Therapy Order above; a therapy with no price or no duration for the
+        # key goes to the end either way.
+        sorts = {
+            'price_asc': ('from_price', 1, 'duration_min'),
+            'price_desc': ('from_price', -1, 'duration_min'),
+            'dur_asc': ('duration_min', 1, 'from_price'),
+            'dur_desc': ('duration_min', -1, 'from_price'),
+        }
+        params = env['ir.config_parameter'].sudo()
+        default_sort = params.get_param('spa_online_booking.default_sort')
+        if default_sort not in sorts:
+            default_sort = 'price_asc'
+        # Settings > Default package order. The screens sort the packages
+        # themselves, by the price on the member tab that is open.
+        default_package_sort = params.get_param(
+            'spa_online_booking.default_package_sort')
+        if default_package_sort not in ('price_asc', 'price_desc', 'sess_asc', 'sess_desc'):
+            default_package_sort = 'price_asc'
+        key, direction, then = sorts[default_sort]
+        therapies.sort(key=lambda t: (
+            not t[key], direction * (t[key] or 0),
+            not t[then], direction * (t[then] or 0)))
         # The public user's default company may use a different currency than
         # the register that fulfils these bookings. Show the currency of the POS
         # that sells the therapies so the page matches the counter.
@@ -996,6 +1021,8 @@ class SpaBookingApiController(http.Controller):
             'therapies': therapies,
             'member_types': member_types,
             'package_note': note or '',
+            'default_sort': default_sort,
+            'default_package_sort': default_package_sort,
             'currency': {
                 'symbol': currency.symbol or '',
                 'position': currency.position or 'before',  # 'before' | 'after'

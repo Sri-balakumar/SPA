@@ -37,6 +37,13 @@
     token: null,
     currency: { symbol: '', position: 'before' },
     therapies: [],
+    // "Sort by" on the services grid. Replaced on load by Settings > Default
+    // service order, which is also marked "(Default)" in the list.
+    therapySort: 'price_asc',
+    defaultSort: 'price_asc',
+    // The same for a therapy's package list (Settings > Default package order).
+    packageSort: 'price_asc',
+    defaultPackageSort: 'price_asc',
     // Member type tabs and the small print under the package list.
     memberTypes: [],
     // Set from the payload once it loads (renderMemberTabs); there is no
@@ -207,6 +214,19 @@
       state.memberTypes = res.member_types || [];
       state.packageNote = res.package_note || '';
       if (res.currency) state.currency = res.currency;
+      // Settings > Default service order. Only on first load: the language
+      // switch re-fetches too, and must not undo a Sort by the customer chose.
+      if (THERAPY_SORTS[res.default_sort]) {
+        state.therapySort = res.default_sort;
+        state.defaultSort = res.default_sort;
+      }
+      $('#therapySort').value = state.therapySort;
+      if (PACKAGE_SORTS[res.default_package_sort]) {
+        state.packageSort = res.default_package_sort;
+        state.defaultPackageSort = res.default_package_sort;
+      }
+      $('#packageSort').value = state.packageSort;
+      markDefaultSort();
       renderTherapies();
     } catch (e) {
       showBanner(t('err_services_load'));
@@ -628,6 +648,41 @@
     return '🌸';
   }
 
+  // The "Sort by" orders. A therapy with no price or no duration always goes
+  // last, whichever way the list runs.
+  const THERAPY_SORTS = {
+    price_asc: ['from_price', 1, 'duration_min'],
+    price_desc: ['from_price', -1, 'duration_min'],
+    dur_asc: ['duration_min', 1, 'from_price'],
+    dur_desc: ['duration_min', -1, 'from_price'],
+  };
+  // Packages: the price is the one on the open member tab (priceFor).
+  const PACKAGE_SORTS = {
+    price_asc: [(p) => priceFor(p), 1, (p) => p.session_count],
+    price_desc: [(p) => priceFor(p), -1, (p) => p.session_count],
+    sess_asc: [(p) => p.session_count, 1, (p) => priceFor(p)],
+    sess_desc: [(p) => p.session_count, -1, (p) => priceFor(p)],
+  };
+  function sortedPackages(packages) {
+    const [get, dir, then] = PACKAGE_SORTS[state.packageSort] || PACKAGE_SORTS.price_asc;
+    return [...packages].sort((a, b) =>
+      dir * ((get(a) || 0) - (get(b) || 0)) || dir * ((then(a) || 0) - (then(b) || 0)));
+  }
+  // Label the Settings defaults "(Default)". Re-run after a language switch:
+  // the i18n pass rewrites every option from its data-i18n key first.
+  function markDefaultSort() {
+    [['#therapySort', state.defaultSort], ['#packageSort', state.defaultPackageSort]]
+      .forEach(([sel, def]) => $$(`${sel} option`).forEach((o) => {
+        o.textContent = t(o.getAttribute('data-i18n'))
+          + (o.value === def ? ` (${t('sort_default')})` : '');
+      }));
+  }
+  function sortedTherapies() {
+    const [key, dir, then] = THERAPY_SORTS[state.therapySort] || THERAPY_SORTS.price_asc;
+    const by = (a, b, k) => (!a[k] - !b[k]) || dir * ((a[k] || 0) - (b[k] || 0));
+    return [...state.therapies].sort((a, b) => by(a, b, key) || by(a, b, then));
+  }
+
   function renderTherapies() {
     const grid = $('#therapyGrid');
     grid.innerHTML = '';
@@ -635,7 +690,7 @@
       grid.innerHTML = `<p class="empty">${t('therapy_none')}</p>`;
       return;
     }
-    state.therapies.forEach((th) => {
+    sortedTherapies().forEach((th) => {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'tcard';
@@ -775,7 +830,7 @@
       list.innerHTML = `<p class="empty">${t('packages_none')}</p>`;
       return;
     }
-    packages.forEach((p) => {
+    sortedPackages(packages).forEach((p) => {
       const selected = state.selectedPackageId === p.id;
       const row = document.createElement('label');
       row.className = 'prow';
@@ -1578,6 +1633,15 @@
   $('#btnBack').addEventListener('click', back);
   $('#btnCopyAnswers')?.addEventListener('click', copyLeadAnswers);
   $$('.js-next').forEach(b => b.addEventListener('click', advance));
+  $('#therapySort').addEventListener('change', (e) => {
+    state.therapySort = e.target.value;
+    renderTherapies();
+  });
+  $('#packageSort').addEventListener('change', (e) => {
+    state.packageSort = e.target.value;
+    const th = currentTherapy();
+    if (th) renderPackages(th);
+  });
 
   function escapeHtml(str) {
     const div = document.createElement('div');
@@ -1591,6 +1655,7 @@
   }
 
   document.addEventListener('languagechange', async () => {
+    markDefaultSort();
     // Re-fetch the catalogue in the new language (translatable content:
     // names, descriptions, ideal-for, focus-areas, questions).
     try {

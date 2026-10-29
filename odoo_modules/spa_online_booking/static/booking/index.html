@@ -51,6 +51,15 @@
     <section class="screen is-active" data-screen="grid">
       <h2 class="screen__title" data-i18n="services_title">Our Services</h2>
       <p class="hint" data-i18n="services_sub">Choose the perfect stretching session for your needs.</p>
+      <div class="sortbar">
+        <label for="therapySort" data-i18n="sort_by">Sort by</label>
+        <select id="therapySort">
+          <option value="price_asc" data-i18n="sort_price_asc">Price: Low to High</option>
+          <option value="price_desc" data-i18n="sort_price_desc">Price: High to Low</option>
+          <option value="dur_asc" data-i18n="sort_dur_asc">Duration: Short to Long</option>
+          <option value="dur_desc" data-i18n="sort_dur_desc">Duration: Long to Short</option>
+        </select>
+      </div>
       <div id="therapyGrid" class="therapy-grid" role="group" aria-label="Therapies"></div>
     </section>
 
@@ -62,6 +71,15 @@
       <h3 class="section-h section-h--green" id="memberTypeHead" data-i18n="member_type" hidden>Select member type</h3>
       <div id="memberTabs" class="mtabs" role="tablist" hidden></div>
       <h3 class="section-h" data-i18n="packages_avail">Available Packages</h3>
+      <div class="sortbar">
+        <label for="packageSort" data-i18n="sort_by">Sort by</label>
+        <select id="packageSort">
+          <option value="price_asc" data-i18n="sort_price_asc">Price: Low to High</option>
+          <option value="price_desc" data-i18n="sort_price_desc">Price: High to Low</option>
+          <option value="sess_asc" data-i18n="sort_sess_asc">Sessions: Fewest to Most</option>
+          <option value="sess_desc" data-i18n="sort_sess_desc">Sessions: Most to Fewest</option>
+        </select>
+      </div>
       <div id="packageList" class="package-list" role="radiogroup" aria-label="Packages"></div>
       <!-- Small print from Settings, so terms can change without a redeploy. -->
       <p class="package-note" id="packageNote" hidden></p>

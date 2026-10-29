@@ -59,6 +59,14 @@
                                  help="Hide the green &quot;Save X&quot; line under each package, on the POS Book Therapy screen and on the online booking page.">
                             <field name="spa_hide_savings"/>
                         </setting>
+                        <setting string="Default service order"
+                                 help="The order the services open in on the booking page, the POS Book Therapy screen and the tablet. Sort by still changes it.">
+                            <field name="spa_default_sort"/>
+                        </setting>
+                        <setting string="Default package order"
+                                 help="The order a service's packages open in on the booking page, the POS Book Therapy screen and the tablet. Sort by still changes it.">
+                            <field name="spa_default_package_sort"/>
+                        </setting>
                     </block>
                     <block title="Health Questionnaire" name="spa_health_block">
                         <setting string="Reuse answers on file (Healthy tick)"

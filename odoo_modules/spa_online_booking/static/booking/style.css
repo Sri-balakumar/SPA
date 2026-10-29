@@ -107,6 +107,12 @@ html[dir="rtl"] .appbar__back { transform: scaleX(-1); }
 .rich img { max-width: 100%; border-radius: 12px; }
 
 /* ---------- therapy grid ---------- */
+.sortbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin: 0 0 12px; }
+.sortbar label { color: var(--ink-soft); font-size: .85rem; font-weight: 600; }
+.sortbar select {
+  font: inherit; font-size: .85rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; cursor: pointer;
+}
 .therapy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 380px) { .therapy-grid { grid-template-columns: 1fr; } }
 .tcard {

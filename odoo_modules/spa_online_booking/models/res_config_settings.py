@@ -81,6 +81,38 @@ class ResConfigSettings(models.TransientModel):
         help="Hide the green 'Save X' line under each package, on the POS "
              "and on the online booking page.")
 
+    spa_default_sort = fields.Selection([
+        ('price_asc', 'Price: Low to High'),
+        ('price_desc', 'Price: High to Low'),
+        ('dur_asc', 'Duration: Short to Long'),
+        ('dur_desc', 'Duration: Long to Short'),
+    ], string='Default service order', default='price_asc',
+        config_parameter='spa_online_booking.default_sort',
+        help="The order the services open in on the booking page, the POS "
+             "Book Therapy screen and the tablet. Customers and staff can "
+             "still change it with Sort by.")
+    spa_default_package_sort = fields.Selection([
+        ('price_asc', 'Price: Low to High'),
+        ('price_desc', 'Price: High to Low'),
+        ('sess_asc', 'Sessions: Fewest to Most'),
+        ('sess_desc', 'Sessions: Most to Fewest'),
+    ], string='Default package order', default='price_asc',
+        config_parameter='spa_online_booking.default_package_sort',
+        help="The order a service's packages open in on the booking page, the "
+             "POS Book Therapy screen and the tablet. Customers and staff can "
+             "still change it with Sort by.")
+
+    @api.model
+    def get_values(self):
+        # A stored order that is not offered (an old or hand-edited value)
+        # would make the Settings form refuse to open; read it as the default
+        # instead. Saving the form then stores a valid one.
+        res = super().get_values()
+        for fname in ('spa_default_sort', 'spa_default_package_sort'):
+            if res.get(fname) not in dict(self._fields[fname].selection):
+                res[fname] = 'price_asc'
+        return res
+
     # Read by res.partner.spa_health_status (spa_kiosk) by key, which is why
     # the setting can live here while the profile lives on the contact.
     spa_health_reuse = fields.Boolean(

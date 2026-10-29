@@ -32,6 +32,13 @@ export class TherapyScreen extends Component {
             loading: true,
             error: "",
             therapies: [],
+            // "Sort by" on the therapy grid. Replaced on load by Settings >
+            // Default service order, which is also marked "(Default)" in it.
+            sortKey: "price_asc",
+            defaultSort: "price_asc",
+            // The same for a therapy's packages (Settings > Default package order).
+            pkgSortKey: "price_asc",
+            defaultPkgSort: "price_asc",
             currency: { symbol: "", position: "before" },
             therapyId: null,
             packageId: null,
@@ -118,6 +125,15 @@ export class TherapyScreen extends Component {
                 // neither is hard-coded here.
                 this.state.memberTypes = res.member_types || [];
                 this.state.packageNote = res.package_note || "";
+                // Settings > Default service order.
+                if (res.default_sort) {
+                    this.state.sortKey = res.default_sort;
+                    this.state.defaultSort = res.default_sort;
+                }
+                if (res.default_package_sort) {
+                    this.state.pkgSortKey = res.default_package_sort;
+                    this.state.defaultPkgSort = res.default_package_sort;
+                }
                 if (res.currency) {
                     this.state.currency = res.currency;
                 }
@@ -131,6 +147,35 @@ export class TherapyScreen extends Component {
 
     get therapy() {
         return this.state.therapies.find((t) => t.id === this.state.therapyId) || null;
+    }
+    get sortOptions() {
+        return [
+            { key: "price_asc", label: "Price: Low to High" },
+            { key: "price_desc", label: "Price: High to Low" },
+            { key: "dur_asc", label: "Duration: Short to Long" },
+            { key: "dur_desc", label: "Duration: Long to Short" },
+        ];
+    }
+    get pkgSortOptions() {
+        return [
+            { key: "price_asc", label: "Price: Low to High" },
+            { key: "price_desc", label: "Price: High to Low" },
+            { key: "sess_asc", label: "Sessions: Fewest to Most" },
+            { key: "sess_desc", label: "Sessions: Most to Fewest" },
+        ];
+    }
+    // The grid in the chosen "Sort by" order. The same orders as the booking
+    // website; a therapy with no price or no duration always goes last.
+    get sortedTherapies() {
+        const sorts = {
+            price_asc: ["from_price", 1, "duration_min"],
+            price_desc: ["from_price", -1, "duration_min"],
+            dur_asc: ["duration_min", 1, "from_price"],
+            dur_desc: ["duration_min", -1, "from_price"],
+        };
+        const [key, dir, then] = sorts[this.state.sortKey] || sorts.price_asc;
+        const by = (a, b, k) => !a[k] - !b[k] || dir * ((a[k] || 0) - (b[k] || 0));
+        return [...this.state.therapies].sort((a, b) => by(a, b, key) || by(a, b, then));
     }
     get pkg() {
         const th = this.therapy;
@@ -175,7 +220,17 @@ export class TherapyScreen extends Component {
         if (!th) {
             return [];
         }
-        return (th.packages || []).filter((p) => this.priceFor(p) !== null);
+        const sorts = {
+            price_asc: [(p) => this.priceFor(p), 1, (p) => p.session_count],
+            price_desc: [(p) => this.priceFor(p), -1, (p) => p.session_count],
+            sess_asc: [(p) => p.session_count, 1, (p) => this.priceFor(p)],
+            sess_desc: [(p) => p.session_count, -1, (p) => this.priceFor(p)],
+        };
+        // In the package "Sort by" order, priced on the open member tab.
+        const [get, dir, then] = sorts[this.state.pkgSortKey] || sorts.price_asc;
+        return (th.packages || [])
+            .filter((p) => this.priceFor(p) !== null)
+            .sort((a, b) => dir * ((get(a) || 0) - (get(b) || 0)) || dir * ((then(a) || 0) - (then(b) || 0)));
     }
 
     // ---- add-ons ----

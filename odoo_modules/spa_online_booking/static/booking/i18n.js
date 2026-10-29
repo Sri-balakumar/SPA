@@ -19,6 +19,15 @@ window.i18n = (() => {
       services_hint: 'Select one or more services.',
       services_sub: 'Choose the perfect stretching session for your needs.',
 
+      sort_by: 'Sort by',
+      sort_price_asc: 'Price: Low to High',
+      sort_price_desc: 'Price: High to Low',
+      sort_dur_asc: 'Duration: Short to Long',
+      sort_dur_desc: 'Duration: Long to Short',
+      sort_sess_asc: 'Sessions: Fewest to Most',
+      sort_sess_desc: 'Sessions: Most to Fewest',
+      sort_default: 'Default',
+
       therapy_none: 'No therapies available right now.',
       packages_avail: 'Available Packages',
       packages_none: 'No packages in this therapy yet.',
@@ -165,6 +174,15 @@ window.i18n = (() => {
       services_title: 'خدماتنا',
       services_hint: 'اختر خدمة واحدة أو أكثر.',
       services_sub: 'اختر جلسة الإطالة المثالية لاحتياجاتك.',
+
+      sort_by: 'ترتيب حسب',
+      sort_price_asc: 'السعر: من الأقل إلى الأعلى',
+      sort_price_desc: 'السعر: من الأعلى إلى الأقل',
+      sort_dur_asc: 'المدة: من الأقصر إلى الأطول',
+      sort_dur_desc: 'المدة: من الأطول إلى الأقصر',
+      sort_sess_asc: 'الجلسات: من الأقل إلى الأكثر',
+      sort_sess_desc: 'الجلسات: من الأكثر إلى الأقل',
+      sort_default: 'افتراضي',
 
       therapy_none: 'لا توجد علاجات متاحة حاليًا.',
       packages_avail: 'الباقات المتاحة',
