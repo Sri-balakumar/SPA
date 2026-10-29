@@ -54,6 +54,18 @@
                             <field name="spa_assign_required"/>
                         </setting>
                     </block>
+                    <block title="Package Prices" name="spa_savings_block">
+                        <setting string="Hide &quot;Save&quot; amount"
+                                 help="Hide the green &quot;Save X&quot; line under each package, on the POS Book Therapy screen and on the online booking page.">
+                            <field name="spa_hide_savings"/>
+                        </setting>
+                    </block>
+                    <block title="Health Questionnaire" name="spa_health_block">
+                        <setting string="Reuse answers on file (Healthy tick)"
+                                 help="Returning customers see a &quot;Healthy - no changes&quot; tick with the date their answers were last updated. Ticked: the questions and the signature on file are reused. Unticked: the questions open pre-filled so they can be updated. When OFF, the full questionnaire is asked on every visit.">
+                            <field name="spa_health_reuse"/>
+                        </setting>
+                    </block>
                     <block title="WhatsApp Delivery" name="spa_whatsapp_block">
                         <setting string="WhatsApp Session"
                                  help="Booking links are sent directly on this WhatsApp session. If empty or disconnected, the first connected session is used.">
@@ -85,6 +97,12 @@
                     <setting string="Tab tab"
                              help="Show the Tab (tablet kiosk) tab in the POS Orders screen.">
                         <field name="pos_spa_show_tab"/>
+                    </setting>
+                </block>
+                <block title="Spa Invoicing" name="spa_invoicing_section">
+                    <setting string="Invoice every order automatically"
+                             help="The Invoice button starts ticked on every new order, so each sale gets an invoice (and the Invoice button on the Orders screen). The order cannot be paid until a customer is selected.">
+                        <field name="pos_spa_auto_invoice"/>
                     </setting>
                 </block>
             </xpath>

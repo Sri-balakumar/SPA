@@ -40,9 +40,32 @@ patch(PosStore.prototype, {
                         // questions being asked.
                         console.warn("Spa questions: no disclaimer available", e);
                     }
+                    // The customer's answers on file, if the order has one.
+                    const order = this.getOrder();
+                    const partnerId = order && order.partner_id ? order.partner_id.id : null;
+                    let health = null;
+                    if (partnerId) {
+                        try {
+                            health = await this.data.call("res.partner", "spa_health_status", [
+                                partnerId,
+                                questions.map((q) => q.id),
+                            ]);
+                        } catch (e) {
+                            console.warn("Spa questions: no health answers available", e);
+                        }
+                    }
                     const answers = await makeAwaitable(this.dialog, SpaQuestionsDialog, {
                         questions,
                         disclaimer: disclaimer || {},
+                        health,
+                        saveHealth: partnerId
+                            ? (map) =>
+                                  this.data
+                                      .call("res.partner", "spa_health_save", [partnerId, map])
+                                      .catch((e) =>
+                                          console.warn("Spa questions: could not save the health answers", e)
+                                      )
+                            : undefined,
                     });
                     if (answers) {
                         line.setCustomerNote(answers);

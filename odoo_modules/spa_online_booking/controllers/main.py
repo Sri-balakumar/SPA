@@ -872,6 +872,10 @@ class SpaBookingApiController(http.Controller):
             [('spa_is_therapy', '=', True)])
         categories = categories.sorted(lambda c: (c.spa_sequence, c.name or ''))
 
+        # Settings > Spa Online Booking > Hide "Save" amount.
+        hide_save = env['ir.config_parameter'].sudo().get_param(
+            'spa_online_booking.hide_savings') in ('True', '1')
+
         therapies = []
         for cat in categories:
             packages = Product.search(
@@ -890,14 +894,15 @@ class SpaBookingApiController(http.Controller):
             # Therapy duration + "From" price are read off the packages so we
             # don't duplicate that data on the category.
             durations = [p.spa_duration for p in packages if p.spa_duration]
-            duration_min = durations[0] if durations else 0
+            # The therapy's own Session Duration wins; packages are the fallback.
+            duration_min = cat.spa_duration or (durations[0] if durations else 0)
             from_price = min((p.list_price for p in packages), default=0.0)
 
             pkg_data = []
             for p in packages:
                 sessions = p.spa_session_count or 0
                 raw_save = (sessions * single_unit) - p.list_price if single_unit else 0
-                save = round(raw_save) if raw_save and raw_save > 0 else 0
+                save = round(raw_save) if raw_save and raw_save > 0 and not hide_save else 0
                 pkg_data.append({
                     'id': p.id,
                     'name': p.name,

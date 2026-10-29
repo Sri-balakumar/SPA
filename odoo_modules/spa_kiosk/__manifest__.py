@@ -1,6 +1,6 @@
 {
     'name': 'Spa Kiosk',
-    'version': '19.0.2.4.0',
+    'version': '19.0.2.6.0',
     'category': 'Services',
     'summary': 'Spa self-service kiosk with per-service questions',
     'description': 'Walk-in kiosk: select a service, enter details, answer service-specific questions, choose payment mode, submit for receptionist approval.',

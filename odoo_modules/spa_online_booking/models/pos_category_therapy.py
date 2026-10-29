@@ -133,6 +133,10 @@ class PosCategory(models.Model):
         string='Focus Areas', translate=True,
         help="e.g. Neck, Shoulders, Back, Hips, Legs")
     spa_sequence = fields.Integer(string='Therapy Order', default=10)
+    spa_duration = fields.Integer(
+        string='Session Duration (minutes)',
+        help="Shown as 'Session Duration' on the POS and the booking page. "
+             "Leave 0 to take it from this therapy's packages.")
     spa_heading_ids = fields.One2many(
         'spa.question.heading', 'pos_category_id', string='Headings')
     spa_question_ids = fields.One2many(

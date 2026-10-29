@@ -1,6 +1,6 @@
 {
     'name': 'Spa Online Booking',
-    'version': '19.0.14.0.0',
+    'version': '19.0.14.6.0',
     'summary': 'Public WhatsApp-link booking flow: JSON API + static booking page',
     'category': 'Services',
     # 'spa_kiosk' is the technical folder name of the team's existing module.
@@ -91,6 +91,8 @@
             # The "Assignee mandatory" gate on Validate. After the dialog it
             # opens and after the store it reads.
             'spa_online_booking/static/src/pos/payment_assign.js',
+            # Settings > Spa Invoicing: tick Invoice on every new order.
+            'spa_online_booking/static/src/pos/auto_invoice.js',
             'spa_online_booking/static/src/pos/navbar_bookings.js',
             'spa_online_booking/static/src/pos/navbar_bookings.xml',
             'spa_online_booking/static/src/pos/ticket_tabs.js',

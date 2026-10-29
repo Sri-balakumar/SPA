@@ -20,6 +20,7 @@
                 <group string="Online Booking — Therapy">
                     <field name="spa_is_therapy"/>
                     <field name="spa_sequence" invisible="not spa_is_therapy"/>
+                    <field name="spa_duration" invisible="not spa_is_therapy"/>
                     <field name="spa_tagline" invisible="not spa_is_therapy"
                            placeholder="e.g. A light and relaxing stretch session"/>
                     <field name="spa_ideal_for" invisible="not spa_is_therapy"

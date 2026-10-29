@@ -308,4 +308,50 @@
               action="action_spa_service_session_today"
               sequence="20"/>
 
+    <!-- Every spa session - Online, Web and Tab - on a calendar at its
+         appointment time, coloured by who it is assigned to. Lives in the
+         Calendar app beside Meetings; clicking one opens the session form. -->
+    <record id="view_spa_service_session_calendar" model="ir.ui.view">
+        <field name="name">spa.service.session.calendar</field>
+        <field name="model">spa.service.session</field>
+        <field name="arch" type="xml">
+            <calendar string="Spa Sessions" date_start="slot_date"
+                      date_delay="duration_hours" color="assignee_id"
+                      mode="week" quick_create="0" create="0" delete="0"
+                      event_open_popup="1">
+                <field name="partner_id"/>
+                <field name="assignee_id" filters="1"/>
+                <field name="channel" filters="1"/>
+                <field name="therapy_id"/>
+                <field name="state"/>
+                <field name="pos_reference"/>
+            </calendar>
+        </field>
+    </record>
+
+    <record id="action_spa_service_session_calendar" model="ir.actions.act_window">
+        <field name="name">Spa Sessions</field>
+        <field name="res_model">spa.service.session</field>
+        <field name="view_mode">calendar,list,form</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'calendar', 'view_id': ref('view_spa_service_session_calendar')}),
+            (0, 0, {'view_mode': 'list',  'view_id': ref('view_spa_service_session_list')}),
+            (0, 0, {'view_mode': 'form',  'view_id': ref('view_spa_service_session_form')})]"/>
+        <field name="search_view_id" ref="view_spa_service_session_search"/>
+        <!-- Cancelled sessions would only clutter the week. -->
+        <field name="domain">[('state', '!=', 'cancelled')]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No spa sessions in this period</p>
+            <p>Every Online, Web and Tab session appears here at its
+               appointment time, with the member of staff assigned to it.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_spa_sessions_calendar"
+              name="Spa Sessions"
+              parent="calendar.mail_menu_calendar"
+              action="action_spa_service_session_calendar"
+              groups="spa_kiosk.group_spa_receptionist"
+              sequence="5"/>
+
 </odoo>

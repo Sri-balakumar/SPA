@@ -3,7 +3,33 @@
 
     <t t-name="pos_spa_header.SpaQuestionsDialog">
         <Dialog title="title">
-            <div class="spa-questions" t-if="state.step === 'questions'">
+            <!-- Answers on file for this customer: ticked = no changes, the
+                 questions are not asked again; untick to edit them. -->
+            <div t-if="health and state.step === 'questions'"
+                 class="d-flex justify-content-end mb-3">
+                <div class="border rounded px-3 py-2 text-end"
+                     t-att-style="state.healthOk ? 'border-color: #198754 !important; background: #f0faf4;' : 'border-color: #fd7e14 !important; background: #fff7ef;'">
+                    <label class="d-flex align-items-center justify-content-end gap-2 mb-1 fw-bold"
+                           style="cursor: pointer;">
+                        <input type="checkbox" class="form-check-input m-0"
+                               style="width: 1.4em; height: 1.4em;"
+                               t-model="state.healthOk"/>
+                        <span t-if="state.healthOk" class="text-success">Healthy - no changes</span>
+                        <span t-else="" style="color: #fd7e14;">Health changed - update answers</span>
+                    </label>
+                    <div class="small text-muted">
+                        Last updated: <b t-esc="health.date"/>
+                        <t t-if="health.by"> by <t t-esc="health.by"/></t>
+                    </div>
+                </div>
+            </div>
+            <p t-if="useOnFile and state.step === 'questions'" class="text-muted">
+                The answers on file will be used. Untick the box if anything has changed.
+            </p>
+            <p t-if="health and state.healthOk and !useOnFile and state.step === 'questions'" class="text-warning">
+                A new question has been added since the last visit - please answer it.
+            </p>
+            <div class="spa-questions" t-if="state.step === 'questions' and !useOnFile">
                 <t t-foreach="props.questions" t-as="q" t-key="q.id">
                     <!-- Section title, printed once above the first question
                          under it - the list arrives already grouped. -->

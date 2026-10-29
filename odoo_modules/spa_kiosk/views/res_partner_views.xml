@@ -26,6 +26,28 @@
                         </list>
                     </field>
                 </page>
+                <page string="Health Profile" name="spa_health"
+                      groups="spa_kiosk.group_spa_receptionist">
+                    <div class="mb-3" invisible="spa_health_date">
+                        <i class="fa fa-info-circle me-1"/>No health answers on file - the questionnaire is asked on the next visit.
+                    </div>
+                    <group invisible="not spa_health_date">
+                        <group>
+                            <field name="spa_health_date" string="Last Updated"/>
+                            <field name="spa_health_user_id"/>
+                        </group>
+                        <group>
+                            <field name="spa_health_signature" widget="image" readonly="1"
+                                   options="{'size': [240, 90]}"/>
+                        </group>
+                    </group>
+                    <field name="spa_health_summary" readonly="1" nolabel="1"
+                           invisible="not spa_health_date"/>
+                    <button name="action_spa_health_clear" type="object"
+                            string="Ask Again Next Visit" class="btn-secondary mt-3"
+                            invisible="not spa_health_date"
+                            confirm="Forget the answers and signature on file? The full questionnaire will be asked on the next visit."/>
+                </page>
             </xpath>
         </field>
     </record>

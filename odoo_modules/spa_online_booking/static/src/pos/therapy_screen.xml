@@ -286,7 +286,28 @@
 
                 <!-- ============ CUSTOMER DETAILS ============ -->
                 <t t-if="state.screen === 'details'">
-                    <h2 class="tbk-h">Personal information</h2>
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <h2 class="tbk-h">Personal information</h2>
+                        <!-- Returning customer with answers on file: ticked =
+                             nothing changed, skip the questions and reuse the
+                             signature; unticked = questions open to edit. -->
+                        <div t-if="isLeadPerson and state.health and state.health.on_file"
+                             class="tp-health border rounded px-3 py-2 text-end"
+                             t-att-style="state.healthOk ? 'border-color: #198754 !important; background: #f0faf4;' : 'border-color: #fd7e14 !important; background: #fff7ef;'">
+                            <label class="d-flex align-items-center justify-content-end gap-2 mb-1 fw-bold"
+                                   style="cursor: pointer;">
+                                <input type="checkbox" class="form-check-input m-0"
+                                       style="width: 1.4em; height: 1.4em;"
+                                       t-model="state.healthOk"/>
+                                <span t-if="state.healthOk" class="text-success">Healthy - no changes</span>
+                                <span t-else="" style="color: #fd7e14;">Health changed - update answers</span>
+                            </label>
+                            <div class="small text-muted">
+                                Last updated: <b t-esc="state.health.date"/>
+                                <t t-if="state.health.by"> by <t t-esc="state.health.by"/></t>
+                            </div>
+                        </div>
+                    </div>
                     <!-- Who is being entered. Shown only for a family, so an
                          ordinary individual booking looks exactly as it did. -->
                     <div t-if="isFamily" class="tp-person">
@@ -426,7 +447,9 @@
                 <div t-if="state.screen !== 'select'" class="tbk-actions">
                     <button class="btn btn-secondary btn-lg" t-on-click="() => this.back()">Back</button>
                     <button t-if="state.screen === 'details'" class="btn btn-primary btn-lg ms-auto"
-                            t-on-click="() => this.toQuestions()">Continue</button>
+                            t-att-disabled="state.busy" t-on-click="() => this.toQuestions()">
+                        <t t-esc="state.busy ? 'Adding…' : 'Continue'"/>
+                    </button>
                     <!-- With a disclaimer the questions lead to it; without one
                          they finish this person - who may not be the last. -->
                     <button t-if="state.screen === 'questions'" class="btn btn-primary btn-lg ms-auto"

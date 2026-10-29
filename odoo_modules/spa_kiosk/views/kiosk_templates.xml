@@ -101,6 +101,23 @@
                 </div>
                 <p class="err" id="kioskMobileErr" style="display: none"/>
 
+                <!-- Returning customer with answers on file (shown by the
+                     script below once the number is typed). Ticked = nothing
+                     changed, the questions are skipped; unticked = answer them
+                     again. Only the DATE is ever sent to this public page,
+                     never the answers themselves. -->
+                <input type="hidden" name="health_ok" id="kioskHealthOk" value=""/>
+                <div id="kioskHealth" style="display: none; border: 2px solid #198754; background: #f0faf4; border-radius: 10px; padding: 12px 16px; margin: 12px 0; text-align: right;">
+                    <label class="opt" style="justify-content: flex-end; font-weight: bold; margin: 0;">
+                        <input type="checkbox" id="kioskHealthTick" checked="checked"/>
+                        <span id="kioskHealthLabel">Healthy - no changes since my last visit</span>
+                    </label>
+                    <div style="font-size: 0.9em; color: #6c757d;">
+                        Last updated: <b id="kioskHealthDate"/>
+                    </div>
+                </div>
+
+                <div id="kioskQuestions">
                 <!-- Dynamic questions of the selected service -->
                 <t t-foreach="questions" t-as="question">
                     <!-- Section title, printed once above the first question
@@ -153,6 +170,8 @@
                         </t>
                     </t>
                 </t>
+
+                </div><!-- /kioskQuestions -->
 
                 <!-- Continue only exists when there is a second page to go to. -->
                 <button class="btn" type="button" t-if="disclaimer"
@@ -302,6 +321,80 @@
                         // one the booking page and the till would have found.
                         mobEl.value = window.spaKioskFullNumber();
                     });
+                })();
+            </script>
+            <script>
+                // Answers on file for this number? Ask the server once the
+                // number looks complete; it answers only {on_file, date}.
+                (function () {
+                    var mobEl = document.getElementById('kioskMobile');
+                    var dialEl = document.getElementById('kioskDial');
+                    var box = document.getElementById('kioskHealth');
+                    var tick = document.getElementById('kioskHealthTick');
+                    var okEl = document.getElementById('kioskHealthOk');
+                    var label = document.getElementById('kioskHealthLabel');
+                    var qs = document.getElementById('kioskQuestions');
+                    var serviceEl = document.querySelector('input[name="service_id"]');
+                    if (!mobEl || !box || !qs) {
+                        return;
+                    }
+                    var onFile = false;
+                    var timer = null;
+                    // Ticked: hide the questions and take them out of the form
+                    // (disabled inputs are neither validated nor posted).
+                    function apply() {
+                        var skip = onFile &amp;&amp; tick.checked;
+                        box.style.display = onFile ? '' : 'none';
+                        box.style.borderColor = tick.checked ? '#198754' : '#fd7e14';
+                        box.style.background = tick.checked ? '#f0faf4' : '#fff7ef';
+                        label.textContent = tick.checked
+                            ? 'Healthy - no changes since my last visit'
+                            : 'My health has changed - I will answer again';
+                        okEl.value = skip ? '1' : '';
+                        qs.style.display = skip ? 'none' : '';
+                        var fields = qs.querySelectorAll('input, select, textarea');
+                        for (var i = 0; i &lt; fields.length; i++) {
+                            fields[i].disabled = skip;
+                        }
+                    }
+                    function number() {
+                        if (window.spaKioskFullNumber) {
+                            return window.spaKioskFullNumber() || '';
+                        }
+                        return mobEl.value.trim();
+                    }
+                    function lookup() {
+                        var n = number();
+                        onFile = false;
+                        if (n.replace(/\D/g, '').length &lt; 7) {
+                            apply();
+                            return;
+                        }
+                        fetch('/spa/kiosk/health', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({jsonrpc: '2.0', method: 'call', params: {
+                                mobile: n, service_id: serviceEl ? serviceEl.value : ''}}),
+                        }).then(function (r) { return r.json(); }).then(function (d) {
+                            var res = (d &amp;&amp; d.result) || {};
+                            if (n !== number()) {
+                                return; // typed on meanwhile
+                            }
+                            onFile = !!res.on_file;
+                            document.getElementById('kioskHealthDate').textContent = res.date || '';
+                            tick.checked = true;
+                            apply();
+                        }).catch(function () { onFile = false; apply(); });
+                    }
+                    function schedule() {
+                        clearTimeout(timer);
+                        timer = setTimeout(lookup, 500);
+                    }
+                    mobEl.addEventListener('input', schedule);
+                    if (dialEl) {
+                        dialEl.addEventListener('change', schedule);
+                    }
+                    tick.addEventListener('change', apply);
                 })();
             </script>
             <script t-if="disclaimer">

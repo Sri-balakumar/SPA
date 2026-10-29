@@ -24,6 +24,7 @@ from odoo.exceptions import UserError
 #            redeemed it is excluded here and appears as one of the rows above,
 #            so a session is never counted twice.
 QUERY = """
+    WITH spa_company_tz(company_id, tz) AS (VALUES %(tz_rows)s)
     SELECT
         (line.id * 10 + 1)                          AS id,
         'sale'                                      AS source,
@@ -40,9 +41,18 @@ QUERY = """
              ELSE 'open' END                        AS state,
         ROUND(GREATEST(line.qty, 0))::integer       AS session_count,
         line.price_subtotal_incl                    AS amount,
-        pos.company_id                              AS company_id
+        pos.company_id                              AS company_id,
+        -- The appointment, for the calendar. spa_slot_datetime is LOCAL wall
+        -- clock like spa_booking.slot_datetime, so it goes through the
+        -- company's zone; an order with no appointment sits on its sale time.
+        COALESCE(
+            (pos.spa_slot_datetime AT TIME ZONE COALESCE(sale_tz.tz, 'UTC'))
+                AT TIME ZONE 'UTC',
+            pos.date_order)                         AS slot_date,
+        COALESCE(NULLIF(tmpl.spa_duration, 0), 60) / 60.0 AS duration_hours
     FROM pos_order_line line
     JOIN pos_order pos          ON pos.id = line.order_id
+    LEFT JOIN spa_company_tz sale_tz ON sale_tz.company_id = pos.company_id
     JOIN product_product variant ON variant.id = line.product_id
     JOIN product_template tmpl   ON tmpl.id = variant.product_tmpl_id
     JOIN LATERAL (
@@ -74,7 +84,10 @@ QUERY = """
         CASE WHEN COALESCE(spa_pack.sessions_total, 0) > 0
              THEN COALESCE(src.amount_total, 0) / spa_pack.sessions_total
              ELSE 0 END,
-        spa_pack.company_id
+        spa_pack.company_id,
+        spa_use.date,
+        COALESCE((SELECT NULLIF(t.spa_duration, 0) FROM product_template t
+                  WHERE t.id = spa_pack.product_tmpl_id), 60) / 60.0
     FROM spa_session_pass_use spa_use
     JOIN spa_session_pass spa_pack ON spa_pack.id = spa_use.pass_id
     LEFT JOIN pos_order src    ON src.id = spa_pack.pos_order_id
@@ -101,7 +114,7 @@ QUERY = """
         -- Converted here through the COMPANY's timezone; no tz on file means
         -- 'UTC', which leaves the value exactly as it was.
         COALESCE(
-            (booking.slot_datetime AT TIME ZONE COALESCE(comp_tz.tz, 'UTC'))
+            (booking.slot_datetime AT TIME ZONE COALESCE(book_tz.tz, 'UTC'))
                 AT TIME ZONE 'UTC',
             booking.create_date),
         booking.spa_therapist_id,
@@ -115,10 +128,15 @@ QUERY = """
              ELSE 'scheduled' END,
         1,
         0,
-        booking.company_id
+        booking.company_id,
+        COALESCE(
+            (booking.slot_datetime AT TIME ZONE COALESCE(book_tz.tz, 'UTC'))
+                AT TIME ZONE 'UTC',
+            booking.create_date),
+        COALESCE((SELECT NULLIF(t.spa_duration, 0) FROM product_template t
+                  WHERE t.id = booking.product_id), 60) / 60.0
     FROM spa_booking booking
-    LEFT JOIN res_company comp     ON comp.id = booking.company_id
-    LEFT JOIN res_partner comp_tz  ON comp_tz.id = comp.partner_id
+    LEFT JOIN spa_company_tz book_tz ON book_tz.company_id = booking.company_id
     LEFT JOIN LATERAL (
         SELECT rel.pos_category_id
         FROM pos_category_product_template_rel rel
@@ -145,6 +163,9 @@ class SpaServiceSession(models.Model):
     _rec_name = 'product_tmpl_id'
 
     date = fields.Datetime(string='Date', readonly=True)
+    # Calendar position: the appointment when there is one, else `date`.
+    slot_date = fields.Datetime(string='Appointment Time', readonly=True)
+    duration_hours = fields.Float(string='Duration (hours)', readonly=True)
     assignee_id = fields.Many2one(
         'res.users', string='Assignee', readonly=True,
         help="Member of staff who gave, or is booked to give, this session. "
@@ -283,7 +304,26 @@ class SpaServiceSession(models.Model):
             'view_mode': 'form',
         }
 
+    def _spa_tz_rows(self):
+        """VALUES rows (company id, timezone) for the view.
+
+        The zone comes from res.company._spa_display_tz_name - the COUNTRY's
+        zone (Oman -> Asia/Muscat), the same rule every spa screen uses -
+        because res.partner.tz is wrong on live data (an Oman company carrying
+        Asia/Calcutta), which put appointments hours off on the calendar.
+        Rebuilt on every upgrade of this module.
+        """
+        rows = []
+        for company in self.env['res.company'].sudo().search([]):
+            try:
+                tz = company._spa_display_tz_name() or 'UTC'
+            except Exception:
+                tz = company.partner_id.tz or 'UTC'
+            rows.append(self.env.cr.mogrify('(%s, %s)', (company.id, tz)).decode())
+        return ', '.join(rows) or "(0, 'UTC')"
+
     def init(self):
         tools.drop_view_if_exists(self.env.cr, self._table)
         self.env.cr.execute(
-            "CREATE OR REPLACE VIEW %s AS (%s)" % (self._table, QUERY))
+            "CREATE OR REPLACE VIEW %s AS (%s)" % (
+                self._table, QUERY % {'tz_rows': self._spa_tz_rows()}))

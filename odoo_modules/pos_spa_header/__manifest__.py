@@ -1,6 +1,6 @@
 {
     'name': 'POS Spa Header',
-    'version': '19.0.1.5.0',
+    'version': '19.0.1.7.0',
     'category': 'Point of Sale',
     'summary': 'Customize the POS top bar: Orders / Customers / Services, no order tabs',
     'author': 'Danat',

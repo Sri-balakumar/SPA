@@ -75,6 +75,21 @@ class ResConfigSettings(models.TransientModel):
              "until each session names who is giving it. When off, the "
              "assignee is recorded wherever it is set but nothing is blocked.")
 
+    spa_hide_savings = fields.Boolean(
+        string='Hide "Save" amount',
+        config_parameter='spa_online_booking.hide_savings',
+        help="Hide the green 'Save X' line under each package, on the POS "
+             "and on the online booking page.")
+
+    # Read by res.partner.spa_health_status (spa_kiosk) by key, which is why
+    # the setting can live here while the profile lives on the contact.
+    spa_health_reuse = fields.Boolean(
+        string='Reuse answers on file',
+        config_parameter='spa_online_booking.health_reuse',
+        help="Returning customers get a 'Healthy - no changes' tick: ticked, "
+             "the questions and signature on file are reused; unticked, the "
+             "questions open pre-filled to update. Off = ask every visit.")
+
     # Per-POS toggles for which channel tabs show in the POS Orders screen.
     pos_spa_show_online = fields.Boolean(
         related='pos_config_id.spa_show_online', readonly=False)
@@ -82,3 +97,5 @@ class ResConfigSettings(models.TransientModel):
         related='pos_config_id.spa_show_web', readonly=False)
     pos_spa_show_tab = fields.Boolean(
         related='pos_config_id.spa_show_tab', readonly=False)
+    pos_spa_auto_invoice = fields.Boolean(
+        related='pos_config_id.spa_auto_invoice', readonly=False)

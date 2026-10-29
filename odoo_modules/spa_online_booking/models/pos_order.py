@@ -265,6 +265,11 @@ class PosOrder(models.Model):
             # shows what was actually agreed to rather than a later edit.
             record._spa_snapshot_disclaimer()
             line.spa_signature_ref = record.id
+        # The latest signature also goes on file with the customer's health
+        # answers, so a "no changes" visit can reuse it (no-op without answers).
+        partner = order.partner_id
+        if lines and partner and 'spa_health_signature' in partner._fields:
+            self.env['res.partner'].sudo().spa_health_keep_signature(partner.id, signature)
         return True
 
     # ---- Session passes (prepaid multi-session packages) ----------------

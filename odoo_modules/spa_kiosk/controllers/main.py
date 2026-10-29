@@ -81,6 +81,46 @@ class SpaKiosk(http.Controller):
             partner = Partner.create({'name': name or number, 'phone': number})
         return partner
 
+    def _kiosk_partner_by_number(self, mobile):
+        """The existing contact behind this number, or an empty recordset."""
+        Partner = request.env['res.partner'].sudo()
+        number = Partner._spa_e164(mobile) or (mobile or '').strip()
+        if not number:
+            return Partner.browse()
+        return Partner.search(
+            ['|', ('phone', '=', number), ('whatsapp', '=', number)], limit=1)
+
+    def _kiosk_health(self, service, mobile):
+        """Health status for this number and service, or None.
+
+        None also when a required question has never been answered (added
+        since the last visit): then the questions must be asked.
+        """
+        partner = self._kiosk_partner_by_number(mobile)
+        if not partner:
+            return None
+        status = request.env['res.partner'].sudo().spa_health_status(
+            partner.id, service._spa_questions().ids)
+        if not status.get('on_file') or status.get('missing_required'):
+            return None
+        return dict(status, partner=partner)
+
+    @http.route('/spa/kiosk/health', type='jsonrpc', auth='public',
+                methods=['POST'], csrf=False)
+    def kiosk_health(self, mobile=None, service_id=None, **kw):
+        # PUBLIC route: answers ONLY whether answers are on file and when -
+        # never the answers, the name or anything else about the person.
+        if _kiosk_blocked() is not None:
+            return {'on_file': False}
+        service = request.env['product.template'].sudo().browse(
+            int(service_id or 0)).exists()
+        if not service:
+            return {'on_file': False}
+        status = self._kiosk_health(service, mobile)
+        if not status:
+            return {'on_file': False}
+        return {'on_file': True, 'date': status.get('date', '')}
+
     def _push_booking_to_pos(self, booking, service, session, partner):
         """Create a draft POS order (customer + service) in the open session so
         the kiosk booking shows up in the POS Orders list."""
@@ -154,10 +194,25 @@ class SpaKiosk(http.Controller):
             return request.redirect(
                 '/spa/kiosk/form/%s?src=%s' % (service.id, post.get('src', '')))
 
+        # "Healthy - no changes" ticked: re-check on the server (never trust the
+        # flag alone) and take the answers from the profile instead of the form.
+        health = self._kiosk_health(service, mobile) \
+            if post.get('health_ok') == '1' else None
+
         # Collect answers for this service's questions
         answers = []
+        new_profile = {}
         form = request.httprequest.form
         for question in service._spa_questions():
+            if health:
+                value = health['answers'].get(question.id)
+                if value:
+                    answers.append((0, 0, {
+                        'question_id': question.id,
+                        'value_text': ', '.join(value) if isinstance(value, list)
+                        else str(value),
+                    }))
+                continue
             key = 'q_%s' % question.id
             if question.question_type == 'multi_choice':
                 values = form.getlist(key)
@@ -173,6 +228,8 @@ class SpaKiosk(http.Controller):
                     'question_id': question.id,
                     'value_text': value,
                 }))
+                new_profile[question.id] = values \
+                    if question.question_type == 'multi_choice' else value
 
         # Align the booking (and its POS order) with the open register's company.
         session = self._open_session()
@@ -180,7 +237,14 @@ class SpaKiosk(http.Controller):
             else (service.company_id.id or request.env.company.id)
 
         partner = self._find_or_create_partner(name, mobile)
-        booking = request.env['spa.booking'].sudo().create({
+        # Freshly answered: these become the customer's answers on file.
+        if new_profile:
+            try:
+                request.env['res.partner'].sudo().spa_health_save(
+                    partner.id, new_profile)
+            except Exception:
+                _logger.exception('Spa kiosk: could not save the health answers')
+        booking =request.env['spa.booking'].sudo().create({
             'partner_name': name,
             'mobile': mobile,
             'partner_id': partner.id,

@@ -97,6 +97,15 @@ export class TherapyScreen extends Component {
             sig: newSigState(),
             // Ticked just above the signature, on the same screen.
             custTerms: false,
+            // Health answers already on file for the lead (res.partner
+            // spa_health_status). With the "Healthy - no changes" tick on,
+            // Continue skips the questions and the signature and reuses these;
+            // untick it and the questions open pre-filled to be edited.
+            health: null,
+            healthOk: true,
+            // Set when this booking reused the profile, so confirm() does not
+            // write the same answers back over it as a new update.
+            healthUsed: false,
             busy: false,
         });
         // Look the customer up as the number is typed, not on every keystroke.
@@ -420,18 +429,110 @@ export class TherapyScreen extends Component {
         }
         this.state.error = "";
         this._savePerson();
-        if (this.state.questionsFor !== this.state.packageId) {
-            try {
-                const r = await fetch(
-                    `/api/spa/questions?service_ids=${encodeURIComponent(this.state.packageId)}`
-                ).then((res) => res.json());
-                this.state.questions = r.questions || [];
-                this.state.questionsFor = this.state.packageId;
-            } catch (e) {
-                this.state.questions = [];
+        await this._ensureQuestions();
+        this.state.healthUsed = false;
+        const health = this.isLeadPerson ? this.state.health : null;
+        if (health && health.on_file) {
+            // Start from what is on file whichever way the tick is set: ticked
+            // it is used as is, unticked it is the form to edit.
+            if (!Object.keys(this.state.answers || {}).length) {
+                this.state.answers = { ...(health.answers || {}) };
+            }
+            if (this.state.healthOk && !(health.missing_required || []).length) {
+                this.state.answers = { ...(health.answers || {}) };
+                this.state.healthUsed = true;
+                this._savePerson();
+                // Only the questions are skipped. The waiver is consent to THIS
+                // package, so it is read, ticked and signed fresh every time.
+                if (this.disclaimer) {
+                    this.state.screen = "disclaimer";
+                } else {
+                    this.nextPersonOrConfirm();
+                }
+                return;
+            }
+            if (this.state.healthOk) {
+                this.state.error =
+                    "A new question has been added since the last visit - please answer it.";
             }
         }
         this.state.screen = "questions";
+    }
+
+    async _ensureQuestions() {
+        if (this.state.questionsFor === this.state.packageId) {
+            return;
+        }
+        try {
+            const r = await fetch(
+                `/api/spa/questions?service_ids=${encodeURIComponent(this.state.packageId)}`
+            ).then((res) => res.json());
+            this.state.questions = r.questions || [];
+            this.state.questionsFor = this.state.packageId;
+        } catch (e) {
+            this.state.questions = [];
+        }
+    }
+
+    // Read the lead's answers on file as soon as we know who they are, so the
+    // tick can be shown on the details step itself.
+    async _loadHealth(partnerId) {
+        this.state.health = null;
+        this.state.healthOk = true;
+        if (!partnerId) {
+            return;
+        }
+        try {
+            await this._ensureQuestions();
+            const status = await this.orm.call("res.partner", "spa_health_status", [
+                partnerId,
+                this.state.questions.map((q) => q.id),
+            ]);
+            // The customer may have changed while the call was in flight.
+            if (this.state.custPartnerId === partnerId && status && status.on_file) {
+                this.state.health = status;
+            }
+        } catch (e) {
+            // No profile = ask the questions, exactly as before.
+            console.warn("Therapy booking: could not read the health answers", e);
+        }
+    }
+
+    // New answers (a first visit, or the tick taken off) become the profile.
+    async _saveHealth(partnerId) {
+        const lead = this.state.members[0];
+        if (!partnerId || !lead) {
+            return;
+        }
+        if (this.state.healthUsed) {
+            // No changes, but nothing signed on file yet (the answers came from
+            // the pop-up or the kiosk): keep the signature just given, so the
+            // next visit skips the waiver as well.
+            const onFile = this.state.health && this.state.health.signature;
+            if (!onFile && lead.signature) {
+                try {
+                    await this.orm.call("res.partner", "spa_health_keep_signature", [
+                        partnerId,
+                        lead.signature,
+                    ]);
+                } catch (e) {
+                    console.warn("Therapy booking: could not keep the signature", e);
+                }
+            }
+            return;
+        }
+        if (!Object.keys(lead.answers || {}).length) {
+            return;
+        }
+        try {
+            await this.orm.call("res.partner", "spa_health_save", [
+                partnerId,
+                lead.answers,
+                lead.signature || false,
+            ]);
+        } catch (e) {
+            console.warn("Therapy booking: could not save the health answers", e);
+        }
     }
     // ---- details validation -------------------------------------------
     // The fields this person has to get right, in the order they appear on
@@ -626,6 +727,12 @@ export class TherapyScreen extends Component {
             this.state.screen = this.disclaimer ? "disclaimer" : "questions";
             return;
         }
+        // Questions were skipped ("Healthy - no changes"): there is no
+        // questions page behind the disclaimer to go back to.
+        if (this.state.screen === "disclaimer" && this.state.healthUsed && this.isLeadPerson) {
+            this.state.screen = "details";
+            return;
+        }
         const prev = map[this.state.screen];
         if (prev) {
             this.state.screen = prev;
@@ -786,6 +893,8 @@ export class TherapyScreen extends Component {
         this.state.custMatches = [];
         this.state.custLookupDone = false;
         this.state.custNewMode = false;
+        this.state.health = null;
+        this.state.healthOk = true;
         // Same call for a keystroke and for a country change - selectCountry()
         // routes through here - so the length message tracks both.
         this.checkField("phone");
@@ -868,6 +977,9 @@ export class TherapyScreen extends Component {
         // contact simply does not have yet - Continue will ask for that.
         this._clearFieldErrors();
         this._checkFilledOnly();
+        // A different person's answers must not carry over to this one.
+        this.state.answers = {};
+        this._loadHealth(c.id);
         // The signature is NOT touched here: it was given for this service a
         // moment ago, on the questions step, before we knew who this was.
     }
@@ -904,6 +1016,9 @@ export class TherapyScreen extends Component {
     newCustomerOnThisNumber() {
         this.state.custPartnerId = null;
         this.state.custNewMode = true;
+        this.state.health = null;
+        this.state.healthOk = true;
+        this.state.answers = {};
         this.state.custName = "";
         this.state.custDob = "";
         this.state.custGender = "";
@@ -996,6 +1111,9 @@ export class TherapyScreen extends Component {
             custLookupDone: false,
             custNewMode: false,
             custTerms: false,
+            health: null,
+            healthOk: true,
+            healthUsed: false,
             error: "",
             busy: false,
         });
@@ -1381,6 +1499,7 @@ export class TherapyScreen extends Component {
                     order.spa_channel = "web";
                 }
                 this._saveMembers(order);
+                await this._saveHealth(partnerId);
             } catch (e) {
                 console.error("Therapy booking: could not record the details", e);
                 this.state.error =
