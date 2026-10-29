@@ -22,7 +22,7 @@ import Button from '../../components/Button';
 import CodePicker from '../../components/CodePicker';
 import AppAlert from '../../components/AppAlert';
 import PersonBanner from '../../components/PersonBanner';
-import { phoneRule, digitsOnly } from '../../data/phoneRules';
+import { phoneRule, digitsOnly, localNumber } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { parseDobDate, formatDob, toDigits } from '../../dateFmt';
@@ -36,16 +36,6 @@ function ageFrom(d) {
   const m = now.getMonth() - d.getMonth();
   if (m < 0 || (m === 0 && now.getDate() < d.getDate())) a--;
   return a;
-}
-// Get the LOCAL number only (no country code) — keeps the code selector clean.
-// Handles "+91 6359863259", "+916359863259" and "6359863259".
-function localNumber(full, cc) {
-  let s = String(full || '').trim();
-  if (s.includes(' ')) return s.split(/\s+/).slice(1).join('').replace(/\D/g, '');
-  s = s.replace(/\D/g, '');                       // digits only
-  const ccd = String(cc || '').replace(/\D/g, ''); // "91"
-  if (ccd && s.startsWith(ccd) && s.length > ccd.length) s = s.slice(ccd.length);
-  return s;
 }
 // Normalise gender from the backend ("female" / "F" / "Male" …) to the form values.
 function normGender(g) {
@@ -90,7 +80,11 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
   // nothing to look them up by, and the lead's matched contact must not be
   // replaced by theirs. They open straight on the form.
   const isLead = (form.memberIndex || 0) === 0;
-  const [mode, setMode] = useState(isLead ? 'lookup' : 'form');
+  // Coming Back to this screen with the lead's details already filled in opens
+  // on the form as it was left. Starting at Find My Details again lost what was
+  // typed: a new search reloads the contact from Odoo, New Customer clears it.
+  const resume = isLead && !!(form.fullName || '').trim() && !!form.phone;
+  const [mode, setMode] = useState(isLead && !resume ? 'lookup' : 'form');
   const [prevMode, setPrevMode] = useState(isLead ? 'lookup' : 'form'); // where the form was opened from
   const [lookupCc, setLookupCc] = useState(form.countryCode || '+968');
   const [lookupIso, setLookupIso] = useState(form.countryIso || 'OM');
@@ -117,7 +111,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
   const [activeCustomer, setActiveCustomer] = useState(null);
 
   const [showPicker, setShowPicker] = useState(false);
-  const [dobDate, setDobDate] = useState(null);
+  // The picker opens on the date already chosen, when coming back to the form.
+  const [dobDate, setDobDate] = useState(() => parseDobDate(form.dobISO || form.dob));
 
   // In-app popup styled like the rest of the app, in place of the OS Alert.
   const [alertBox, setAlertBox] = useState(null);
