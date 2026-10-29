@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
 import pytz
+from markupsafe import Markup
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
@@ -515,23 +516,58 @@ class SpaBookingPos(models.Model):
     def _pos_sync_partner(self, partner):
         """Carry what the booking captured onto an EXISTING contact.
 
-        Only fills in what the contact is MISSING - a typo on the tablet must
-        never overwrite good data. The signature is deliberately NOT among
-        these: it stays on the booking it was given for, because it is consent
-        to that service and not a detail of the person.
+        Date of birth and gender only fill in what the contact is MISSING - a
+        typo on the tablet must never overwrite good data. WhatsApp and e-mail
+        are different: the customer types them again on every booking, so a
+        different value means it changed and the contact takes it - but only
+        from a booking made after the contact's details were last set
+        (spa_contact_date). Otherwise loading an old booking would put back a
+        number or address the customer has since changed. Every change is
+        noted on the contact; a booking too old to apply says so on itself.
+        The phone is never replaced - it is the number customers are looked up
+        by. The signature is deliberately NOT among these: it stays on the
+        booking it was given for, because it is consent to that service and
+        not a detail of the person.
         """
         self.ensure_one()
         patch = {}
-        if self.email and not partner.email:
-            patch['email'] = self.email
         if self.date_of_birth and not partner.date_of_birth:
             patch['date_of_birth'] = self.date_of_birth
         if self.gender and not partner.gender:
             patch['gender'] = self.gender
-        if self.whatsapp_number and not partner.whatsapp:
-            patch['whatsapp'] = self.whatsapp_number
+
+        # Compared as digits / lower-cased, so a spacing or capital letter is
+        # the same value and not a change.
+        digits = lambda n: ''.join(c for c in (n or '') if c.isdigit())
+        mail = lambda e: (e or '').strip().lower()
+        changes = {}
+        if self.whatsapp_number and digits(self.whatsapp_number) != digits(partner.whatsapp):
+            changes['whatsapp'] = self.whatsapp_number
+        if self.email and mail(self.email) != mail(partner.email):
+            changes['email'] = self.email.strip()
+        newer = not partner.spa_contact_date or (
+            self.create_date and self.create_date >= partner.spa_contact_date)
+        if changes and not newer:
+            # Nothing to lose by filling an empty e-mail, however old.
+            if 'email' in changes and not partner.email:
+                patch['email'] = changes['email']
+            self.message_post(body=_(
+                "WhatsApp / e-mail not copied to the contact: it already has "
+                "details newer than this booking."))
+            changes = {}
+        if changes:
+            patch.update(changes, spa_contact_date=self.create_date)
+
+        before = {f: partner[f] for f in ('whatsapp', 'email') if f in patch}
         if patch:
             partner.sudo().write(patch)
+        if before:
+            labels = {'whatsapp': _("WhatsApp"), 'email': _("E-mail")}
+            partner.sudo().message_post(body=Markup('%s<ul>%s</ul>') % (
+                _("Updated from booking %s:", self.name),
+                Markup('').join(Markup('<li>%s: %s → %s</li>') % (
+                    labels[f], old or '-', partner[f] or '-')
+                    for f, old in before.items())))
         return partner
 
 
