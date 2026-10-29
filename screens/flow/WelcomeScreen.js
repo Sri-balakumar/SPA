@@ -12,6 +12,10 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import { useLang } from '../../LanguageContext';
+// Read from app.json so the footer always shows the version being built.
+import appConfig from '../../app.json';
+
+const APP_VERSION = appConfig.expo.version;
 
 const SERIF = 'PlayfairDisplay_700Bold';
 
@@ -149,7 +153,7 @@ export default function WelcomeScreen({
 
             {/* Inside the language panel, so it fades out with it and never
                 appears on the New/Existing content. */}
-            <Text style={s.poweredBy}>Powered by 369ai | v1.0.0</Text>
+            <Text style={s.poweredBy}>Powered by 369ai | v{APP_VERSION}</Text>
           </Animated.View>
 
           {/* 2) WELCOME CONTENT (unchanged design) */}

@@ -4,7 +4,7 @@
     "slug": "spa",
     "owner": "kawijis",
     "scheme": "spa",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "default",
     "userInterfaceStyle": "light",
     "backgroundColor": "#ffffff",
@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "com.alphalize.spa",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
