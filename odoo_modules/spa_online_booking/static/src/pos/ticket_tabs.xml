@@ -62,21 +62,11 @@
             <attribute name="t-if">false</attribute>
         </xpath>
 
-        <!-- Show the channel (Online / Web / Tab) on each order row (desktop). -->
-        <xpath expr="//td[hasclass('order-name')]" position="inside">
-            <div t-if="order.spa_channel" class="mt-1">
-                <span t-attf-class="badge rounded {{ spaChannelClass(order) }}"
-                      t-esc="spaChannelLabel(order)"/>
-            </div>
-        </xpath>
-
-        <!-- Same, for the mobile order list. -->
-        <xpath expr="//div[hasclass('order-name')]" position="inside">
-            <div t-if="order.spa_channel" class="mt-1">
-                <span t-attf-class="badge rounded {{ spaChannelClass(order) }}"
-                      t-esc="spaChannelLabel(order)"/>
-            </div>
-        </xpath>
+        <!-- No channel badge on core's order rows: that table is hidden above,
+             and the cards below carry the channel. The two xpaths that used to
+             add one targeted an .order-name cell that not every Odoo 19 build
+             has - where it is missing, Odoo cannot apply the extension and the
+             whole Orders page fails to open. -->
 
         <!-- Booking tab: list of bookings for the selected channel -->
         <xpath expr="//div[hasclass('orders')]" position="before">
