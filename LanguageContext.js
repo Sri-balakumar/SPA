@@ -24,6 +24,14 @@ const STR = {
   // service screen
   chooseService: { en: 'Choose a Service', hi: 'सेवा चुनें', ar: 'اختر خدمة' },
   serviceSub: { en: 'Select the service you would like to enjoy', hi: 'जिस सेवा का आप आनंद लेना चाहते हैं उसे चुनें', ar: 'اختر الخدمة التي ترغب بها' },
+  sortBy: { en: 'Sort by', hi: 'क्रमबद्ध करें', ar: 'ترتيب حسب' },
+  sortPriceAsc: { en: 'Price: Low to High', hi: 'कीमत: कम से अधिक', ar: 'السعر: من الأقل إلى الأعلى' },
+  sortPriceDesc: { en: 'Price: High to Low', hi: 'कीमत: अधिक से कम', ar: 'السعر: من الأعلى إلى الأقل' },
+  sortDurAsc: { en: 'Duration: Short to Long', hi: 'अवधि: कम से अधिक', ar: 'المدة: من الأقصر إلى الأطول' },
+  sortDurDesc: { en: 'Duration: Long to Short', hi: 'अवधि: अधिक से कम', ar: 'المدة: من الأطول إلى الأقصر' },
+  sortSessAsc: { en: 'Sessions: Fewest to Most', hi: 'सत्र: कम से अधिक', ar: 'الجلسات: من الأقل إلى الأكثر' },
+  sortSessDesc: { en: 'Sessions: Most to Fewest', hi: 'सत्र: अधिक से कम', ar: 'الجلسات: من الأكثر إلى الأقل' },
+  sortDefault: { en: 'Default', hi: 'डिफ़ॉल्ट', ar: 'افتراضي' },
   loadingServices: { en: 'Loading services…', hi: 'सेवाएँ लोड हो रही हैं…', ar: 'جارٍ تحميل الخدمات…' },
   noServices: { en: 'No services available yet.', hi: 'अभी कोई सेवा उपलब्ध नहीं है।', ar: 'لا توجد خدمات متاحة بعد.' },
   bannerTitle: { en: 'Treat Yourself, You Deserve It!', hi: 'अपना ख्याल रखें, आप इसके हकदार हैं!', ar: 'دلل نفسك، أنت تستحق ذلك!' },
@@ -226,6 +234,8 @@ const STR = {
   // Edit Profile
   pleaseUpdate: { en: 'Please update your details', ar: 'يرجى تحديث بياناتك' },
   saveChanges: { en: 'Save Changes', ar: 'حفظ التغييرات' },
+  saving: { en: 'Saving…', hi: 'सहेजा जा रहा है…', ar: 'جارٍ الحفظ…' },
+  couldNotSave: { en: 'Could not save', hi: 'सहेजा नहीं जा सका', ar: 'تعذّر الحفظ' },
 };
 
 const LanguageContext = createContext(null);

@@ -11,11 +11,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import LangButton from '../../components/LangButton';
+import SortPill from '../../components/SortPill';
 import { loadTherapies, mediaUrl } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { toDigits, money } from '../../dateFmt';
 
 const SERIF = 'PlayfairDisplay_700Bold';
+
+// Package "Sort by" orders, the same as the booking website and the POS: value,
+// direction, tie-breaker, label. The price is the one on the open member tab.
+const byPrice = (p, priceFor) => priceFor(p);
+const bySessions = (p) => p.sessions;
+const PKG_SORTS = {
+  price_asc: [byPrice, 1, bySessions, 'sortPriceAsc'],
+  price_desc: [byPrice, -1, bySessions, 'sortPriceDesc'],
+  sess_asc: [bySessions, 1, byPrice, 'sortSessAsc'],
+  sess_desc: [bySessions, -1, byPrice, 'sortSessDesc'],
+};
 
 // One line of the therapy's details. Left out when Odoo has no value for it,
 // same as the POS, so an unfilled field never shows as a blank row.
@@ -56,6 +68,7 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
       prices: p.prices || {},
     };
   });
+  // The chosen package's key, not its position: Sort by reorders the list.
   const [selected, setSelected] = useState(null);
 
   // ---- therapy details (same block the POS shows above the tabs) ----
@@ -98,12 +111,20 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
   }
 
   // A package with no price for this tab is left out entirely - an empty cell
-  // means "not offered", not "same price as individual".
-  const visible = packages.filter((p) => priceFor(p) !== null);
+  // means "not offered", not "same price as individual". Shown in the "Sort by"
+  // order, which opens on Odoo's Settings > Default package order.
+  const [pkgSort, setPkgSort] = useState(PKG_SORTS[form.packageSort] ? form.packageSort : 'price_asc');
+  const [get, dir, then] = PKG_SORTS[pkgSort];
+  const visible = packages
+    .filter((p) => priceFor(p) !== null)
+    .sort((a, b) => dir * ((get(a, priceFor) || 0) - (get(b, priceFor) || 0))
+      || dir * ((then(a, priceFor) || 0) - (then(b, priceFor) || 0)));
+  // The Settings default is labelled "(Default)" in the list.
+  const defaultPkgSort = PKG_SORTS[form.packageSort] ? form.packageSort : 'price_asc';
 
   function pickMemberType(key) {
-    // Clearing the selection is deliberate: the package list itself changes, so
-    // an index into the old list would point at the wrong row. `members` is
+    // Clearing the selection is deliberate: the package list itself changes,
+    // and the chosen package may not be sold on the new tab. `members` is
     // deliberately NOT cleared - the same customer is still booking, and
     // retyping person 1 because they switched Family 2 to Family 3 is needless.
     setSelected(null);
@@ -129,7 +150,7 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
   }, [lang]);
 
   function cont() {
-    const pkg = visible[selected];
+    const pkg = visible.find((p) => p.key === selected);
     // serviceId = the PACKAGE id — that's what /questions and /tab/submit expect.
     // addonIds is cleared here rather than merged: the extras on offer belong to
     // the package, so an id ticked on a previous choice must not survive into a
@@ -192,13 +213,17 @@ export default function PackagesScreen({ form, set, next, onBack, onHome }) {
           ) : null}
 
           <Text style={[s.sectionTitle, rtl && s.rtlTxt]}>{t('availablePackages')}</Text>
+          {visible.length > 1 ? (
+            <SortPill value={pkgSort} defaultKey={defaultPkgSort} onChange={setPkgSort}
+              options={Object.keys(PKG_SORTS).map((k) => ({ key: k, label: t(PKG_SORTS[k][3]) }))} />
+          ) : null}
           {!visible.length ? (
             <Text style={[s.noPkg, rtl && s.rtlTxt]}>{t('noPackagesForOption')}</Text>
           ) : null}
-          {visible.map((p, i) => {
-            const active = selected === i;
+          {visible.map((p) => {
+            const active = selected === p.key;
             return (
-              <TouchableOpacity key={p.key} activeOpacity={0.9} onPress={() => setSelected(i)}
+              <TouchableOpacity key={p.key} activeOpacity={0.9} onPress={() => setSelected(p.key)}
                 style={[s.card, active && s.cardActive]}>
                 <View style={[s.radio, active && s.radioActive]}>
                   {active && <View style={s.radioDot} />}

@@ -17,10 +17,26 @@ import { loadTherapies, mediaUrl } from '../../spaApi';
 import { money } from '../../dateFmt';
 import { useLang } from '../../LanguageContext';
 import LangButton from '../../components/LangButton';
+import SortPill from '../../components/SortPill';
 
 const SERIF = 'PlayfairDisplay_700Bold';
 const META = {};
 SERVICES.forEach((s) => { META[s.name] = s; });
+
+// "Sort by" orders, the same as the booking website and the POS: field,
+// direction, tie-breaker, label. A therapy with no price or no duration for
+// the field always goes last.
+const SORTS = {
+  price_asc: ['from_price', 1, 'duration_min', 'sortPriceAsc'],
+  price_desc: ['from_price', -1, 'duration_min', 'sortPriceDesc'],
+  dur_asc: ['duration_min', 1, 'from_price', 'sortDurAsc'],
+  dur_desc: ['duration_min', -1, 'from_price', 'sortDurDesc'],
+};
+function sortTherapies(list, sortKey) {
+  const [key, dir, then] = SORTS[sortKey] || SORTS.price_asc;
+  const by = (a, b, k) => (!a[k] - !b[k]) || dir * ((a[k] || 0) - (b[k] || 0));
+  return [...list].sort((a, b) => by(a, b, key) || by(a, b, then));
+}
 
 export default function ServiceScreen({ set, next, onBack, onHome }) {
   const insets = useSafeAreaInsets();
@@ -37,12 +53,20 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
   const [services, setServices] = useState(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);   // service tapped → show its full description
+  // Opens in Odoo's Settings > Default service order; Sort by changes it.
+  const [sortKey, setSortKey] = useState(null);
+  const [defaultSort, setDefaultSort] = useState('price_asc');
 
   async function fetchServices() {
     setError('');
     try {
       const data = await loadTherapies(lang);
       setServices(data.therapies || []);
+      // Only the first load takes Odoo's default: switching language re-fetches
+      // and must not undo a Sort by the customer picked.
+      const def = SORTS[data.default_sort] ? data.default_sort : 'price_asc';
+      setDefaultSort(def);
+      setSortKey((k) => k || def);
       // Top-level catalogue settings, carried on the form because the screens
       // that need them are further down the flow and do not re-fetch:
       //   package_note  - commercial small print under the package list
@@ -52,6 +76,8 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
       set({
         packageNote: data.package_note || '',
         memberTypes: data.member_types || [],
+        // Settings > Default package order, for the Packages screen.
+        packageSort: data.default_package_sort || 'price_asc',
       });
     } catch (e) {
       setError(e.message || 'Could not load services.');
@@ -102,8 +128,12 @@ export default function ServiceScreen({ set, next, onBack, onHome }) {
         <View style={s.center}><Text style={s.errTxt}>{t('noServices')}</Text></View>
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={s.scroll}>
+          <View style={{ width: contentW }}>
+            <SortPill value={sortKey || defaultSort} defaultKey={defaultSort} onChange={setSortKey}
+              options={Object.keys(SORTS).map((k) => ({ key: k, label: t(SORTS[k][3]) }))} />
+          </View>
           <View style={[s.grid, { width: contentW, columnGap: GAP, rowGap: GAP + 4 }]}>
-            {services.map((svc) => {
+            {sortTherapies(services, sortKey).map((svc) => {
               const meta = META[svc.name] || {};
               const imgSrc = (svc.image_data ? { uri: svc.image_data } : mediaUrl(svc.image_url)) || meta.img;
               const displayName = svc.name;

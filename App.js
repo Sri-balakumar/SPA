@@ -56,7 +56,7 @@ const EMPTY_FORM = {
   // payload, so a stale number can never reach the total or the booking.
   addonIds: [],
   // Top-level catalogue settings, filled on the Service screen.
-  packageNote: '', memberTypes: [],
+  packageNote: '', memberTypes: [], packageSort: '',
   // Which Individual / Family option was chosen, and everyone it covers.
   //
   // ONE set of screens filled N times, not N copies on screen: the details form
