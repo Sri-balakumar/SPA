@@ -12,8 +12,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import CodePicker from '../../components/CodePicker';
-import { phoneRule, digitsOnly } from '../../data/phoneRules';
+import { phoneRule, digitsOnly, localNumber } from '../../data/phoneRules';
 import { useLang } from '../../LanguageContext';
+import AppAlert from '../../components/AppAlert';
+import { saveProfile } from '../../spaApi';
 import { parseDobDate } from '../../dateFmt';
 
 const GENDERS = ['Female', 'Male', 'Other'];
@@ -50,9 +52,20 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
   const [cc, setCc] = useState(form.countryCode || '+968');
   const [ccIso, setCcIso] = useState(form.countryIso || 'OM');
   const [phone, setPhone] = useState(form.phone || '');
-  const [waSame, setWaSame] = useState(m.whatsappSame !== false);
-  const [wa, setWa] = useState('');
+  // Open on the customer's own WhatsApp. The server never sends whatsappSame
+  // (only a save here sets it), so work it out from the numbers on file:
+  // ticked when there is none or it matches the mobile, unticked otherwise.
+  const waLocal = localNumber(m.whatsapp, form.countryCode || '+968');
+  const [waSame, setWaSame] = useState(
+    () => m.whatsappSame ?? (!waLocal || waLocal === (form.phone || '')));
+  const [wa, setWa] = useState(() => (waSame ? '' : waLocal));
+  // Optional, as on the New-customer form; anything typed must be a real
+  // address. Same rule as EMAIL_RE in PersonalInfoScreen and the server.
+  const [email, setEmail] = useState(m.email || '');
+  const badEmail = !!email.trim() && !/^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email.trim());
   const [genderOpen, setGenderOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [alertBox, setAlertBox] = useState(null);
 
   // Digit count + validity for the selected country (phone and WhatsApp share one).
   const rule = phoneRule(ccIso);
@@ -65,16 +78,51 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
     setDobDate(selected);
   }
 
-  function save() {
-    if (badPhone || badWa) return;              // button is disabled, belt & braces
+  async function save() {
+    if (badPhone || badWa || badEmail || busy) return;   // button is disabled, belt & braces
+    if (!waSame && !wa.trim()) {
+      setAlertBox({ title: t('missing'), message: t('enterWhatsapp'), tone: 'error' });
+      return;
+    }
     const mobile = `${cc} ${phone.trim()}`;
     const whatsapp = waSame ? mobile : `${cc} ${wa.trim()}`;
     const dobISO = dobDate ? iso(dobDate) : '';
+    // Onto the customer's contact in Odoo first. Only kept in the app, the
+    // next lookup brought the old details straight back.
+    if (m.id && !m.demo) {
+      setBusy(true);
+      try {
+        await saveProfile(m.id, {
+          name: fullName.trim() || m.name,
+          ...(phone.trim() ? { phone: mobile.replace(/\s/g, '') } : {}),
+          ...(phone.trim() || !waSame ? { whatsapp: whatsapp.replace(/\s/g, '') } : {}),
+          // Left out when blank: clearing the box never wipes the e-mail on file.
+          ...(email.trim() ? { email: email.trim() } : {}),
+          gender: gender ? gender.toLowerCase() : false,
+          ...(dobISO ? { date_of_birth: dobISO } : {}),
+        });
+      } catch (e) {
+        setBusy(false);
+        setAlertBox({ title: t('couldNotSave'), message: e.message || t('tryAgain'), tone: 'error' });
+        return;
+      }
+      setBusy(false);
+    }
+    // ISO, like the server sends it, so every screen's formatDob reads it.
+    const updated = {
+      ...m, name: fullName, phone: mobile, whatsapp, whatsappSame: waSame, age, gender, dob: dobISO || m.dob,
+      email: email.trim() || m.email || '',
+    };
     set({
       fullName, dob, dobISO, age, gender, countryCode: cc, phone: phone.trim(),
       whatsapp: waSame ? phone.trim() : wa.trim(), whatsappSame: waSame,
-      // ISO, like the server sends it, so every screen's formatDob reads it.
-      selectedCustomer: { ...m, name: fullName, phone: mobile, whatsapp, age, gender, dob: dobISO || m.dob },
+      selectedCustomer: updated,
+      // The profile list this customer was picked from, so Back shows them
+      // with the new details too.
+      membership: form.membership && {
+        ...form.membership,
+        customers: (form.membership.customers || []).map((c) => (c.id === m.id ? updated : c)),
+      },
     });
     onBack();
   }
@@ -146,13 +194,19 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           </View>
           {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
+          <Text style={[s.label, rtl && s.rtlTxt]}>{t('email')}</Text>
+          <TextInput style={[s.input, badEmail && s.fieldError, rtl && s.rtlTxt]} value={email}
+            onChangeText={(v) => setEmail(v.trim())} placeholder="name@example.com" placeholderTextColor="#B4A9C4"
+            keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+          {badEmail && <Text style={s.errTxt}>{t('emailInvalidMsg')}</Text>}
+
           <TouchableOpacity
-            style={[s.cta, (badPhone || badWa) && { opacity: 0.6 }]}
+            style={[s.cta, (badPhone || badWa || badEmail || busy) && { opacity: 0.6 }]}
             activeOpacity={0.9}
             onPress={save}
-            disabled={badPhone || badWa}
+            disabled={badPhone || badWa || badEmail || busy}
           >
-            <Text style={s.ctaTxt}>{t('saveChanges')}</Text>
+            <Text style={s.ctaTxt}>{busy ? t('saving') : t('saveChanges')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -171,6 +225,8 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <AppAlert box={alertBox} onClose={() => setAlertBox(null)} />
     </View>
   );
 }

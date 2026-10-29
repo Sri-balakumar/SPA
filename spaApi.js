@@ -262,6 +262,15 @@ export async function saveHealthOnFile(partnerId, map, signature) {
   }
 }
 
+// Write Edit Profile's changes onto the customer's contact, over the staff
+// login like saveHealthOnFile (res.partner.spa_profile_save - a POS user cannot
+// write contacts directly). Without it the edit lived only in the app, and the
+// next lookup (Find My Details, the Existing flow) brought the old details
+// back. Throws, so the screen can say it did not save.
+export async function saveProfile(partnerId, vals) {
+  return odooCallKw('res.partner', 'spa_profile_save', [partnerId, vals]);
+}
+
 // Health answers already on file for the matched customer, so a returning
 // customer can skip the questions ("Healthy - no changes").
 //   → { enabled, customers:[ {id, on_file, last_updated, by, answers:{qid:value}, missing_required:[]} ] }

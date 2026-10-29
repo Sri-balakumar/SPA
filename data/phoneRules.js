@@ -67,6 +67,17 @@ export function digitsOnly(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
+// Get the LOCAL number only (no country code) — keeps the code selector clean.
+// Handles "+91 6359863259", "+916359863259" and "6359863259".
+export function localNumber(full, cc) {
+  let s = String(full || '').trim();
+  if (s.includes(' ')) return s.split(/\s+/).slice(1).join('').replace(/\D/g, '');
+  s = s.replace(/\D/g, '');                       // digits only
+  const ccd = String(cc || '').replace(/\D/g, ''); // "91"
+  if (ccd && s.startsWith(ccd) && s.length > ccd.length) s = s.slice(ccd.length);
+  return s;
+}
+
 // Resolve the ISO for a dial code. Only a fallback for state saved before the
 // ISO was tracked — a dial code alone is ambiguous (+1 is US, CA and ~20
 // Caribbean nations), so prefer the ISO the picker hands back.
