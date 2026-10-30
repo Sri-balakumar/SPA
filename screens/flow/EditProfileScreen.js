@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../theme';
 import BrandHeader from '../../components/BrandHeader';
 import CodePicker from '../../components/CodePicker';
-import { phoneRule, digitsOnly, localNumber } from '../../data/phoneRules';
+import { phoneRule, digitsOnly, splitNumber } from '../../data/phoneRules';
 import { useLang } from '../../LanguageContext';
 import AppAlert from '../../components/AppAlert';
 import { saveProfile } from '../../spaApi';
@@ -52,13 +52,17 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
   const [cc, setCc] = useState(form.countryCode || '+968');
   const [ccIso, setCcIso] = useState(form.countryIso || 'OM');
   const [phone, setPhone] = useState(form.phone || '');
-  // Open on the customer's own WhatsApp. The server never sends whatsappSame
-  // (only a save here sets it), so work it out from the numbers on file:
-  // ticked when there is none or it matches the mobile, unticked otherwise.
-  const waLocal = localNumber(m.whatsapp, form.countryCode || '+968');
+  // Open on the customer's own WhatsApp, under its own country - it can differ
+  // from the mobile's. The server never sends whatsappSame (only a save here
+  // sets it), so work it out from the numbers on file: ticked when there is
+  // none or it matches the mobile (code and number), unticked otherwise.
+  const [waInit] = useState(() => splitNumber(m.whatsapp, cc, ccIso));
+  const [waCc, setWaCc] = useState(waInit.cc);
+  const [waIso, setWaIso] = useState(waInit.iso);
   const [waSame, setWaSame] = useState(
-    () => m.whatsappSame ?? (!waLocal || waLocal === (form.phone || '')));
-  const [wa, setWa] = useState(() => (waSame ? '' : waLocal));
+    () => m.whatsappSame ?? (!waInit.local
+      || digitsOnly(`${waInit.cc}${waInit.local}`) === digitsOnly(`${cc}${phone}`)));
+  const [wa, setWa] = useState(() => (waSame ? '' : waInit.local));
   // Optional, as on the New-customer form; anything typed must be a real
   // address. Same rule as EMAIL_RE in PersonalInfoScreen and the server.
   const [email, setEmail] = useState(m.email || '');
@@ -67,10 +71,19 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
   const [busy, setBusy] = useState(false);
   const [alertBox, setAlertBox] = useState(null);
 
-  // Digit count + validity for the selected country (phone and WhatsApp share one).
+  // Digit count + validity per selected country. WhatsApp uses the phone's
+  // while it is the same number, its own once that is unticked.
   const rule = phoneRule(ccIso);
+  const waRule = waSame ? rule : phoneRule(waIso);
   const badPhone = !!phone && !rule.isValid(phone);
-  const badWa = !waSame && !!wa && !rule.isValid(wa);
+  const badWa = !waSame && !!wa && !waRule.isValid(wa);
+
+  // Unticking starts the WhatsApp code on the phone's when nothing is typed
+  // yet; it can then be changed on its own.
+  function toggleSame() {
+    if (waSame && !wa.trim()) { setWaCc(cc); setWaIso(ccIso); }
+    setWaSame(!waSame);
+  }
 
   function onPickDate(event, selected) {
     setShowPicker(Platform.OS === 'ios');
@@ -85,7 +98,7 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
       return;
     }
     const mobile = `${cc} ${phone.trim()}`;
-    const whatsapp = waSame ? mobile : `${cc} ${wa.trim()}`;
+    const whatsapp = waSame ? mobile : `${waCc} ${wa.trim()}`;
     const dobISO = dobDate ? iso(dobDate) : '';
     // Onto the customer's contact in Odoo first. Only kept in the app, the
     // next lookup brought the old details straight back.
@@ -114,8 +127,9 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
       email: email.trim() || m.email || '',
     };
     set({
-      fullName, dob, dobISO, age, gender, countryCode: cc, phone: phone.trim(),
+      fullName, dob, dobISO, age, gender, countryCode: cc, countryIso: ccIso, phone: phone.trim(),
       whatsapp: waSame ? phone.trim() : wa.trim(), whatsappSame: waSame,
+      waCountryCode: waSame ? cc : waCc, waCountryIso: waSame ? ccIso : waIso,
       selectedCustomer: updated,
       // The profile list this customer was picked from, so Back shows them
       // with the new details too.
@@ -180,17 +194,18 @@ export default function EditProfileScreen({ form, set, onBack, onHome }) {
           </View>
           {badPhone && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 
-          <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={() => setWaSame((v) => !v)}>
+          <TouchableOpacity style={s.check} activeOpacity={0.8} onPress={toggleSame}>
             <View style={[s.box, waSame && s.boxOn]}>{waSame && <Ionicons name="checkmark" size={14} color="#fff" />}</View>
             <Text style={[s.checkTxt, rtl && s.rtlTxt]}>{t('whatsappSame')}</Text>
           </TouchableOpacity>
 
           <Text style={[s.label, rtl && s.rtlTxt]}>{t('whatsapp')} *</Text>
           <View style={[s.inputRow, waSame && { opacity: 0.5 }, badWa && s.fieldError]}>
-            <CodePicker value={cc} onChange={(d, iso) => { setCc(d); setCcIso(iso); }} />
+            <CodePicker value={waSame ? cc : waCc} disabled={waSame}
+              onChange={(d, iso) => { setWaCc(d); setWaIso(iso); }} />
             <TextInput style={s.inputFlex} value={waSame ? phone : wa} onChangeText={(v) => setWa(digitsOnly(v))}
-              editable={!waSame} keyboardType="phone-pad" maxLength={rule.len}
-              placeholder={t('enterNDigits', { n: rule.len })} placeholderTextColor="#B4A9C4" />
+              editable={!waSame} keyboardType="phone-pad" maxLength={waRule.len}
+              placeholder={t('enterNDigits', { n: waRule.len })} placeholderTextColor="#B4A9C4" />
           </View>
           {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}
 

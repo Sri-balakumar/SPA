@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../theme';
 import { COUNTRY_ROWS, flagOf, matchCountry } from '../data/countries';
 
-export default function CodePicker({ value, onChange }) {
+export default function CodePicker({ value, onChange, disabled }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
 
@@ -39,7 +39,8 @@ export default function CodePicker({ value, onChange }) {
 
   return (
     <>
-      <TouchableOpacity style={s.btn} onPress={() => setOpen(true)} activeOpacity={0.7}>
+      {/* disabled: the field follows another one (WhatsApp same as phone). */}
+      <TouchableOpacity style={s.btn} onPress={() => setOpen(true)} activeOpacity={0.7} disabled={disabled}>
         <Text style={s.code}>{current}</Text>
         <Text style={s.chev}>▾</Text>
       </TouchableOpacity>

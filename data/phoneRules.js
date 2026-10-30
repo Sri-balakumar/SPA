@@ -6,7 +6,7 @@
 // which customers never give us. Only `/mobile` rejects a wrong leading digit,
 // which is the check we actually want:
 //     IN  9/8/7/6 ok, 2 rejected      OM  9/7 ok, 2 rejected
-import { getExampleNumber, isValidPhoneNumber } from 'libphonenumber-js/mobile';
+import { getExampleNumber, isValidPhoneNumber, parsePhoneNumberFromString } from 'libphonenumber-js/mobile';
 import examples from 'libphonenumber-js/examples.mobile.json';
 
 // Countries whose example number misrepresents the real limit. `len` here is
@@ -76,6 +76,26 @@ export function localNumber(full, cc) {
   const ccd = String(cc || '').replace(/\D/g, ''); // "91"
   if (ccd && s.startsWith(ccd) && s.length > ccd.length) s = s.slice(ccd.length);
   return s;
+}
+
+// Split a saved number into its own country and the local number:
+// "+919876543210" → { cc: '+91', iso: 'IN', local: '9876543210' }. A WhatsApp
+// number can be under a different country than the mobile, so localNumber()
+// with the mobile's code is not enough. Only a number saved WITH its code
+// (leading + or 00) is split - a bare local "91234567" would read as +91.
+// Anything else keeps the fallback country.
+export function splitNumber(full, fallbackCc, fallbackIso) {
+  const s = String(full || '').trim();
+  const d = digitsOnly(s.startsWith('00') ? s.slice(2) : s);
+  if (d && (s.startsWith('+') || s.startsWith('00'))) {
+    try {
+      const p = parsePhoneNumberFromString(`+${d}`);
+      if (p && p.country) {
+        return { cc: `+${p.countryCallingCode}`, iso: p.country, local: String(p.nationalNumber) };
+      }
+    } catch (e) { /* not a full international number - use the fallback */ }
+  }
+  return { cc: fallbackCc, iso: fallbackIso, local: localNumber(full, fallbackCc) };
 }
 
 // Resolve the ISO for a dial code. Only a fallback for state saved before the

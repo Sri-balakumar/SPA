@@ -208,12 +208,13 @@ export async function submitBooking(form) {
   });
   const cc = form.countryCode || '';
   // E.164: leading +, country code, NO spaces/brackets/dashes (per the API docs).
-  const withCc = (n) => (n ? `${cc}${String(n).replace(/\D/g, '')}` : '');
+  const withCc = (n, code = cc) => (n ? `${code}${String(n).replace(/\D/g, '')}` : '');
   const body = {
     name: form.fullName,
     service_ids: [form.serviceId],                 // the chosen PACKAGE id
     mobile: withCc(form.phone),
-    whatsapp: form.whatsappSame ? withCc(form.phone) : withCc(form.whatsapp),
+    // A WhatsApp that isn't the phone has its own country code.
+    whatsapp: form.whatsappSame ? withCc(form.phone) : withCc(form.whatsapp, form.waCountryCode || cc),
     // Save the personal details onto the customer's Contact too.
     birthday: form.dobISO || form.dob || '',        // date of birth (YYYY-MM-DD preferred)
     dob: form.dobISO || form.dob || '',

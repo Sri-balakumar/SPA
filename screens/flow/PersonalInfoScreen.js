@@ -22,7 +22,7 @@ import Button from '../../components/Button';
 import CodePicker from '../../components/CodePicker';
 import AppAlert from '../../components/AppAlert';
 import PersonBanner from '../../components/PersonBanner';
-import { phoneRule, digitsOnly, localNumber } from '../../data/phoneRules';
+import { phoneRule, digitsOnly, localNumber, splitNumber } from '../../data/phoneRules';
 import { findMembership } from '../../spaApi';
 import { useLang } from '../../LanguageContext';
 import { parseDobDate, formatDob, toDigits } from '../../dateFmt';
@@ -91,12 +91,14 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
   const [lookupNum, setLookupNum] = useState(form.phone || '');
 
   // Digit count + validity per selected country, for the lookup field and for
-  // the two fields on the form (phone and WhatsApp share one country).
+  // the two fields on the form. WhatsApp shares the phone's country while it is
+  // the same number, and has its own once that is unticked.
   const lookupRule = phoneRule(lookupIso);
   const badLookup = !!lookupNum && !lookupRule.isValid(lookupNum);
   const formRule = phoneRule(form.countryIso || 'OM');
+  const waRule = form.whatsappSame ? formRule : phoneRule(form.waCountryIso || form.countryIso || 'OM');
   const badPhone = !!form.phone && !formRule.isValid(form.phone);
-  const badWa = !!form.whatsapp && !formRule.isValid(form.whatsapp);
+  const badWa = !!form.whatsapp && !waRule.isValid(form.whatsapp);
 
   // Email is optional, as on the web booking page; anything typed must be a real
   // address. Same rule as EMAIL_RE in spa_validation.js and _parse_email on the server.
@@ -145,8 +147,9 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
     const cc = lookupCc;                                  // keep the selected code (+91) intact
     const phoneNum = localNumber(c.phone, cc);
     const waRaw = c.whatsapp || c.phone;
-    const waNum = localNumber(waRaw, cc);
-    const same = !waRaw || waNum === phoneNum;
+    // The WhatsApp keeps its own country: it may not be the mobile's.
+    const wa = splitNumber(waRaw, cc, lookupIso);
+    const same = !waRaw || digitsOnly(`${wa.cc}${wa.local}`) === digitsOnly(`${cc}${phoneNum}`);
     const { dobText, dobISO, age, date } = parseDob(c.dob, c.age);
     setDobDate(date);                                     // picker opens on their birthday
     set({
@@ -163,8 +166,10 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
       // while silently refusing the 9th and 10th digit.
       countryIso: lookupIso,
       phone: phoneNum,
-      whatsapp: same ? phoneNum : waNum,
+      whatsapp: same ? phoneNum : wa.local,
       whatsappSame: same,
+      waCountryCode: same ? cc : wa.cc,
+      waCountryIso: same ? lookupIso : wa.iso,
       existingCustomerId: c.id || null,
     });
     setActiveCustomer((c.packages || []).length ? c : null);
@@ -180,7 +185,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
       // form falls back to Oman's 8 digits whatever country was picked here.
       countryCode: lookupCc, countryIso: lookupIso,
       phone: lookupNum.trim(), whatsapp: lookupNum.trim(),
-      whatsappSame: true, existingCustomerId: null,
+      whatsappSame: true, waCountryCode: lookupCc, waCountryIso: lookupIso,
+      existingCustomerId: null,
     });
     setActiveCustomer(null);
     setPrevMode(mode);                                    // remember lookup vs profiles for Back
@@ -199,9 +205,20 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
     const n = digitsOnly(v);
     set(form.whatsappSame ? { phone: n, whatsapp: n } : { phone: n });
   }
+  // Either way the WhatsApp code starts on the phone's: unticked it can then be
+  // changed on its own, e.g. an Indian mobile with an Omani WhatsApp.
   function toggleSame() {
     const nextSame = !form.whatsappSame;
-    set({ whatsappSame: nextSame, whatsapp: nextSame ? form.phone : '' });
+    set({
+      whatsappSame: nextSame, whatsapp: nextSame ? form.phone : '',
+      waCountryCode: form.countryCode, waCountryIso: form.countryIso,
+    });
+  }
+  // The phone's code carries the WhatsApp's along only while they are the same.
+  function onPhoneCode(c, iso) {
+    set(form.whatsappSame
+      ? { countryCode: c, countryIso: iso, waCountryCode: c, waCountryIso: iso }
+      : { countryCode: c, countryIso: iso });
   }
   function proceed() {
     if (!form.fullName.trim()) return showAlert(t('missing'), t('enterName'));
@@ -406,7 +423,7 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
               {/* Phone */}
               <Text style={s.label}>{t('phone')} <Text style={s.req}>*</Text></Text>
               <View style={[s.field, badPhone && s.fieldError]}>
-                <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
+                <CodePicker value={form.countryCode} onChange={onPhoneCode} />
                 <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
                   keyboardType="phone-pad" maxLength={formRule.len} value={form.phone} onChangeText={onPhone} />
               </View>
@@ -423,9 +440,11 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
               {/* WhatsApp */}
               <Text style={s.label}>{t('whatsapp')} <Text style={s.req}>*</Text></Text>
               <View style={[s.field, form.whatsappSame && s.readonly, badWa && s.fieldError]}>
-                <CodePicker value={form.countryCode} onChange={(c, iso) => set({ countryCode: c, countryIso: iso })} />
-                <TextInput style={s.input} placeholder={t('enterNDigits', { n: formRule.len })} placeholderTextColor="#B4A9C4"
-                  keyboardType="phone-pad" maxLength={formRule.len} editable={!form.whatsappSame}
+                <CodePicker value={form.whatsappSame ? form.countryCode : form.waCountryCode}
+                  disabled={form.whatsappSame}
+                  onChange={(c, iso) => set({ waCountryCode: c, waCountryIso: iso })} />
+                <TextInput style={s.input} placeholder={t('enterNDigits', { n: waRule.len })} placeholderTextColor="#B4A9C4"
+                  keyboardType="phone-pad" maxLength={waRule.len} editable={!form.whatsappSame}
                   value={form.whatsapp} onChangeText={(v) => set({ whatsapp: digitsOnly(v) })} />
               </View>
               {badWa && <Text style={s.errTxt}>{t('phoneInvalid')}</Text>}

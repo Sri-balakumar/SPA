@@ -78,8 +78,10 @@ export default function ReviewScreen({ form, set, next, onBack, onHome }) {
           <Row label={t('name')} value={form.fullName} />
           <Row label={t('service')} value={form.service} />
           <Row label={t('genderAge')} value={genderAge} />
-          <Row label={t('mobile')} value={form.phone} />
-          <Row label={t('whatsapp')} value={form.whatsapp} />
+          {/* With their codes: the WhatsApp's can differ from the mobile's. */}
+          <Row label={t('mobile')} value={form.phone ? `${form.countryCode} ${form.phone}` : ''} />
+          <Row label={t('whatsapp')} value={form.whatsapp
+            ? `${form.whatsappSame ? form.countryCode : form.waCountryCode} ${form.whatsapp}` : ''} />
           <Row label={t('email')} value={form.email} />
           <Row label={t('dob')} value={form.dob} />
           <Row label={t('specialReq')} value={form.specialRequests} />

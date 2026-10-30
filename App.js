@@ -39,6 +39,9 @@ const EMPTY_FORM = {
   // countryIso pairs with countryCode — the dial code alone can't identify a
   // country, and the per-country phone rules key off the ISO.
   fullName: '', dob: '', dobISO: '', age: '', gender: '', countryCode: '+968', countryIso: 'OM', phone: '', whatsapp: '', whatsappSame: true,
+  // WhatsApp's own country, used only when it is NOT the same as the phone:
+  // an Indian mobile can come with an Omani WhatsApp.
+  waCountryCode: '+968', waCountryIso: 'OM',
   email: '', signature: '',
   answers: [],
   // Returning customer left "Healthy - no changes" ticked: the questions were
