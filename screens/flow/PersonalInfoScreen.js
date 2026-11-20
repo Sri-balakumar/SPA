@@ -393,6 +393,8 @@ export default function PersonalInfoScreen({ form, set, next, onBack, onHome, on
               value={dobDate || new Date(2000, 0, 1)}
               mode="date"
               display="default"
+              // Must be set: without it Android snaps every year before 1970 to 1970.
+              minimumDate={new Date(1900, 0, 1)}
               maximumDate={new Date()}
               onChange={onPickDate}
             />
